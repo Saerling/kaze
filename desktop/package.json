@@ -1,0 +1,22 @@
+{
+  "name": "kaze-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Kaze para Windows: Firefox con la interfaz de Kaze",
+  "license": "MPL-2.0",
+  "scripts": {
+    "download": "surfer download",
+    "import": "surfer import",
+    "bootstrap": "surfer bootstrap",
+    "init": "npm run download && npm run import && npm run bootstrap",
+    "build": "surfer build",
+    "build:ui": "surfer build --ui",
+    "start": "cd engine && python3 ./mach run",
+    "package": "surfer package",
+    "check": "python3 scripts/check.py",
+    "surfer": "surfer"
+  },
+  "devDependencies": {
+    "@zen-browser/surfer": "1.14.9"
+  }
+}

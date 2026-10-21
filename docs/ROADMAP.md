@@ -1,26 +1,24 @@
 # Plan de trabajo
 
-## Fase 0 — Base ✅ (este commit)
-- [x] Estructura del repo, licencia MPL-2.0, documentación
-- [x] Escritorio: script que descarga Zen y aplica la capa Kaze (nombre, íconos, preferencias)
-- [x] Preferencias de bajo consumo de RAM para escritorio (`desktop/prefs/kaze/`)
-- [x] Android: app GeckoView con barra de dirección, pestañas y descarga automática de pestañas inactivas
-- [x] CI: compilación del APK de Android en cada push
+## Fase 1 — Base desde cero ✅
+- [x] Android: espacios, Essentials, fijadas, pestañas que se duermen, búsqueda con sugerencias, historial, privadas, descargas, buscar en página, versión de escritorio, permisos y diálogos de páginas, espacios aislados
+- [x] Android: arreglado el cierre al abrir (motor creado en procesos hijos)
+- [x] Android: pruebas y capturas automáticas
+- [x] Windows: interfaz Kaze sobre las pestañas verticales de Firefox (espacios, Essentials, compacto, página flotante, dormir pestañas)
+- [x] Windows: configuración de compilación propia (surfer) con 3 parches y marca Kaze
+- [x] Windows: cargador de desarrollo para probar sin compilar
+- [x] CI: APK + pruebas en cada push; comprobación de parches de escritorio
 
-## Fase 1 — Escritorio usable
-- [ ] Primera compilación de Kaze para Windows en tu PC
-- [ ] Revisar textos que todavía dicen "Zen" en la interfaz y cambiarlos (parches en `desktop/patches/`)
-- [ ] Desactivar actualizaciones automáticas de Zen y apuntarlas a los releases de Kaze
-- [ ] Tema visual propio de Kaze (usando `shared/design/tokens.json`)
-- [ ] Medir RAM vs. Zen y Firefox con 10 / 30 / 60 pestañas
-
-## Fase 2 — Android completo
-- [ ] Historial y marcadores locales
-- [ ] Descargas, modo privado, bloqueador de anuncios (uBlock Origin vía WebExtensions de GeckoView)
-- [ ] Pestañas agrupadas en espacios (como los workspaces de Zen)
-- [ ] Integrar Android Components de Mozilla para **Firefox Sync** (historial, marcadores, pestañas, contraseñas)
+## Fase 2 — Primera versión para usar a diario
+- [ ] Windows: primera compilación completa en tu PC y medir RAM contra Firefox y Zen
+- [ ] Windows: editor de espacios en un panel (hoy usa menús)
+- [ ] Windows: arrastrar pestañas entre espacios y reordenar espacios arrastrando
+- [ ] Android: deslizar en la barra para cambiar de pestaña
+- [ ] Android: lector, traducir página, compartir hacia un espacio (como Z-Sync)
+- [ ] Android: uBlock Origin preinstalado (hoy se instala desde Ajustes)
 
 ## Fase 3 — Todo conectado
-- [ ] "Continuar en el otro dispositivo": enviar pestaña Windows ⇄ Android
-- [ ] Espacios de trabajo sincronizados entre dispositivos
+- [ ] Firefox Sync en Android (historial, marcadores, contraseñas, pestañas)
+- [ ] Espacios y Essentials sincronizados entre Windows y Android
+- [ ] "Continuar en el otro dispositivo"
 - [ ] Releases automáticos (instalador de Windows + APK firmado)

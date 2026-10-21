@@ -1,0 +1,127 @@
+package app.kaze.browser
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.test.core.app.ApplicationProvider
+import app.kaze.browser.data.TabKind
+import app.kaze.browser.data.Urls
+import app.kaze.browser.ui.components.LocalApp
+import app.kaze.browser.ui.screens.BrowserBottomPills
+import app.kaze.browser.ui.screens.BrowserTopBar
+import app.kaze.browser.ui.screens.SpacesScreen
+import app.kaze.browser.ui.sheets.SpaceEditorSheet
+import app.kaze.browser.ui.theme.KazeTheme
+import app.kaze.browser.ui.theme.LocalKaze
+import app.kaze.browser.ui.theme.spaceBase
+import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+/** Capturas de la interfaz sin teléfono (Robolectric + Roborazzi). Salen en app/build/outputs/roborazzi/. */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
+class ScreenshotTest {
+    @get:Rule val compose = createComposeRule()
+    private lateinit var app: Kaze
+
+    @Before fun seed() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        app = Kaze.get(ctx)
+        val s = app.store
+        if (s.tabs.isNotEmpty()) return
+        val space = s.spaces.first()
+        listOf(
+            "https://discord.com/", "https://www.nytimes.com/", "https://chatgpt.com/",
+            "https://www.reddit.com/", "https://github.com/", "https://www.youtube.com/",
+        ).forEach { s.setKind(s.newTab(it, select = false), TabKind.ESSENTIAL) }
+        listOf(
+            "https://chatgpt.com/" to "ChatGPT", "https://www.youtube.com/" to "YouTube",
+            "https://mobbin.com/" to "Mobbin — UI & UX design inspiration for mobile & web", "https://docs.google.com/" to "Google Docs",
+        ).forEach { (u, t) -> s.newTab(u, select = false).also { tab -> tab.title = t; s.setKind(tab, TabKind.PINNED) } }
+        s.newTab("https://es.wikipedia.org/wiki/Aurora_polar", select = false).title = "Aurora polar - Wikipedia"
+        s.newTab("https://www.bbc.com/mundo", select = false).title = "BBC News Mundo"
+        s.tabs.forEach { t -> (Urls.host(t.pinnedUrl ?: t.url))?.removePrefix("www.")?.let { runCatching { app.favicons.load(it) } } }
+    }
+
+    @Composable
+    private fun Themed(dark: Boolean, content: @Composable () -> Unit) {
+        KazeTheme(dark) { CompositionLocalProvider(LocalApp provides app, content = content) }
+    }
+
+    @Composable
+    private fun Spaces() = SpacesScreen({}, {}, {}, {}, {}, {}, {}, {})
+
+    @Test fun espacios_claro() {
+        compose.setContent { Themed(false) { Spaces() } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-espacios-claro.png")
+    }
+
+    @Test fun espacios_oscuro() {
+        compose.setContent { Themed(true) { Spaces() } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-espacios-oscuro.png")
+    }
+
+    @Test fun navegador() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
+        tab.canGoBack = true
+        compose.setContent {
+            Themed(false) {
+                val k = LocalKaze.current
+                Column(Modifier.fillMaxSize().background(k.paper)) {
+                    BrowserTopBar(tab, spaceBase(app.store.currentSpace!!.colors, false, k.paper), {}, {}, {})
+                    Box(Modifier.weight(1f).fillMaxWidth().background(Color.White)) {
+                        FakePage()
+                        BrowserBottomPills(tab, true, {}, {}, {}, {}, Modifier.align(Alignment.BottomCenter))
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-navegador.png")
+    }
+
+    @Test fun editor_de_espacio() {
+        compose.setContent { Themed(false) { Box(Modifier.fillMaxSize()) { Spaces(); SpaceEditorSheet(app.store.spaces.first()) {} } } }
+        compose.waitForIdle()
+        captureScreenRoboImage("../../docs/capturas/android-editar-espacio.png")
+    }
+
+    @Composable
+    private fun FakePage() {
+        Column(Modifier.padding(20.dp)) {
+            Text("Aurora polar", fontSize = 30.sp, fontWeight = FontWeight.Normal, color = Color(0xFF202122))
+            Text(
+                "Una aurora polar es un fenómeno en forma de brillo o luminiscencia que aparece en el cielo nocturno, " +
+                    "generalmente en zonas polares, aunque puede aparecer en otras zonas del mundo durante breves períodos. " +
+                    "En el hemisferio norte se conoce como aurora boreal, y en el hemisferio sur como aurora austral.",
+                fontSize = 17.sp, color = Color(0xFF202122), modifier = Modifier.padding(top = 16.dp), lineHeight = 27.sp,
+            )
+        }
+    }
+
+    private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onRoot() =
+        onNode(androidx.compose.ui.test.isRoot())
+}

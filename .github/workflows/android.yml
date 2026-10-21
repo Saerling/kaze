@@ -10,7 +10,7 @@ on:
 
 jobs:
   apk:
-    name: Compilar APK
+    name: Pruebas y APK
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,17 +30,27 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Compilar
+      - name: Pruebas
+        run: ./gradlew testDebugUnitTest --console=plain
+
+      - name: Compilar APK
         run: ./gradlew assembleRelease --console=plain
 
       - name: Subir APK (ARM 64 bits, la mayoría de celulares)
         uses: actions/upload-artifact@v7
         with:
-          name: kaze-arm64-v8a
+          name: kaze-android-arm64-v8a
           path: android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
 
       - name: Subir APK (ARM 32 bits, celulares viejos)
         uses: actions/upload-artifact@v7
         with:
-          name: kaze-armeabi-v7a
+          name: kaze-android-armeabi-v7a
           path: android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+
+      - name: Subir capturas de la interfaz
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: capturas-android
+          path: docs/capturas/android-*.png

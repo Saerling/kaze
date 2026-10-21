@@ -1,5 +1,9 @@
-# Escritorio: código de Zen/Firefox descargado (se regenera con sync_zen.py)
-desktop/build/
+# Escritorio: código de Firefox descargado y compilado por surfer
+desktop/engine/
+desktop/node_modules/
+desktop/dist/
+desktop/.surfer/
+desktop/.surfer-*/
 
 # Android
 android/.gradle/
@@ -8,6 +12,7 @@ android/app/build/
 android/local.properties
 android/.idea/
 android/.kotlin/
+android/docs/
 *.iml
 *.apk
 *.aab

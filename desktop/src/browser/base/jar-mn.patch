@@ -1,0 +1,12 @@
+diff --git a/browser/base/jar.mn b/browser/base/jar.mn
+index b2b5db6..d6a5b89 100644
+--- a/browser/base/jar.mn
++++ b/browser/base/jar.mn
+@@ -3,6 +3,7 @@
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ browser.jar:
+ %  content browser %content/browser/ contentaccessible=yes
++#include ../kaze/jar.inc.mn
+ 
+         content/browser/aboutDialog-appUpdater.js     (content/aboutDialog-appUpdater.js)
+ *       content/browser/aboutDialog.xhtml                    (content/aboutDialog.xhtml)

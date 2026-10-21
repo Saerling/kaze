@@ -9,7 +9,7 @@ Genera todos los íconos de Kaze a partir de branding/kaze-logo.svg.
   python branding/generar_iconos.py
 
 Salida:
-  branding/desktop/   -> mismos nombres de archivo que espera Zen en configs/branding/release
+  desktop/configs/branding/release/  -> los archivos que espera surfer para la marca de Windows/Linux
   android/app/src/main/res/mipmap-*/ic_launcher.png (+ round)
 """
 from io import BytesIO
@@ -20,7 +20,7 @@ from PIL import Image
 
 RAIZ = Path(__file__).resolve().parent.parent
 SVG = (RAIZ / "branding" / "kaze-logo.svg").read_bytes()
-DESKTOP = RAIZ / "branding" / "desktop"
+DESKTOP = RAIZ / "desktop" / "configs" / "branding" / "release"
 ANDROID_RES = RAIZ / "android" / "app" / "src" / "main" / "res"
 
 
@@ -55,6 +55,7 @@ def escritorio() -> None:
     render(192).save(DESKTOP / "content" / "about-logo.png")
     render(384).save(DESKTOP / "content" / "about-logo@2x.png")
     (DESKTOP / "content" / "about-logo.svg").write_bytes(SVG)
+    (DESKTOP / "MacOSInstaller.svg").write_bytes(SVG)
 
 
 def android() -> None:

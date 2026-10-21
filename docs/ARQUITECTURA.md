@@ -1,73 +1,103 @@
 # Arquitectura de Kaze
 
-## Idea general
+Kaze se rehízo desde cero con una idea: **apoyarse en lo que Firefox ya trae** y añadir
+solo la capa que falta. Menos código propio = menos que se rompa con cada versión de Firefox
+y menos memoria.
 
 ```
-                 ┌──────────────────────────────┐
-                 │   Gecko (motor de Firefox)    │
-                 └──────────────┬───────────────┘
-                ┌───────────────┴────────────────┐
-        ┌───────▼────────┐               ┌───────▼────────┐
-        │  Kaze Windows  │               │  Kaze Android  │
-        │  Zen + capa    │               │  GeckoView +   │
-        │  Kaze (desktop/)│              │  Compose       │
-        └───────┬────────┘               └───────┬────────┘
-                └──────────► Firefox Sync ◄──────┘
-                   (historial, marcadores, pestañas, contraseñas)
+                    ┌──────────────────────────────┐
+                    │     Gecko (motor de Firefox)  │
+                    └──────────────┬───────────────┘
+              ┌────────────────────┴────────────────────┐
+     ┌────────▼─────────┐                      ┌────────▼─────────┐
+     │  Kaze Windows    │                      │  Kaze Android    │
+     │  Firefox 158     │                      │  GeckoView 158   │
+     │  + 3 parches     │                      │  + Compose       │
+     │  + kaze.js/.css  │                      │                  │
+     └────────┬─────────┘                      └────────┬─────────┘
+              └──────── misma estética (shared/design) ─┘
 ```
-
-Usar **el mismo motor en los dos lados** es lo que hace que todo "esté conectado":
-el formato de historial, marcadores, contraseñas y pestañas es el mismo, y Firefox Sync ya
-sabe moverlos entre dispositivos con cifrado de extremo a extremo.
 
 ## Windows (`desktop/`)
 
-Zen no es un fork "a mano" de Firefox: es un conjunto de **parches** que la herramienta
-[`surfer`](https://github.com/zen-browser/surfer) aplica sobre el código de Firefox antes de compilar.
+### Comparado con Zen
 
-Kaze hace lo mismo un nivel más arriba:
+Zen mantiene ~260 parches sobre Firefox y su propia barra lateral. Kaze usa **3 parches**:
 
-1. `desktop/scripts/sync_zen.py` descarga Zen en la versión fijada en `desktop/zen-version.txt`.
-2. Aplica la **capa Kaze** encima:
-   - `desktop/kaze.json` → nombre, ID de app, nombre del ejecutable (sobrescribe `surfer.json`).
-   - `branding/` → íconos y logo.
-   - `desktop/prefs/kaze/*.yaml` → preferencias de rendimiento y bajo consumo.
-   - `desktop/patches/*.patch` → cambios propios de Kaze sobre el código de Zen (vacío por ahora).
-3. Luego se compila con los comandos normales de Zen (`npm run init`, `npm run build`).
+| Parche | Para qué |
+|---|---|
+| `browser/base/content/browser-xhtml.patch` | carga `kaze.css` y `kaze.js` en la ventana del navegador |
+| `browser/base/jar-mn.patch` | empaqueta los archivos de Kaze en `chrome://browser/content/kaze/` |
+| `browser/app/profile/firefox-js.patch` | incluye `kaze-prefs.js` (preferencias por defecto) |
 
-**Ventaja:** cuando Zen sale con un Firefox nuevo, solo cambias `zen-version.txt` y vuelves a correr el script.
-**Costo:** si un parche de Kaze choca con un cambio de Zen, hay que ajustarlo a mano.
+Todo lo demás vive en `desktop/src/browser/kaze/` y se construye **encima de las pestañas
+verticales nativas de Firefox** (que ya existen desde Firefox 136):
+
+- **Espacios** — cada pestaña guarda su espacio en SessionStore (sobrevive a reinicios).
+  Cambiar de espacio oculta las pestañas de los demás con `gBrowser.hideTab()`.
+- **Essentials** — pestañas fijadas con la marca `kaze-essential`; Firefox ya las dibuja en
+  cuadrícula, Kaze solo las estiliza y las deja visibles en todos los espacios.
+- **Fijadas del espacio** — pestañas fijadas sin esa marca; solo se ven en su espacio.
+- **Modo compacto, página flotante, degradados** — CSS.
+- **Dormir pestañas** — cada minuto descarga (`discardBrowser`) las que llevan 20 min sin usarse.
+
+Los espacios se guardan en la preferencia `kaze.spaces.data` (JSON), compartida entre ventanas.
+
+### Compilación
+
+`surfer` (la herramienta de Zen, MPL) descarga el código de Firefox de la versión de
+`surfer.json`, enlaza `src/` dentro, aplica los parches y la marca de `configs/branding/`
+y compila con `mach`. `scripts/check.py` comprueba en segundos que los parches aplican.
+
+### Cargador de desarrollo
+
+`dev/instalar.py` copia un *autoconfig* a un Firefox normal que inyecta `kaze.js` y `kaze.css`
+desde el repositorio. Es el **mismo código** que va compilado, así que sirve para desarrollar
+la interfaz sin compilar Firefox (reiniciar Firefox basta para ver los cambios).
 
 ## Android (`android/`)
 
-Zen no tiene versión Android, así que esta parte es propia:
+Zen no tiene versión Android; esta parte es propia, con la interfaz de Z-Sync.
 
-- **Motor:** [GeckoView](https://firefox-source-docs.mozilla.org/mobile/android/geckoview/) desde `maven.mozilla.org`.
-  Es una librería, así que la app se compila en minutos (no hay que compilar Firefox).
-- **Interfaz:** Kotlin + Jetpack Compose, Material 3.
-- **Un solo `GeckoRuntime`** para toda la app (`KazeApp`). Cada pestaña es una `GeckoSession`.
+```
+KazeApp ── Kaze (contenedor, solo en el proceso principal)
+             ├── Settings     preferencias (SharedPreferences + estado de Compose)
+             ├── Db           SQLite del sistema: espacios, pestañas, historial
+             ├── Store        estado en memoria que dibuja la UI; escribe a Db en segundo plano
+             ├── GeckoRuntime uno solo (Engine.kt), con prefs de bajo consumo en YAML
+             └── SessionPool  sesiones de Gecko por pestaña: crear, dormir, restaurar
+MainActivity ── un único GeckoView + pantallas Compose (espacios, navegador, búsqueda, hojas)
+```
 
-### Cómo ahorra RAM en Android
+### Por qué se cerraba la versión anterior
+
+GeckoView abre procesos propios (uno por pestaña, GPU, medios) y Android crea la clase
+`Application` en **cada uno**. La versión anterior creaba el motor en `Application.onCreate`,
+así que cada proceso hijo intentaba crear otro motor y la app se cerraba al abrir.
+Ahora `KazeApp` no crea nada; el contenedor `Kaze` se crea perezosamente desde la actividad,
+que solo existe en el proceso principal.
+
+### Ahorro de memoria
 
 | Técnica | Dónde |
 |---|---|
-| Solo la pestaña visible está "activa"; las demás se pausan (`setActive(false)`) | `TabManager.select()` |
-| Máximo de pestañas vivas en memoria (`MAX_LIVE_SESSIONS`); las más viejas se **descargan**: se guarda su estado y se cierra la sesión | `TabManager.trimLiveSessions()` |
-| Al volver a una pestaña descargada se restaura su estado (scroll, historial) | `Tab.ensureSession()` |
-| Cuando Android avisa de memoria baja (`onTrimMemory`), se descargan todas las pestañas menos la actual | `KazeApp.onTrimMemory()` |
-| Ajustes del runtime de Gecko: sin compilación de depuración, caché y procesos limitados | `KazeApp.crearRuntime()` |
+| Máximo de páginas cargadas (1 en celulares con poca RAM, 2–3 en el resto) | `SessionPool.trim()` |
+| Dormir pestañas sin usar (10 min por defecto) | `SessionPool.sweepIdle()` |
+| Al faltar memoria, dormir todo menos la pestaña visible | `KazeApp.onTrimMemory()` |
+| Restaurar desde el estado guardado (historial, scroll, formularios) | `SessionPool.ensure()` |
+| Un solo `GeckoView`; se oculta en la pantalla de espacios (libera la superficie de GPU) | `MainActivity` |
+| Sin Fission por defecto (un proceso por sitio usa varias veces más RAM) | `Engine.create()` |
+| Prefs de Gecko: back-forward cache de 1 página, caché de 16 MB, imágenes ≤ 48 MB | `Engine.PREFS` |
+| Sin Room/OkHttp/Coil: SQLite, `HttpURLConnection` y `BitmapFactory` del sistema | `data/` |
+| Escrituras agrupadas (el estado de sesión cambia con cada scroll) | `Store.schedulePersist()` |
 
-## Sincronización
+### Pruebas
 
-Fase 1 (escritorio): Firefox Sync funciona tal cual, igual que en Zen.
+`app/src/test/`: lógica de URLs, `Store` (espacios, fijadas, privadas, persistencia, historial)
+y capturas de la interfaz con Robolectric + Roborazzi (sin teléfono), que quedan en `docs/capturas/`.
 
-Fase 2 (Android): GeckoView por sí solo no trae Sync. El camino es integrar los
-**Android Components** de Mozilla (`service-firefox-accounts`, `service-sync-logins`,
-`feature-syncedtabs`, etc.), que son las mismas piezas que usa Firefox para Android.
-Hay que revisar las condiciones de Mozilla para usar sus cuentas desde una app de terceros;
-la alternativa es montar un servidor propio con [`syncstorage-rs`](https://github.com/mozilla-services/syncstorage-rs).
+## Sincronización (siguiente fase)
 
-## Diseño compartido
-
-`shared/design/tokens.json` define colores, radios y tiempos de animación.
-En escritorio se aplican como tema CSS (Zen ya soporta temas/mods); en Android se leen en `ui/theme/`.
+Windows ya trae Firefox Sync. Para Android hay dos caminos: integrar los *Android Components*
+de Mozilla (cuentas y sync de Firefox), o como hace Z-Sync, hablar directamente con Firefox Sync
+y guardar los espacios en una colección propia. Z-Sync (MIT) es una buena referencia para eso.

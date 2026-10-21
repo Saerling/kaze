@@ -2,13 +2,13 @@
   <!-- Kaze 風 — logo: tres ráfagas de viento sobre un círculo -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5EE6C8"/>
-      <stop offset="0.55" stop-color="#3A8DFF"/>
-      <stop offset="1" stop-color="#6B4BFF"/>
+      <stop offset="0" stop-color="#7FB5A8"/>
+      <stop offset="0.55" stop-color="#3D6B62"/>
+      <stop offset="1" stop-color="#264540"/>
     </linearGradient>
   </defs>
   <circle cx="256" cy="256" r="240" fill="url(#bg)"/>
-  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-width="34">
+  <g fill="none" stroke="#F3ECE6" stroke-linecap="round" stroke-width="34">
     <path d="M112 196 H300 a46 46 0 1 0 -46 -46"/>
     <path d="M96 268 H380 a50 50 0 1 1 -50 50"/>
     <path d="M136 340 H232" opacity="0.85"/>

@@ -1,12 +1,15 @@
 [versions]
 agp = "9.4.1"
 kotlin = "2.4.21"
-# Versión de GeckoView = versión de Firefox. Mantener alineada con desktop/zen-version.txt (Firefox 158).
+# Versión de GeckoView = versión de Firefox. Mantener alineada con desktop/firefox-version.txt.
 geckoview = "158.0.20261019185856"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 coreKtx = "1.19.1"
 lifecycle = "2.11.0"
+junit = "4.13.2"
+robolectric = "4.17"
+roborazzi = "1.76.0"
 
 [libraries]
 geckoview = { group = "org.mozilla.geckoview", name = "geckoview", version.ref = "geckoview" }
@@ -17,8 +20,14 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core" }
+androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

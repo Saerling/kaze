@@ -5,47 +5,490 @@
 package app.kaze.browser
 
 import android.app.SearchManager
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import app.kaze.browser.ui.BrowserScreen
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import app.kaze.browser.data.Space
+import app.kaze.browser.data.Tab
+import app.kaze.browser.data.TabKind
+import app.kaze.browser.data.Urls
+import app.kaze.browser.engine.Engine
+import app.kaze.browser.engine.PendingPrompt
+import app.kaze.browser.ui.components.LocalApp
+import app.kaze.browser.ui.screens.BrowserBottomPills
+import app.kaze.browser.ui.screens.BrowserTopBar
+import app.kaze.browser.ui.screens.FindBar
+import app.kaze.browser.ui.screens.SearchScreen
+import app.kaze.browser.ui.screens.SpacesScreen
+import app.kaze.browser.ui.sheets.ClipboardBridge
+import app.kaze.browser.ui.sheets.ContextMenuSheet
+import app.kaze.browser.ui.sheets.HistorySheet
+import app.kaze.browser.ui.sheets.MoveToSpaceSheet
+import app.kaze.browser.ui.sheets.PageMenuSheet
+import app.kaze.browser.ui.sheets.PermissionHost
+import app.kaze.browser.ui.sheets.PromptHost
+import app.kaze.browser.ui.sheets.SettingsSheet
+import app.kaze.browser.ui.sheets.SpaceEditorSheet
+import app.kaze.browser.ui.sheets.TabMenuSheet
 import app.kaze.browser.ui.theme.KazeTheme
+import app.kaze.browser.ui.theme.KazeType
+import app.kaze.browser.ui.theme.LocalKaze
+import app.kaze.browser.ui.theme.isLight
+import app.kaze.browser.ui.theme.spaceBase
+import kotlinx.coroutines.delay
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.GeckoWebExecutor
+import org.mozilla.geckoview.WebRequest
+import org.mozilla.geckoview.GeckoSession.PermissionDelegate
+import org.mozilla.geckoview.GeckoSession.PromptDelegate
+
+/** Qué pidió abrir la pantalla de búsqueda. */
+private sealed interface SearchTarget {
+    val initial: String
+    data class NewTab(val spaceId: String, val private: Boolean, override val initial: String = "") : SearchTarget
+    data class Navigate(val tab: Tab, override val initial: String) : SearchTarget
+}
 
 class MainActivity : ComponentActivity() {
 
-    private val app get() = application as KazeApp
+    private lateinit var app: Kaze
+    private lateinit var geckoView: GeckoView
+
+    /** Estado de navegación de la UI (sobrevive mientras viva la actividad). */
+    private var showSpaces by mutableStateOf(true)
+
+    private var pendingFile: Pair<PromptDelegate.FilePrompt, PendingPrompt>? = null
+    private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val (prompt, pending) = pendingFile ?: return@registerForActivityResult
+        pendingFile = null
+        val data = res.data
+        val uris = buildList {
+            data?.clipData?.let { c -> for (i in 0 until c.itemCount) add(c.getItemAt(i).uri) }
+            if (isEmpty()) data?.data?.let(::add)
+        }
+        when {
+            uris.isEmpty() -> pending.dismiss()
+            prompt.type == PromptDelegate.FilePrompt.Type.MULTIPLE -> pending.finish(prompt.confirm(this, uris.toTypedArray()))
+            else -> pending.finish(prompt.confirm(this, uris.first()))
+        }
+    }
+
+    private var pendingPermission: PermissionDelegate.Callback? = null
+    private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        val cb = pendingPermission ?: return@registerForActivityResult
+        pendingPermission = null
+        if (r.values.all { it }) cb.grant() else cb.reject()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) abrirDesdeIntent(intent)
+        app = Kaze.get(this)
+        geckoView = GeckoView(this).apply { visibility = View.INVISIBLE }
+
+        app.pool.beforeClose = { s -> if (geckoView.session === s) geckoView.releaseSession() }
+        app.pool.externalOpener = ::openExternal
+        app.pool.androidPermissions = { perms, cb ->
+            val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+            if (missing.isEmpty()) cb.grant() else {
+                pendingPermission = cb
+                permissionLauncher.launch(missing.toTypedArray())
+            }
+        }
+        ClipboardBridge.copy = { text ->
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Kaze", text))
+            app.ui.show("Copiado")
+        }
+
+        if (savedInstanceState == null) handleIntent(intent)
 
         setContent {
-            KazeTheme {
-                BrowserScreen(app.tabs)
+            val dark = Engine.isDarkTheme(this, app.settings)
+            KazeTheme(dark) {
+                CompositionLocalProvider(LocalApp provides app) { Root() }
             }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        abrirDesdeIntent(intent)
+        handleIntent(intent)
     }
 
-    /** Enlaces abiertos desde otras apps, o búsquedas del sistema. */
-    private fun abrirDesdeIntent(intent: Intent?) {
-        when (intent?.action) {
-            Intent.ACTION_VIEW -> intent.dataString?.let { app.tabs.newTab(it) }
-            Intent.ACTION_WEB_SEARCH -> intent.getStringExtra(SearchManager.QUERY)?.let {
-                app.tabs.newTab(UrlUtils.toUrl(it))
-            }
-        }
+    override fun onStart() {
+        super.onStart()
+        if (!showSpaces) app.pool.resumeVisible()
     }
 
     override fun onStop() {
         super.onStop()
-        app.tabs.persist()
+        app.pool.hideAll()
+        app.store.flush()
+    }
+
+    override fun onDestroy() {
+        if (geckoView.session != null) geckoView.releaseSession()
+        if (isFinishing) {
+            app.pool.beforeClose = null
+            ClipboardBridge.copy = null
+        }
+        super.onDestroy()
+    }
+
+    // ── Intents: enlaces de otras apps, compartir, búsquedas ──────────
+
+    private fun handleIntent(intent: Intent?) {
+        val url = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.dataString
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
+                Regex("https?://\\S+").find(text)?.value ?: Urls.fromInput(text, app.settings.searchEngine)
+            }
+            Intent.ACTION_WEB_SEARCH, Intent.ACTION_SEARCH ->
+                intent.getStringExtra(SearchManager.QUERY)?.let { Urls.fromInput(it, app.settings.searchEngine) }
+            else -> null
+        } ?: return
+        app.store.newTab(url)
+        showSpaces = false
+    }
+
+    private fun openExternal(uri: String): Boolean = try {
+        val intent = if (uri.startsWith("intent:")) {
+            Intent.parseUri(uri, Intent.URI_INTENT_SCHEME).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE); component = null; selector = null
+            }
+        } else {
+            Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addCategory(Intent.CATEGORY_BROWSABLE)
+        }
+        startActivity(intent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        // intent: con enlace de respaldo para navegadores
+        Uri.parse(uri).getQueryParameter("browser_fallback_url")?.let { app.store.selectedTab?.let { t -> app.pool.ensure(t).loadUri(it) } }
+        false
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun share(url: String, title: String? = null) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)
+        title?.let { send.putExtra(Intent.EXTRA_SUBJECT, it) }
+        startActivity(Intent.createChooser(send, null))
+    }
+
+    private fun openFilePicker(prompt: PromptDelegate.FilePrompt, pending: PendingPrompt) {
+        pendingFile = prompt to pending
+        val mimes = prompt.mimeTypes?.filter { it.contains('/') }.orEmpty()
+        val intent = Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).apply {
+            type = if (mimes.size == 1) mimes[0] else "*/*"
+            if (mimes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, mimes.toTypedArray())
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, prompt.type == PromptDelegate.FilePrompt.Type.MULTIPLE)
+        }
+        try {
+            fileLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            pendingFile = null
+            pending.dismiss()
+        }
+    }
+
+    private fun restart() {
+        app.store.flush()
+        val i = packageManager.getLaunchIntentForPackage(packageName)!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(i)
+        Runtime.getRuntime().exit(0)
+    }
+
+    // ── UI ────────────────────────────────────────────────────────────
+
+    @Composable
+    private fun Root() {
+        val store = app.store
+        val ui = app.ui
+        val k = LocalKaze.current
+        val tab = store.selectedTab
+
+        var search by remember { mutableStateOf<SearchTarget?>(null) }
+        var tabMenu by remember { mutableStateOf<Tab?>(null) }
+        var moveTab by remember { mutableStateOf<Tab?>(null) }
+        var pageMenu by remember { mutableStateOf(false) }
+        var editSpace by remember { mutableStateOf<Space?>(null) }
+        var newSpace by remember { mutableStateOf(false) }
+        var history by remember { mutableStateOf(false) }
+        var settings by remember { mutableStateOf(false) }
+        var finding by remember { mutableStateOf(false) }
+
+        fun open(t: Tab) {
+            store.select(t)
+            showSpaces = false
+        }
+
+        fun closeTab(t: Tab) {
+            val next = if (t.id == store.selectedTabId) store.nextAfterClose(t) else null
+            app.pool.close(t)
+            store.close(t)
+            if (next != null) open(next) else if (store.selectedTab == null) showSpaces = true
+        }
+
+        // Mostrar la pestaña seleccionada en el GeckoView (o pausar todo en la pantalla de espacios).
+        LaunchedEffect(store.selectedTabId, store.selectionNonce, showSpaces) {
+            val t = store.selectedTab
+            if (!showSpaces && t != null) {
+                val s: GeckoSession = app.pool.show(t)
+                if (geckoView.session !== s) {
+                    if (geckoView.session != null) geckoView.releaseSession()
+                    geckoView.setSession(s)
+                }
+                geckoView.visibility = View.VISIBLE
+                ui.scrollDirection = -1
+            } else {
+                app.pool.hideAll()
+                // INVISIBLE destruye la superficie de dibujo: Gecko libera memoria de GPU.
+                geckoView.visibility = View.INVISIBLE
+                if (t == null) {
+                    if (geckoView.session != null) geckoView.releaseSession()
+                    showSpaces = true
+                }
+            }
+        }
+
+        // Pantalla completa (videos): esconder barras del sistema.
+        LaunchedEffect(ui.fullscreen) {
+            val c = WindowCompat.getInsetsController(window, window.decorView)
+            if (ui.fullscreen) {
+                c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                c.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                c.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        val space = tab?.let { store.spaceById(if (it.kind == TabKind.ESSENTIAL) store.currentSpaceId else it.spaceId) }
+        val tint = spaceBase(space?.colors.orEmpty(), k.isDark, k.paper)
+        LaunchedEffect(tint, showSpaces, k.isDark) {
+            val c = WindowCompat.getInsetsController(window, window.decorView)
+            c.isAppearanceLightStatusBars = if (showSpaces) !k.isDark else tint.isLight()
+            c.isAppearanceLightNavigationBars = !k.isDark
+        }
+
+        // Atrás: pantalla completa → buscar → historial de la página → espacios → salir.
+        BackHandler(enabled = showSpaces) { moveTaskToBack(true) }
+        BackHandler(enabled = !showSpaces) {
+            val t = store.selectedTab
+            if (t != null && t.canGoBack) app.pool.sessionOf(t.id)?.goBack() else showSpaces = true
+        }
+        BackHandler(enabled = finding) { finding = false; tab?.let { app.pool.sessionOf(it.id)?.finder?.clear() } }
+        BackHandler(enabled = ui.fullscreen) { tab?.let { app.pool.sessionOf(it.id)?.exitFullScreen() } }
+
+        Box(Modifier.fillMaxSize().background(k.paper)) {
+            Column(
+                Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.navigationBarsPadding().imePadding()),
+            ) {
+                if (!ui.fullscreen && tab != null && !showSpaces) {
+                    BrowserTopBar(
+                        tab = tab,
+                        tint = tint,
+                        onAddress = { search = SearchTarget.Navigate(tab, tab.url.takeUnless { it.startsWith("about:") }.orEmpty()) },
+                        onReload = { app.pool.sessionOf(tab.id)?.reload() },
+                        onStop = { app.pool.sessionOf(tab.id)?.stop() },
+                    )
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    AndroidView(factory = { geckoView }, modifier = Modifier.fillMaxSize())
+                    if (!ui.fullscreen && tab != null && !showSpaces) {
+                        if (finding) {
+                            FindBar(
+                                query = ui.findQuery.orEmpty(),
+                                current = ui.findCurrent, total = ui.findTotal,
+                                onQuery = { q -> find(tab, q, backwards = false, restart = true) },
+                                onNext = { find(tab, ui.findQuery.orEmpty(), backwards = false) },
+                                onPrev = { find(tab, ui.findQuery.orEmpty(), backwards = true) },
+                                onClose = { finding = false; app.pool.sessionOf(tab.id)?.finder?.clear() },
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            )
+                        } else {
+                            BrowserBottomPills(
+                                tab = tab,
+                                visible = ui.scrollDirection <= 0 || tab.loading,
+                                onBack = {
+                                    if (tab.canGoBack) app.pool.sessionOf(tab.id)?.goBack() else showSpaces = true
+                                },
+                                onForward = { app.pool.sessionOf(tab.id)?.goForward() },
+                                onSpaces = { showSpaces = true },
+                                onMenu = { pageMenu = true },
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            )
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showSpaces,
+                enter = fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.98f),
+                exit = fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 0.98f),
+            ) {
+                SpacesScreen(
+                    onOpenTab = ::open,
+                    onNewTab = { s -> search = SearchTarget.NewTab(s.id, private = s.id == Space.PRIVATE_ID) },
+                    onSearch = { search = SearchTarget.NewTab(store.currentSpaceId, private = store.currentSpaceId == Space.PRIVATE_ID) },
+                    onHistory = { history = true },
+                    onSettings = { settings = true },
+                    onTabMenu = { tabMenu = it },
+                    onEditSpace = { if (it.id != Space.PRIVATE_ID) editSpace = it },
+                    onAddSpace = { newSpace = true },
+                )
+            }
+
+            search?.let { target ->
+                SearchScreen(
+                    initial = target.initial,
+                    private = (target as? SearchTarget.NewTab)?.private ?: (target as SearchTarget.Navigate).tab.isPrivate,
+                    onSubmit = { url ->
+                        search = null
+                        when (target) {
+                            is SearchTarget.NewTab -> {
+                                store.newTab(url, spaceId = target.spaceId, private = target.private)
+                                showSpaces = false
+                            }
+                            is SearchTarget.Navigate -> {
+                                app.pool.ensure(target.tab).loadUri(url)
+                                open(target.tab)
+                            }
+                        }
+                    },
+                    onSwitchTab = { t -> search = null; open(t) },
+                    onDismiss = { search = null },
+                )
+            }
+
+            // ── Hojas ──
+            tabMenu?.let { t ->
+                TabMenuSheet(t, onDismiss = { tabMenu = null }, onOpen = { open(t) }, onMove = { moveTab = t })
+            }
+            moveTab?.let { t -> MoveToSpaceSheet(t) { moveTab = null } }
+            if (pageMenu && tab != null) {
+                PageMenuSheet(
+                    tab = tab,
+                    onDismiss = { pageMenu = false },
+                    onNewTab = { search = SearchTarget.NewTab(if (tab.isPrivate) store.currentSpaceId else tab.spaceId, private = false) },
+                    onNewPrivate = { search = SearchTarget.NewTab(store.currentSpaceId, private = true) },
+                    onFind = { finding = true },
+                    onShare = { share(tab.url, tab.title) },
+                    onMove = { moveTab = tab },
+                )
+            }
+            editSpace?.let { s -> SpaceEditorSheet(s) { editSpace = null } }
+            if (newSpace) SpaceEditorSheet(null) { newSpace = false }
+            if (history) {
+                HistorySheet(onDismiss = { history = false }, onOpen = { url -> history = false; store.newTab(url); showSpaces = false })
+            }
+            if (settings) SettingsSheet(onDismiss = { settings = false }, onRestart = ::restart)
+
+            ui.contextMenu?.let { req ->
+                ContextMenuSheet(
+                    link = req.element.linkUri,
+                    image = req.element.srcUri.takeIf {
+                        req.element.type == org.mozilla.geckoview.GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
+                    },
+                    title = req.element.title ?: req.element.linkText,
+                    onDismiss = { ui.contextMenu = null },
+                    onOpenNew = { url, foreground ->
+                        val private = url.startsWith("private:") || req.tab.isPrivate
+                        val target = url.removePrefix("private:")
+                        val t = store.newTab(target, spaceId = req.tab.spaceId, private = private, select = foreground)
+                        if (foreground) open(t) else ui.show("Abierta en segundo plano")
+                    },
+                    onShare = { share(it) },
+                    onDownload = { url ->
+                        GeckoWebExecutor(app.runtime).fetch(WebRequest(url)).accept { r -> r?.let(app.downloads::save) }
+                    },
+                )
+            }
+
+            // ── Diálogos de la página ──
+            ui.prompt?.let { p -> PromptHost(p, onDone = { ui.prompt = null }, onFile = ::openFilePicker) }
+            ui.permission?.let { p -> PermissionHost(p) { ui.permission = null } }
+
+            Toast(ui.toast) { ui.toast = null }
+        }
+    }
+
+    private fun find(tab: Tab, query: String, backwards: Boolean, restart: Boolean = false) {
+        val ui = app.ui
+        ui.findQuery = query
+        val finder = app.pool.sessionOf(tab.id)?.finder ?: return
+        if (query.isEmpty()) {
+            finder.clear(); ui.findTotal = 0; ui.findCurrent = 0; return
+        }
+        if (restart) finder.clear()
+        val flags = if (backwards) GeckoSession.FINDER_FIND_BACKWARDS else 0
+        finder.find(query, flags).accept { r ->
+            ui.findTotal = r?.total ?: 0
+            ui.findCurrent = r?.current ?: 0
+        }
+    }
+}
+
+@Composable
+private fun Toast(message: String?, onGone: () -> Unit) {
+    val k = LocalKaze.current
+    LaunchedEffect(message) {
+        if (message != null) {
+            delay(2200)
+            onGone()
+        }
+    }
+    Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 84.dp), contentAlignment = Alignment.BottomCenter) {
+        AnimatedVisibility(message != null, enter = fadeIn(), exit = fadeOut()) {
+            Text(
+                message.orEmpty(),
+                style = KazeType.small,
+                color = k.paper,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.9f)).padding(horizontal = 18.dp, vertical = 10.dp),
+            )
+        }
     }
 }

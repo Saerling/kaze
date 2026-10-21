@@ -1,0 +1,11 @@
+diff --git a/browser/app/profile/firefox.js b/browser/app/profile/firefox.js
+index a7dc185..a2c20df 100644
+--- a/browser/app/profile/firefox.js
++++ b/browser/app/profile/firefox.js
+@@ -3824,3 +3824,6 @@ pref("distribution.mozillaonline.ignore", true);
+ #ifdef XP_MACOSX
+   pref("browser.macAppMenu.setAsDefaultShown", false);
+ #endif
++
++// Kaze
++#include ../../kaze/kaze-prefs.js

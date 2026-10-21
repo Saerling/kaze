@@ -1,0 +1,21 @@
+name: Escritorio
+
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", "branding/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop/**", "branding/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Parches, sintaxis y marca
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Comprobar contra la versión de Firefox de surfer.json
+        run: python3 desktop/scripts/check.py

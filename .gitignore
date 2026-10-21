@@ -1,0 +1,23 @@
+# Escritorio: código de Zen/Firefox descargado (se regenera con sync_zen.py)
+desktop/build/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/.kotlin/
+*.iml
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Python
+__pycache__/
+*.pyc
+
+# Sistema
+.DS_Store
+Thumbs.db

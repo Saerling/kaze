@@ -26,7 +26,30 @@ enum class TabKind(val code: Int) {
     }
 }
 
-/** Un espacio de trabajo (Zen "workspace"): nombre, emoji y degradado de colores. */
+/**
+ * Un perfil (como en Safari): sus propios espacios, Essentials, historial, marcadores,
+ * lista de lectura y cookies. "Personal" es el perfil por defecto.
+ */
+@Stable
+class Profile(
+    val id: String = newId(),
+    name: String,
+    emoji: String,
+    position: Int,
+) {
+    var name by mutableStateOf(name)
+    var emoji by mutableStateOf(emoji)
+    var position by mutableIntStateOf(position)
+
+    /** Contexto de Gecko: cookies y almacenamiento separados por perfil. */
+    val contextId: String? get() = if (id == DEFAULT_ID) null else "kaze-profile-$id"
+
+    companion object {
+        const val DEFAULT_ID = "personal"
+    }
+}
+
+/** Un espacio de trabajo (Zen "workspace", "grupo de pestañas" en Safari): nombre, emoji y degradado. */
 @Stable
 class Space(
     val id: String = newId(),
@@ -35,7 +58,9 @@ class Space(
     colors: List<Int>,
     position: Int,
     isolated: Boolean = false,
+    profileId: String = Profile.DEFAULT_ID,
 ) {
+    var profileId by mutableStateOf(profileId)
     var name by mutableStateOf(name)
     var emoji by mutableStateOf(emoji)
     /** 1 a 3 colores ARGB para el degradado de fondo. */
@@ -44,8 +69,8 @@ class Space(
     /** Si es true, el espacio tiene sus propias cookies y sesiones (como un contenedor de Firefox). */
     var isolated by mutableStateOf(isolated)
 
-    /** Identificador de contexto de Gecko para aislar cookies del espacio. */
-    val contextId: String? get() = if (isolated) "kaze-space-$id" else null
+    /** Contexto de Gecko propio si el espacio está aislado (dentro de su perfil). */
+    fun contextId(profile: Profile?): String? = if (isolated) "kaze-space-$id" else profile?.contextId
 
     companion object {
         /** Espacio virtual de las pestañas privadas; nunca se guarda en disco. */
@@ -89,10 +114,31 @@ class Tab(
     /** true mientras Gecko tiene la página cargada en memoria. */
     var isLive by mutableStateOf(false)
     var desktopMode by mutableStateOf(false)
+    /** La página tiene un artículo que se puede leer en modo Lector. */
+    var readerable by mutableStateOf(false)
+    var readerMode by mutableStateOf(false)
+    /** Idioma detectado de la página (para ofrecer Traducir) y si ya está traducida. */
+    var pageLang by mutableStateOf<String?>(null)
+    var translated by mutableStateOf(false)
+    /** Rastreadores bloqueados en esta página (Reporte de privacidad). */
+    var trackersBlocked by mutableIntStateOf(0)
+
+    val isStart: Boolean get() = url == Urls.START
 
     val displayTitle: String
-        get() = title.ifBlank { Urls.displayHost(url).ifBlank { url } }
+        get() = if (isStart) "Página de inicio" else title.ifBlank { Urls.displayHost(url).ifBlank { url } }
 }
+
+/** Una página guardada en la lista de lectura. */
+data class ReadingItem(val url: String, val title: String, val added: Long)
+
+/** Un marcador o un elemento de la lista de lectura. */
+data class SavedPage(
+    val url: String,
+    val title: String,
+    val added: Long,
+    val read: Boolean = false,
+)
 
 /** Una entrada del historial. */
 data class HistoryEntry(

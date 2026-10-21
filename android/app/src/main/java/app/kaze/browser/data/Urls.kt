@@ -9,6 +9,8 @@ import java.net.URLEncoder
 
 object Urls {
     const val BLANK = "about:blank"
+    /** Página de inicio de Kaze: se dibuja en Compose, sin cargar el motor (no gasta RAM de Gecko). */
+    const val START = "kaze:inicio"
 
     private val SCHEMES = listOf(
         "http://", "https://", "about:", "file://", "data:", "view-source:", "moz-extension://", "resource://",
@@ -41,6 +43,7 @@ object Urls {
 
     /** "https://www.ejemplo.com/a" → "ejemplo.com" */
     fun displayHost(url: String): String {
+        if (url == START) return ""
         if (url.startsWith("about:")) return url
         val host = host(url) ?: return url.removePrefix("https://").removePrefix("http://").trimEnd('/')
         return host.removePrefix("www.")

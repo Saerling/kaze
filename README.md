@@ -13,7 +13,7 @@
 <p align="center">
   <img src="docs/capturas/escritorio-claro.png" width="640" alt="Kaze en Windows">
   &nbsp;
-  <img src="docs/capturas/android-espacios-claro.png" width="180" alt="Kaze en Android">
+  <img src="docs/capturas/android-pestanas-claro.png" width="180" alt="Kaze en Android">
 </p>
 
 ## Qué tiene
@@ -30,6 +30,7 @@
 | Espacios aislados (cookies propias, como contenedores) | con los contenedores de Firefox | ✅ |
 | Bloqueo de rastreadores estricto, sin telemetría | ✅ | ✅ |
 | Historial, búsqueda con sugerencias, privadas, descargas, buscar en página, versión de escritorio | ✅ (Firefox) | ✅ |
+| Estilo Safari: barra abajo, pestañas en tarjetas, página de inicio, lector, traducir, perfiles | — | ✅ |
 | Firefox Sync | ✅ | próxima fase |
 
 ## Estructura

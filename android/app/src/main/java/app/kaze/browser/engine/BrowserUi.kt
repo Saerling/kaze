@@ -56,6 +56,8 @@ class BrowserUi {
     var contextMenu by mutableStateOf<ContextMenuRequest?>(null)
     var fullscreen by mutableStateOf(false)
     var toast by mutableStateOf<String?>(null)
+    /** Pide abrir Ajustes desde cualquier hoja. */
+    var openSettings by mutableStateOf(false)
 
     /** Dirección del último scroll de la página: >0 bajando, <0 subiendo. */
     var scrollDirection by mutableIntStateOf(0)

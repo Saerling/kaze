@@ -81,6 +81,32 @@ class StoreTest {
         assertEquals(1, store.spaces.size)
     }
 
+    @Test fun perfilesSeparanEspaciosEHistorial() {
+        db.recordVisit("https://personal.com/", "P")
+        val trabajo = store.addProfile("Trabajo", "💼")
+        assertEquals(1, store.spaces.count { it.profileId == trabajo.id })
+        val salientes = store.switchProfile(trabajo.id)
+        assertTrue(salientes.isEmpty() || salientes.all { !it.isPrivate })
+        assertEquals(listOf("General"), store.profileSpaces.map { it.name })
+        waitDb()
+        assertTrue(db.suggest("personal").isEmpty())
+        store.switchProfile(app.kaze.browser.data.Profile.DEFAULT_ID)
+        assertEquals(1, db.suggest("personal").size)
+        val cerradas = store.deleteProfile(trabajo.id)
+        assertTrue(cerradas.isEmpty())
+        assertEquals(1, store.profiles.size)
+    }
+
+    @Test fun listaDeLectura() {
+        db.addToReadingList("https://a.com/nota", "Nota")
+        waitDb()
+        assertEquals(listOf("Nota"), db.readingList().map { it.title })
+        assertTrue(db.inReadingList("https://a.com/nota"))
+        db.removeFromReadingList("https://a.com/nota")
+        waitDb()
+        assertTrue(db.readingList().isEmpty())
+    }
+
     @Test fun historial() {
         db.recordVisit("https://kaze.app/", "Kaze")
         db.recordVisit("https://kaze.app/", "")

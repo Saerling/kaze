@@ -17,6 +17,7 @@ import app.kaze.browser.engine.BrowserUi
 import app.kaze.browser.engine.Downloads
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.engine.SessionPool
+import app.kaze.browser.engine.Thumbnails
 import app.kaze.browser.engine.Updater
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -72,7 +73,7 @@ class Kaze private constructor(context: Context) {
 
     /** El motor se crea al primer uso (la pantalla de espacios se dibuja antes, el arranque se siente más rápido). */
     private val runtimeLazy = lazy { Engine.create(context, settings).also(::setupExtensions) }
-    private val poolLazy = lazy { SessionPool(runtime, store, settings, db, ui, downloads) }
+    private val poolLazy = lazy { SessionPool(runtime, store, settings, db, ui, downloads).also(::installExtension) }
     val runtime: GeckoRuntime by runtimeLazy
     val pool: SessionPool by poolLazy
 
@@ -81,6 +82,15 @@ class Kaze private constructor(context: Context) {
 
     init {
         db.trimHistory()
+    }
+
+    val thumbnails = Thumbnails(context)
+
+    /** Extensión interna (modo Lector). Va dentro del APK y se instala/actualiza sola. */
+    private fun installExtension(pool: SessionPool) {
+        runtime.webExtensionController
+            .ensureBuiltIn("resource://android/assets/extensions/kaze/", "interno@kaze.app")
+            .accept({ ext -> pool.extension = ext }, { e -> android.util.Log.w("Kaze", "Extensión interna", e) })
     }
 
     private fun setupExtensions(runtime: GeckoRuntime) {

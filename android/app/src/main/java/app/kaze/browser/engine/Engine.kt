@@ -90,7 +90,8 @@ object Engine {
             .webManifest(false)
             .globalPrivacyControlEnabled(true)
             .aboutConfigEnabled(true)
-            .automaticFontSizeAdjustment(true)
+            .automaticFontSizeAdjustment(settings.textSize == 100)
+            .fontSizeFactor(settings.textSize / 100f)
             .consoleOutput(BuildConfig.DEBUG)
             .remoteDebuggingEnabled(BuildConfig.DEBUG)
             .debugLogging(false)
@@ -126,6 +127,12 @@ object Engine {
     }
 
     private const val TAG = "KazeEngine"
+
+    /** Cambia el tamaño del texto de todas las páginas al momento (el "AA" de Safari). */
+    fun applyTextSize(runtime: GeckoRuntime, percent: Int) {
+        runtime.settings.setAutomaticFontSizeAdjustment(percent == 100)
+        runtime.settings.setFontSizeFactor(percent / 100f)
+    }
 
     fun isDarkTheme(context: Context, settings: Settings): Boolean = when (settings.theme) {
         ThemeMode.LIGHT -> false

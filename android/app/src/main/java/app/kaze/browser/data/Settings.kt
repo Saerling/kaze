@@ -46,6 +46,12 @@ class Settings(context: Context) {
     /** Aislamiento de sitios por proceso (Fission): más seguro pero usa bastante más RAM. */
     var siteIsolation by pref("fission", false)
     var lastSpaceId by pref("last_space", "")
+    var lastProfileId by pref("last_profile", "")
+    /** Tamaño del texto de las páginas, en % (como "AA" de Safari). */
+    var textSize by pref("text_size", 100)
+    /** Total de rastreadores bloqueados (Reporte de privacidad) y desde cuándo se cuentan. */
+    var trackersTotal by pref("trackers_total", 0)
+    var trackersSince by pref("trackers_since", "")
     var onboarded by pref("onboarded", false)
 
     // ── Mecánica ──────────────────────────────────────────────────────

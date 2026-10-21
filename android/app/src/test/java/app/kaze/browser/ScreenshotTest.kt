@@ -20,13 +20,13 @@ import androidx.test.core.app.ApplicationProvider
 import app.kaze.browser.data.TabKind
 import app.kaze.browser.data.Urls
 import app.kaze.browser.ui.components.LocalApp
-import app.kaze.browser.ui.screens.BrowserBottomPills
-import app.kaze.browser.ui.screens.BrowserTopBar
-import app.kaze.browser.ui.screens.SpacesScreen
-import app.kaze.browser.ui.sheets.SpaceEditorSheet
+import app.kaze.browser.ui.screens.ChromeActions
+import app.kaze.browser.ui.screens.SafariBottomBar
+import app.kaze.browser.ui.screens.StartPage
+import app.kaze.browser.ui.screens.TabsScreen
+import app.kaze.browser.ui.sheets.GroupsSheet
 import app.kaze.browser.ui.theme.KazeTheme
 import app.kaze.browser.ui.theme.LocalKaze
-import app.kaze.browser.ui.theme.spaceBase
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Before
@@ -69,33 +69,60 @@ class ScreenshotTest {
         KazeTheme(dark) { CompositionLocalProvider(LocalApp provides app, content = content) }
     }
 
+    /** Miniatura falsa con aspecto de página (para ver las tarjetas como en un teléfono real). */
+    private fun fakeThumb(title: String, color: Int): android.graphics.Bitmap {
+        val b = android.graphics.Bitmap.createBitmap(720, 1100, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        c.drawColor(android.graphics.Color.WHITE)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = color
+        c.drawRect(0f, 0f, 720f, 260f, p)
+        p.color = android.graphics.Color.rgb(30, 30, 32); p.textSize = 64f; p.isFakeBoldText = true
+        c.drawText(title, 40f, 360f, p)
+        p.color = android.graphics.Color.rgb(205, 205, 210)
+        for (i in 0 until 9) c.drawRect(40f, 420f + i * 64f, if (i % 3 == 2) 460f else 680f, 450f + i * 64f, p)
+        return b
+    }
+
+    private fun thumbs() {
+        val colors = listOf(0xFF5B8DEF, 0xFFE07A5F, 0xFF81B29A, 0xFFF2CC8F, 0xFF3D405B, 0xFF9C89B8).map { it.toInt() }
+        app.store.tabs.forEachIndexed { i, t -> app.thumbnails.save(t.id, fakeThumb(t.displayTitle.take(16), colors[i % colors.size])) }
+        Thread.sleep(800)
+    }
+
     @Composable
-    private fun Spaces() = SpacesScreen({}, {}, {}, {}, {}, {}, {}, {})
+    private fun Tabs() = TabsScreen({}, {}, {}, {}, {}, {})
 
-    @Test fun espacios_claro() {
-        compose.setContent { Themed(false) { Spaces() } }
+    @Test fun pestanas_claro() {
+        thumbs()
+        compose.setContent { Themed(false) { Tabs() } }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("../../docs/capturas/android-espacios-claro.png")
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-claro.png")
     }
 
-    @Test fun espacios_oscuro() {
-        compose.setContent { Themed(true) { Spaces() } }
+    @Test fun pestanas_oscuro() {
+        thumbs()
+        compose.setContent { Themed(true) { Tabs() } }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("../../docs/capturas/android-espacios-oscuro.png")
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-oscuro.png")
     }
+
+    @Test fun inicio() {
+        compose.setContent { Themed(false) { StartPage(false, {}, {}, {}, {}) } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-inicio.png")
+    }
+
+    private fun actions() = ChromeActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
     @Test fun navegador() {
         val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
         tab.canGoBack = true
         compose.setContent {
             Themed(false) {
-                val k = LocalKaze.current
-                Column(Modifier.fillMaxSize().background(k.paper)) {
-                    BrowserTopBar(tab, spaceBase(app.store.currentSpace!!.colors, false, k.paper), {}, {}, {})
-                    Box(Modifier.weight(1f).fillMaxWidth().background(Color.White)) {
-                        FakePage()
-                        BrowserBottomPills(tab, true, {}, {}, {}, {}, Modifier.align(Alignment.BottomCenter))
-                    }
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    FakePage()
+                    SafariBottomBar(tab, false, actions(), Modifier.align(Alignment.BottomCenter))
                 }
             }
         }
@@ -103,10 +130,24 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-navegador.png")
     }
 
-    @Test fun editor_de_espacio() {
-        compose.setContent { Themed(false) { Box(Modifier.fillMaxSize()) { Spaces(); SpaceEditorSheet(app.store.spaces.first()) {} } } }
+    @Test fun navegador_barra_reducida() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
+        compose.setContent {
+            Themed(true) {
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    FakePage()
+                    SafariBottomBar(tab, true, actions(), Modifier.align(Alignment.BottomCenter))
+                }
+            }
+        }
         compose.waitForIdle()
-        captureScreenRoboImage("../../docs/capturas/android-editar-espacio.png")
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-navegador-reducida.png")
+    }
+
+    @Test fun grupos() {
+        compose.setContent { Themed(false) { Box(Modifier.fillMaxSize()) { Tabs(); GroupsSheet({}, {}, {}, {}, {}) } } }
+        compose.waitForIdle()
+        captureScreenRoboImage("../../docs/capturas/android-grupos.png")
     }
 
     @Composable

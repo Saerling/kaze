@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -59,15 +60,20 @@ import app.kaze.browser.data.Urls
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.engine.PendingPrompt
 import app.kaze.browser.ui.components.LocalApp
-import app.kaze.browser.ui.screens.BrowserBottomPills
-import app.kaze.browser.ui.screens.BrowserTopBar
+import app.kaze.browser.ui.screens.ChromeActions
 import app.kaze.browser.ui.screens.FindBar
+import app.kaze.browser.ui.screens.SafariBottomBar
+import app.kaze.browser.ui.screens.StartPage
+import app.kaze.browser.ui.screens.TabsScreen
+import app.kaze.browser.ui.sheets.GroupsSheet
+import app.kaze.browser.ui.sheets.LibrarySheet
+import app.kaze.browser.ui.sheets.PrivacyReportSheet
+import app.kaze.browser.ui.sheets.ShareSheet
+import app.kaze.browser.ui.sheets.TabsQuickSheet
 import app.kaze.browser.ui.screens.SearchScreen
-import app.kaze.browser.ui.screens.SpacesScreen
 import app.kaze.browser.ui.sheets.ClipboardBridge
 import app.kaze.browser.ui.sheets.ContextMenuSheet
 import app.kaze.browser.ui.sheets.CrashSheet
-import app.kaze.browser.ui.sheets.HistorySheet
 import app.kaze.browser.ui.sheets.MoveToSpaceSheet
 import app.kaze.browser.ui.sheets.PageMenuSheet
 import app.kaze.browser.ui.sheets.PermissionHost
@@ -79,8 +85,6 @@ import app.kaze.browser.ui.sheets.UpdateSheet
 import app.kaze.browser.ui.theme.KazeTheme
 import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
-import app.kaze.browser.ui.theme.isLight
-import app.kaze.browser.ui.theme.spaceBase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -105,7 +109,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var geckoView: GeckoView
 
     /** Estado de navegación de la UI (sobrevive mientras viva la actividad). */
-    private var showSpaces by mutableStateOf(true)
+    private var showTabs by mutableStateOf(false)
 
     private var pendingFile: Pair<PromptDelegate.FilePrompt, PendingPrompt>? = null
     private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
@@ -191,7 +195,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (::app.isInitialized && !showSpaces) app.pool.resumeVisible()
+        if (::app.isInitialized && !showTabs) app.pool.resumeVisible()
     }
 
     override fun onStop() {
@@ -224,7 +228,7 @@ class MainActivity : ComponentActivity() {
             else -> null
         } ?: return
         app.store.newTab(url)
-        showSpaces = false
+        showTabs = false
     }
 
     private fun openExternal(uri: String): Boolean = try {
@@ -286,12 +290,17 @@ class MainActivity : ComponentActivity() {
         var search by remember { mutableStateOf<SearchTarget?>(null) }
         var tabMenu by remember { mutableStateOf<Tab?>(null) }
         var moveTab by remember { mutableStateOf<Tab?>(null) }
-        var pageMenu by remember { mutableStateOf(false) }
+        var aaMenu by remember { mutableStateOf(false) }
+        var shareMenu by remember { mutableStateOf(false) }
+        var tabsQuick by remember { mutableStateOf(false) }
+        var groups by remember { mutableStateOf(false) }
         var editSpace by remember { mutableStateOf<Space?>(null) }
         var newSpace by remember { mutableStateOf(false) }
-        var history by remember { mutableStateOf(false) }
+        var library by remember { mutableStateOf(false) }
         var settings by remember { mutableStateOf(false) }
+        var privacy by remember { mutableStateOf(false) }
         var finding by remember { mutableStateOf(false) }
+        var barHidden by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
         // Buscar una versión nueva en GitHub al abrir (solo en las versiones publicadas).
@@ -303,22 +312,56 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Al abrir: volver a la última pestaña del espacio, o una pestaña nueva con la página de inicio.
+        LaunchedEffect(Unit) {
+            if (store.selectedTab == null && !showTabs) {
+                val last = store.tabs.filter { it.spaceId == store.currentSpaceId && !it.isPrivate }.maxByOrNull { it.lastUsed }
+                if (last != null) store.select(last) else store.newTab(Urls.START)
+            }
+        }
+
+        /** Foto de la página actual para la vista de pestañas (solo la visible: no gasta RAM extra). */
+        fun snapshot(then: () -> Unit) {
+            val t = store.selectedTab
+            if (t == null || t.isStart || geckoView.visibility != View.VISIBLE || geckoView.session == null) {
+                then(); return
+            }
+            geckoView.capturePixels().accept({ bmp -> if (bmp != null) app.thumbnails.save(t.id, bmp); then() }, { then() })
+        }
+
         fun open(t: Tab) {
             store.select(t)
-            showSpaces = false
+            showTabs = false
+        }
+
+        fun newTab(private: Boolean = false) {
+            val t = store.newTab(Urls.START, private = private)
+            open(t)
         }
 
         fun closeTab(t: Tab) {
             val next = if (t.id == store.selectedTabId) store.nextAfterClose(t) else null
             app.pool.close(t)
+            app.thumbnails.delete(t.id)
             store.close(t)
-            if (next != null) open(next) else if (store.selectedTab == null) showSpaces = true
+            if (next != null) open(next) else if (store.selectedTab == null) showTabs = true
         }
 
-        // Mostrar la pestaña seleccionada en el GeckoView (o pausar todo en la pantalla de espacios).
-        LaunchedEffect(store.selectedTabId, store.selectionNonce, showSpaces) {
+        fun showTabsGrid() = snapshot { showTabs = true }
+
+        /** Deslizar la barra: pestaña anterior/siguiente del espacio (como Safari). */
+        fun swipeTab(delta: Int) {
+            val t = store.selectedTab ?: return
+            val list = (store.pinned(store.currentSpaceId) + store.normal(store.currentSpaceId)).filter { !it.isPrivate == !t.isPrivate }
+            val i = list.indexOfFirst { it.id == t.id }
+            val next = list.getOrNull(i + delta) ?: return
+            snapshot { open(next) }
+        }
+
+        // Mostrar la pestaña seleccionada en el GeckoView (o pausar todo en la vista de pestañas).
+        LaunchedEffect(store.selectedTabId, store.selectionNonce, showTabs, tab?.isStart) {
             val t = store.selectedTab
-            if (!showSpaces && t != null) {
+            if (!showTabs && t != null && !t.isStart) {
                 val s: GeckoSession = app.pool.show(t)
                 if (geckoView.session !== s) {
                     if (geckoView.session != null) geckoView.releaseSession()
@@ -326,14 +369,12 @@ class MainActivity : ComponentActivity() {
                 }
                 geckoView.visibility = View.VISIBLE
                 ui.scrollDirection = -1
+                barHidden = false
             } else {
                 app.pool.hideAll()
                 // INVISIBLE destruye la superficie de dibujo: Gecko libera memoria de GPU.
                 geckoView.visibility = View.INVISIBLE
-                if (t == null) {
-                    if (geckoView.session != null) geckoView.releaseSession()
-                    showSpaces = true
-                }
+                if (t == null && !showTabs) showTabs = true
             }
         }
 
@@ -348,80 +389,97 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        val space = tab?.let { store.spaceById(if (it.kind == TabKind.ESSENTIAL) store.currentSpaceId else it.spaceId) }
-        val tint = spaceBase(space?.colors.orEmpty(), k.isDark, k.paper)
-        LaunchedEffect(tint, showSpaces, k.isDark) {
+        LaunchedEffect(k.isDark) {
             val c = WindowCompat.getInsetsController(window, window.decorView)
-            c.isAppearanceLightStatusBars = if (showSpaces) !k.isDark else tint.isLight()
+            c.isAppearanceLightStatusBars = !k.isDark
             c.isAppearanceLightNavigationBars = !k.isDark
         }
 
-        // Atrás: pantalla completa → buscar → historial de la página → espacios → salir.
-        BackHandler(enabled = showSpaces) { moveTaskToBack(true) }
-        BackHandler(enabled = !showSpaces) {
+        // Atrás: pantalla completa → buscar → historial de la página → vista de pestañas → salir.
+        BackHandler(enabled = showTabs) { if (store.selectedTab != null) showTabs = false else moveTaskToBack(true) }
+        BackHandler(enabled = !showTabs) {
             val t = store.selectedTab
-            if (t != null && t.canGoBack) app.pool.sessionOf(t.id)?.goBack() else showSpaces = true
+            when {
+                t != null && t.readerMode -> app.pool.setReader(t, false)
+                t != null && t.canGoBack -> app.pool.sessionOf(t.id)?.goBack()
+                else -> showTabsGrid()
+            }
         }
         BackHandler(enabled = finding) { finding = false; tab?.let { app.pool.sessionOf(it.id)?.finder?.clear() } }
         BackHandler(enabled = ui.fullscreen) { tab?.let { app.pool.sessionOf(it.id)?.exitFullScreen() } }
 
+        val actions = tab?.let { t ->
+            ChromeActions(
+                onAddress = { search = SearchTarget.Navigate(t, if (t.isStart || t.url.startsWith("about:")) "" else t.url) },
+                onReload = { app.pool.sessionOf(t.id)?.reload() },
+                onStop = { app.pool.sessionOf(t.id)?.stop() },
+                onAa = { aaMenu = true },
+                onBack = {
+                    when {
+                        t.readerMode -> app.pool.setReader(t, false)
+                        t.canGoBack -> app.pool.sessionOf(t.id)?.goBack()
+                        else -> showTabsGrid()
+                    }
+                },
+                onForward = { app.pool.sessionOf(t.id)?.goForward() },
+                onShare = { shareMenu = true },
+                onLibrary = { library = true },
+                onTabs = { showTabsGrid() },
+                onTabsLong = { tabsQuick = true },
+                onSwipeTab = ::swipeTab,
+                onExpand = { barHidden = false; ui.scrollDirection = -1 },
+            )
+        }
+        val collapsed = tab != null && !tab.isStart && !tab.loading && (ui.scrollDirection > 0 || barHidden)
+
         Box(Modifier.fillMaxSize().background(k.paper)) {
-            Column(
-                Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.navigationBarsPadding().imePadding()),
-            ) {
-                if (!ui.fullscreen && tab != null && !showSpaces) {
-                    BrowserTopBar(
-                        tab = tab,
-                        tint = tint,
-                        onAddress = { search = SearchTarget.Navigate(tab, tab.url.takeUnless { it.startsWith("about:") }.orEmpty()) },
-                        onReload = { app.pool.sessionOf(tab.id)?.reload() },
-                        onStop = { app.pool.sessionOf(tab.id)?.stop() },
+            Box(Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.statusBarsPadding().imePadding())) {
+                AndroidView(factory = { geckoView }, modifier = Modifier.fillMaxSize())
+
+                if (tab != null && tab.isStart && !showTabs) {
+                    StartPage(
+                        private = tab.isPrivate,
+                        onOpenUrl = { url -> app.pool.ensure(tab).loadUri(url); store.onUrl(tab, url) },
+                        onOpenFavorite = ::open,
+                        onFavoriteMenu = { tabMenu = it },
+                        onPrivacyReport = { privacy = true },
                     )
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    AndroidView(factory = { geckoView }, modifier = Modifier.fillMaxSize())
-                    if (!ui.fullscreen && tab != null && !showSpaces) {
-                        if (finding) {
-                            FindBar(
-                                query = ui.findQuery.orEmpty(),
-                                current = ui.findCurrent, total = ui.findTotal,
-                                onQuery = { q -> find(tab, q, backwards = false, restart = true) },
-                                onNext = { find(tab, ui.findQuery.orEmpty(), backwards = false) },
-                                onPrev = { find(tab, ui.findQuery.orEmpty(), backwards = true) },
-                                onClose = { finding = false; app.pool.sessionOf(tab.id)?.finder?.clear() },
-                                modifier = Modifier.align(Alignment.BottomCenter),
-                            )
-                        } else {
-                            BrowserBottomPills(
-                                tab = tab,
-                                visible = ui.scrollDirection <= 0 || tab.loading,
-                                onBack = {
-                                    if (tab.canGoBack) app.pool.sessionOf(tab.id)?.goBack() else showSpaces = true
-                                },
-                                onForward = { app.pool.sessionOf(tab.id)?.goForward() },
-                                onSpaces = { showSpaces = true },
-                                onMenu = { pageMenu = true },
-                                modifier = Modifier.align(Alignment.BottomCenter),
-                            )
-                        }
+
+                if (!ui.fullscreen && tab != null && !showTabs && actions != null) {
+                    if (finding) {
+                        FindBar(
+                            query = ui.findQuery.orEmpty(),
+                            current = ui.findCurrent, total = ui.findTotal,
+                            onQuery = { q -> find(tab, q, backwards = false, restart = true) },
+                            onNext = { find(tab, ui.findQuery.orEmpty(), backwards = false) },
+                            onPrev = { find(tab, ui.findQuery.orEmpty(), backwards = true) },
+                            onClose = { finding = false; app.pool.sessionOf(tab.id)?.finder?.clear() },
+                            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+                        )
+                    } else {
+                        SafariBottomBar(
+                            tab = tab,
+                            collapsed = collapsed,
+                            a = actions,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
                     }
                 }
             }
 
             AnimatedVisibility(
-                visible = showSpaces,
-                enter = fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.98f),
-                exit = fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 0.98f),
+                visible = showTabs,
+                enter = fadeIn(tween(180)) + scaleIn(tween(240), initialScale = 1.04f),
+                exit = fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 1.04f),
             ) {
-                SpacesScreen(
-                    onOpenTab = ::open,
-                    onNewTab = { s -> search = SearchTarget.NewTab(s.id, private = s.id == Space.PRIVATE_ID) },
-                    onSearch = { search = SearchTarget.NewTab(store.currentSpaceId, private = store.currentSpaceId == Space.PRIVATE_ID) },
-                    onHistory = { history = true },
-                    onSettings = { settings = true },
+                TabsScreen(
+                    onOpen = ::open,
+                    onNewTab = { newTab(private = store.currentSpaceId == Space.PRIVATE_ID) },
+                    onDone = { if (store.selectedTab != null) showTabs = false else newTab() },
+                    onGroups = { groups = true },
                     onTabMenu = { tabMenu = it },
-                    onEditSpace = { if (it.id != Space.PRIVATE_ID) editSpace = it },
-                    onAddSpace = { newSpace = true },
+                    onClose = ::closeTab,
                 )
             }
 
@@ -434,10 +492,11 @@ class MainActivity : ComponentActivity() {
                         when (target) {
                             is SearchTarget.NewTab -> {
                                 store.newTab(url, spaceId = target.spaceId, private = target.private)
-                                showSpaces = false
+                                showTabs = false
                             }
                             is SearchTarget.Navigate -> {
                                 app.pool.ensure(target.tab).loadUri(url)
+                                store.onUrl(target.tab, url)
                                 open(target.tab)
                             }
                         }
@@ -452,22 +511,68 @@ class MainActivity : ComponentActivity() {
                 TabMenuSheet(t, onDismiss = { tabMenu = null }, onOpen = { open(t) }, onMove = { moveTab = t })
             }
             moveTab?.let { t -> MoveToSpaceSheet(t) { moveTab = null } }
-            if (pageMenu && tab != null) {
+            if (aaMenu && tab != null) {
                 PageMenuSheet(
                     tab = tab,
-                    onDismiss = { pageMenu = false },
-                    onNewTab = { search = SearchTarget.NewTab(if (tab.isPrivate) store.currentSpaceId else tab.spaceId, private = false) },
-                    onNewPrivate = { search = SearchTarget.NewTab(store.currentSpaceId, private = true) },
-                    onFind = { finding = true },
-                    onShare = { share(tab.url, tab.title) },
-                    onMove = { moveTab = tab },
+                    onDismiss = { aaMenu = false },
+                    onHideBar = { aaMenu = false; barHidden = true },
+                    onPrivacyReport = { aaMenu = false; privacy = true },
+                )
+            }
+            if (shareMenu && tab != null) {
+                ShareSheet(
+                    tab = tab,
+                    onDismiss = { shareMenu = false },
+                    onSystemShare = { share(tab.url, tab.title) },
+                    onFind = { shareMenu = false; finding = true },
+                    onMove = { shareMenu = false; moveTab = tab },
+                )
+            }
+            if (tabsQuick) {
+                TabsQuickSheet(
+                    tab = tab,
+                    onDismiss = { tabsQuick = false },
+                    onNewTab = { tabsQuick = false; newTab() },
+                    onNewPrivate = { tabsQuick = false; newTab(private = true) },
+                    onCloseTab = { tabsQuick = false; tab?.let(::closeTab) },
+                    onCloseAll = {
+                        tabsQuick = false
+                        store.clearNormal(store.currentSpaceId).forEach { app.pool.close(it); app.thumbnails.delete(it.id) }
+                        if (store.selectedTab == null) showTabs = true
+                    },
+                )
+            }
+            if (groups) {
+                GroupsSheet(
+                    onDismiss = { groups = false },
+                    onSelect = { id ->
+                        groups = false
+                        store.selectSpace(id)
+                    },
+                    onNew = { groups = false; newSpace = true },
+                    onEdit = { s -> groups = false; editSpace = s },
+                    onProfile = { id ->
+                        groups = false
+                        store.switchProfile(id).forEach(app.pool::unload)
+                        showTabs = true
+                    },
                 )
             }
             editSpace?.let { s -> SpaceEditorSheet(s) { editSpace = null } }
             if (newSpace) SpaceEditorSheet(null) { newSpace = false }
-            if (history) {
-                HistorySheet(onDismiss = { history = false }, onOpen = { url -> history = false; store.newTab(url); showSpaces = false })
+            if (library) {
+                LibrarySheet(
+                    onDismiss = { library = false },
+                    onOpenUrl = { url ->
+                        library = false
+                        val t = store.selectedTab
+                        if (t != null && t.isStart) { app.pool.ensure(t).loadUri(url); store.onUrl(t, url); open(t) }
+                        else { store.newTab(url); showTabs = false }
+                    },
+                    onOpenTab = { t -> library = false; open(t) },
+                )
             }
+            if (privacy) PrivacyReportSheet(tab) { privacy = false }
             if (settings) {
                 SettingsSheet(
                     onDismiss = { settings = false },
@@ -507,6 +612,11 @@ class MainActivity : ComponentActivity() {
             ui.permission?.let { p -> PermissionHost(p) { ui.permission = null } }
 
             Toast(ui.toast) { ui.toast = null }
+        }
+
+        // Ajustes se abre desde la Biblioteca y desde la vista de pestañas.
+        LaunchedEffect(ui.openSettings) {
+            if (ui.openSettings) { settings = true; ui.openSettings = false }
         }
     }
 

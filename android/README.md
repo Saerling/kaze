@@ -1,14 +1,32 @@
 # Kaze para Android
 
-Kotlin + Jetpack Compose sobre **GeckoView 158** (el motor de Firefox para Android), con la
-estética de Z-Sync: papel y tinta, degradado por espacio, Essentials y controles flotantes.
+Kotlin + Jetpack Compose sobre **GeckoView 158** (el motor de Firefox para Android), con el
+**aspecto de Safari** y las **funciones de Zen**: espacios, Essentials, fijadas y pestañas que se duermen.
 
 <p>
-  <img src="../docs/capturas/android-espacios-claro.png" width="200">
-  <img src="../docs/capturas/android-espacios-oscuro.png" width="200">
   <img src="../docs/capturas/android-navegador.png" width="200">
-  <img src="../docs/capturas/android-editar-espacio.png" width="200">
+  <img src="../docs/capturas/android-pestanas-claro.png" width="200">
+  <img src="../docs/capturas/android-inicio.png" width="200">
+  <img src="../docs/capturas/android-grupos.png" width="200">
 </p>
+
+## Cómo se usa
+
+- **Barra abajo (como Safari):** dirección en una cápsula con **AA** (lector, traducir, tamaño del texto,
+  versión de escritorio, reporte de privacidad, ocultar barra) y recargar. Debajo: atrás, adelante,
+  compartir, biblioteca y pestañas. Al bajar por la página se encoge; un toque la abre otra vez.
+  **Desliza la barra a los lados** para pasar a la pestaña anterior o siguiente.
+- **Vista de pestañas:** tarjetas con miniatura de cada página, buscar pestañas, Essentials y fijadas arriba.
+  Abajo, los emojis de tus espacios; **desliza a los lados** para cambiar de espacio (como Zen).
+  Mantén presionado el botón de pestañas para nueva, privada o cerrar.
+- **Grupos (espacios de Zen):** toca el nombre del grupo abajo para cambiar, crear o editar grupos
+  (nombre, emoji, colores, aislar cookies) y **perfiles**.
+- **Perfiles:** cada uno con sus grupos, Essentials, historial, lista de lectura y cookies propias.
+- **Página de inicio:** Favoritos (tus Essentials), visitados con frecuencia, lista de lectura y reporte de privacidad.
+  No carga el motor de Firefox hasta que abres algo: no gasta RAM.
+- **Lector y traducir:** lector limpio con temas y tamaño de letra; traducción de la página hecha **en el
+  propio teléfono** con el traductor de Firefox (la primera vez descarga el idioma).
+- **Biblioteca:** Favoritos, Lista de lectura e Historial.
 
 ## Instalar y actualizar
 

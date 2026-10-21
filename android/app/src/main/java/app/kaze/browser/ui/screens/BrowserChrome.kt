@@ -4,15 +4,20 @@
 
 package app.kaze.browser.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,9 +25,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,15 +35,16 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.ArrowBackIos
+import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -47,142 +53,255 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.kaze.browser.data.Tab
 import app.kaze.browser.data.Urls
-import app.kaze.browser.ui.components.FloatingPill
 import app.kaze.browser.ui.components.LocalApp
+import app.kaze.browser.ui.components.ToolbarIcon
 import app.kaze.browser.ui.components.tap
 import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
+import app.kaze.browser.ui.theme.glass
 import app.kaze.browser.ui.theme.liftCard
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
-/** Barra superior del navegador: candado, dirección y recargar, sobre el color del espacio. */
+/** Las acciones de la barra de Safari. */
+class ChromeActions(
+    val onAddress: () -> Unit,
+    val onReload: () -> Unit,
+    val onStop: () -> Unit,
+    val onAa: () -> Unit,
+    val onBack: () -> Unit,
+    val onForward: () -> Unit,
+    val onShare: () -> Unit,
+    val onLibrary: () -> Unit,
+    val onTabs: () -> Unit,
+    val onTabsLong: () -> Unit,
+    /** Deslizar la barra: -1 pestaña anterior, +1 siguiente. */
+    val onSwipeTab: (Int) -> Unit,
+    val onExpand: () -> Unit,
+)
+
+/**
+ * Barra inferior de Safari: cápsula de dirección (AA · sitio · recargar) y debajo
+ * atrás, adelante, compartir, marcadores y pestañas. Al bajar por la página se
+ * encoge a una cápsula pequeña con el dominio; un toque la vuelve a abrir.
+ */
 @Composable
-fun BrowserTopBar(tab: Tab, tint: Color, onAddress: () -> Unit, onReload: () -> Unit, onStop: () -> Unit) {
-    val k = LocalKaze.current
-    val app = LocalApp.current
-    val engine = app.settings.searchEngine
-    val label = remember(tab.url, engine) { Urls.searchTermsOf(tab.url, engine) ?: Urls.displayHost(tab.url) }
+fun SafariBottomBar(tab: Tab, collapsed: Boolean, a: ChromeActions, modifier: Modifier = Modifier) {
+    AnimatedContent(
+        targetState = collapsed,
+        transitionSpec = {
+            (fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.92f)) togetherWith
+                (fadeOut(tween(120)) + scaleOut(tween(180), targetScale = 0.92f))
+        },
+        contentAlignment = Alignment.BottomCenter,
+        modifier = modifier,
+        label = "bar",
+    ) { small ->
+        if (small) CollapsedBar(tab, a.onExpand) else ExpandedBar(tab, a)
+    }
+}
 
-    Column(Modifier.fillMaxWidth().background(tint).statusBarsPadding()) {
+@Composable
+private fun CollapsedBar(tab: Tab, onExpand: () -> Unit) {
+    val k = LocalKaze.current
+    Box(Modifier.fillMaxWidth().padding(bottom = 6.dp), contentAlignment = Alignment.Center) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp)
-                .height(44.dp)
-                .tap(onAddress)
-                .liftCard(RoundedCornerShape(50))
-                .padding(horizontal = 6.dp),
+            Modifier.glass(RoundedCornerShape(50), 8f).clickable(onClick = onExpand).padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                when {
-                    tab.isPrivate -> Text("🕶️")
-                    tab.url.startsWith("about:") -> Unit
-                    tab.isSecure -> Icon(Icons.Outlined.Lock, "Conexión segura", tint = k.ink55, modifier = Modifier.size(16.dp))
-                    else -> Icon(Icons.Outlined.Warning, "Conexión no segura", tint = Color(0xFFC0563A), modifier = Modifier.size(16.dp))
-                }
+            if (!tab.isSecure && !tab.isStart) {
+                Icon(Icons.Outlined.Warning, null, tint = Color(0xFFFF9500), modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
             }
             Text(
-                label.ifBlank { "Buscar o escribir dirección" },
-                style = KazeType.body.copy(fontWeight = FontWeight.SemiBold),
-                color = if (label.isBlank()) k.ink55 else k.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                addressLabel(tab).ifBlank { "Kaze" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
+                color = k.ink, maxLines = 1,
             )
-            Box(
-                Modifier.size(36.dp).clip(CircleShape).clickable { if (tab.loading) onStop() else onReload() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    if (tab.loading) Icons.Outlined.Close else Icons.Outlined.Refresh,
-                    if (tab.loading) "Detener" else "Recargar",
-                    tint = k.ink70, modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        // Progreso de carga: línea fina bajo la barra.
-        val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "progress")
-        Box(Modifier.fillMaxWidth().height(2.dp)) {
-            if (tab.loading) {
-                Box(Modifier.fillMaxWidth(progress.coerceIn(0.05f, 1f)).height(2.dp).background(k.accent))
-            }
         }
     }
 }
 
-/** Controles flotantes abajo: atrás/adelante a la izquierda, espacios y menú a la derecha. */
 @Composable
-fun BrowserBottomPills(
-    tab: Tab,
-    visible: Boolean,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
-    onSpaces: () -> Unit,
-    onMenu: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInVertically { it } + fadeIn(),
-        exit = slideOutVertically { it } + fadeOut(),
-        modifier = modifier,
+private fun ExpandedBar(tab: Tab, a: ChromeActions) {
+    val k = LocalKaze.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .glass(RoundedCornerShape(28.dp))
+            .padding(top = 8.dp, start = 8.dp, end = 8.dp),
     ) {
+        AddressPill(tab, a)
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FloatingPill {
-                Row(Modifier.padding(horizontal = 4.dp)) {
-                    PillButton(Icons.AutoMirrored.Outlined.ArrowBack, "Atrás", enabled = true, onClick = onBack)
-                    PillButton(Icons.AutoMirrored.Outlined.ArrowForward, "Adelante", enabled = tab.canGoForward, onClick = onForward)
-                }
-            }
-            FloatingPill {
-                Row(Modifier.padding(horizontal = 4.dp)) {
-                    PillButton(Icons.Outlined.GridView, "Espacios y pestañas", enabled = true, onClick = onSpaces)
-                    PillButton(Icons.Outlined.MoreHoriz, "Menú", enabled = true, onClick = onMenu)
-                }
-            }
+            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onClick = a.onBack)
+            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante", enabled = tab.canGoForward, onClick = a.onForward)
+            ToolbarIcon(Icons.Outlined.IosShare, "Compartir y más", enabled = !tab.isStart, onClick = a.onShare)
+            ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
+            TabsButton(a.onTabs, a.onTabsLong)
         }
     }
 }
 
+/** El ícono de pestañas de Safari (dos cuadrados); mantener presionado abre el menú rápido. */
 @Composable
-private fun PillButton(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun TabsButton(onClick: () -> Unit, onLong: () -> Unit) {
     val k = LocalKaze.current
     Box(
-        Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .semantics { contentDescription = label },
+        Modifier.size(48.dp).clip(CircleShape).tap(onClick, onLong).semantics { contentDescription = "Pestañas" },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = k.ink, modifier = Modifier.size(22.dp).alpha(if (enabled) 1f else 0.3f))
+        Box(Modifier.offset(3.dp, (-3).dp).size(15.dp).clip(RoundedCornerShape(4.dp)).background(k.accent.copy(alpha = 0.35f)))
+        Box(Modifier.offset((-2).dp, 2.dp).size(16.dp).clip(RoundedCornerShape(4.dp)).background(k.accent).padding(1.8.dp)) {
+            Box(Modifier.size(12.4.dp).clip(RoundedCornerShape(3.dp)).background(k.glass))
+        }
     }
 }
 
-/** Barra de "buscar en la página". */
+/** Texto de la cápsula: búsqueda si la página es de un buscador, si no el dominio. */
+@Composable
+private fun addressLabel(tab: Tab): String {
+    val app = LocalApp.current
+    val engine = app.settings.searchEngine
+    return remember(tab.url, engine) {
+        if (tab.isStart) "" else Urls.searchTermsOf(tab.url, engine) ?: Urls.displayHost(tab.url)
+    }
+}
+
+@Composable
+private fun AddressPill(tab: Tab, a: ChromeActions) {
+    val k = LocalKaze.current
+    val scope = rememberCoroutineScope()
+    val drag = remember { Animatable(0f) }
+    val label = addressLabel(tab)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .offset { IntOffset(drag.value.roundToInt(), 0) }
+            .liftCard(RoundedCornerShape(14.dp))
+            // Deslizar a los lados cambia de pestaña (como Safari).
+            .pointerInput(tab.id) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        val d = drag.value
+                        scope.launch { drag.animateTo(0f, spring(0.8f, 500f)) }
+                        if (abs(d) > 90) a.onSwipeTab(if (d < 0) 1 else -1)
+                    },
+                    onDragCancel = { scope.launch { drag.animateTo(0f) } },
+                ) { change, dx ->
+                    change.consume()
+                    scope.launch { drag.snapTo((drag.value + dx * 0.6f).coerceIn(-160f, 160f)) }
+                }
+            }
+            // Deslizar hacia arriba abre la vista de pestañas.
+            .pointerInput(Unit) {
+                var total = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { total = 0f },
+                    onDragEnd = { if (total < -60) a.onTabs() },
+                ) { change, dy -> change.consume(); total += dy }
+            },
+    ) {
+        Row(Modifier.fillMaxWidth().height(46.dp), verticalAlignment = Alignment.CenterVertically) {
+            // "AA": opciones de la página (Lector, traducir, tamaño del texto…).
+            Box(
+                Modifier.size(46.dp).clickable(enabled = !tab.isStart, onClick = a.onAa)
+                    .semantics { contentDescription = "Opciones de la página" },
+                contentAlignment = Alignment.Center,
+            ) {
+                when {
+                    tab.translated -> Icon(Icons.Outlined.Translate, null, tint = k.accent, modifier = Modifier.size(19.dp))
+                    else -> Text(
+                        "AA",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = when {
+                            tab.isStart -> k.ink35
+                            tab.readerMode -> k.accent
+                            else -> k.ink
+                        },
+                    )
+                }
+                if (tab.readerable && !tab.readerMode) {
+                    // Puntito: hay un artículo para leer en modo Lector.
+                    Box(Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 9.dp).size(6.dp).clip(CircleShape).background(k.accent))
+                }
+            }
+            Row(
+                Modifier.weight(1f).height(46.dp).clickable(onClick = a.onAddress),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                when {
+                    tab.isStart || label.isBlank() -> Text("Buscar o escribir dirección", style = KazeType.body, color = k.ink55, maxLines = 1)
+                    else -> {
+                        if (tab.isPrivate) {
+                            Text("Privada · ", style = KazeType.body.copy(fontWeight = FontWeight.Medium), color = k.ink55)
+                        } else if (!tab.url.startsWith("about:")) {
+                            Icon(
+                                if (tab.isSecure) Icons.Outlined.Lock else Icons.Outlined.Warning, null,
+                                tint = if (tab.isSecure) k.ink55 else Color(0xFFFF9500), modifier = Modifier.size(13.dp),
+                            )
+                            Spacer(Modifier.width(5.dp))
+                        }
+                        Text(
+                            label, style = KazeType.body.copy(fontWeight = FontWeight.Medium), color = k.ink,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+            Box(
+                Modifier.size(46.dp).clickable(enabled = !tab.isStart) { if (tab.loading) a.onStop() else a.onReload() }
+                    .semantics { contentDescription = if (tab.loading) "Detener" else "Recargar" },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!tab.isStart) {
+                    Icon(
+                        if (tab.loading) Icons.Outlined.Close else Icons.Outlined.Refresh, null,
+                        tint = k.ink, modifier = Modifier.size(19.dp),
+                    )
+                }
+            }
+        }
+        // Progreso de carga: línea azul dentro de la cápsula, abajo.
+        val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "progress")
+        if (tab.loading) {
+            Box(
+                Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp).fillMaxWidth(progress.coerceIn(0.05f, 1f))
+                    .height(2.5.dp).clip(RoundedCornerShape(50)).background(k.accent),
+            )
+        }
+    }
+}
+
+/** Barra de "Buscar en la página", sobre el teclado. */
 @Composable
 fun FindBar(
     query: String,
@@ -198,8 +317,14 @@ fun FindBar(
     val focus = remember { FocusRequester() }
     var text by remember { mutableStateOf(query) }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    FloatingPill(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Row(Modifier.padding(start = 18.dp, end = 4.dp).height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier.fillMaxWidth().padding(10.dp).glass(RoundedCornerShape(22.dp)).padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier.weight(1f).height(38.dp).liftCard(RoundedCornerShape(10.dp)).padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             BasicTextField(
                 value = text,
                 onValueChange = { text = it; onQuery(it) },
@@ -214,13 +339,13 @@ fun FindBar(
                     inner()
                 },
             )
-            if (text.isNotEmpty()) {
-                Text(if (total > 0) "$current/$total" else "0/0", style = KazeType.small, color = k.ink55)
-                Spacer(Modifier.width(4.dp))
-            }
-            PillButton(Icons.Outlined.KeyboardArrowUp, "Anterior", enabled = total > 0, onClick = onPrev)
-            PillButton(Icons.Outlined.KeyboardArrowDown, "Siguiente", enabled = total > 0, onClick = onNext)
-            PillButton(Icons.Outlined.Close, "Cerrar", enabled = true, onClick = onClose)
+            if (text.isNotEmpty()) Text(if (total > 0) "$current de $total" else "Sin resultados", style = KazeType.footnote, color = k.ink55)
         }
+        ToolbarIcon(Icons.Outlined.KeyboardArrowUp, "Anterior", enabled = total > 0, onClick = onPrev)
+        ToolbarIcon(Icons.Outlined.KeyboardArrowDown, "Siguiente", enabled = total > 0, onClick = onNext)
+        Text(
+            "OK", style = KazeType.headline, color = k.accent,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose).padding(horizontal = 10.dp, vertical = 8.dp),
+        )
     }
 }

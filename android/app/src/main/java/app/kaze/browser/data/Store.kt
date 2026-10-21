@@ -19,8 +19,19 @@ import androidx.compose.runtime.setValue
  */
 class Store(private val db: Db, private val settings: Settings) {
 
+    val profiles = mutableStateListOf<Profile>()
+    /** Todos los espacios de todos los perfiles (la UI usa [visibleSpaces], solo los del perfil activo). */
     val spaces = mutableStateListOf<Space>()
     val tabs = mutableStateListOf<Tab>()
+
+    var currentProfileId by mutableStateOf(Profile.DEFAULT_ID)
+        private set
+    val currentProfile: Profile? get() = profiles.firstOrNull { it.id == currentProfileId }
+
+    /** Espacios del perfil activo, en orden. */
+    val profileSpaces by derivedStateOf {
+        spaces.filter { it.profileId == currentProfileId }.sortedBy { it.position }
+    }
 
     var currentSpaceId by mutableStateOf("")
         private set
@@ -35,7 +46,7 @@ class Store(private val db: Db, private val settings: Settings) {
 
     /** Espacios visibles en el selector: los guardados + "Privado" si hay pestañas privadas. */
     val visibleSpaces by derivedStateOf {
-        val list = spaces.sortedBy { it.position }
+        val list = profileSpaces
         if (tabs.any { it.isPrivate }) list + privateSpace else list
     }
 
@@ -49,19 +60,72 @@ class Store(private val db: Db, private val settings: Settings) {
     private val flushTask = Runnable { flush() }
 
     fun load() {
-        spaces.clear(); tabs.clear()
+        profiles.clear(); spaces.clear(); tabs.clear()
+        profiles.addAll(db.loadProfiles())
+        if (profiles.none { it.id == Profile.DEFAULT_ID }) {
+            Profile(Profile.DEFAULT_ID, "Personal", "🙂", 0).also { profiles.add(0, it); db.saveProfile(it) }
+        }
         spaces.addAll(db.loadSpaces())
-        if (spaces.isEmpty()) seed()
-        tabs.addAll(db.loadTabs().filter { t -> t.kind == TabKind.ESSENTIAL || spaces.any { it.id == t.spaceId } })
-        currentSpaceId = settings.lastSpaceId.takeIf { id -> spaces.any { it.id == id } } ?: spaces.first().id
+        if (spaces.none { it.profileId == Profile.DEFAULT_ID }) seed(Profile.DEFAULT_ID)
+        tabs.addAll(db.loadTabs().filter { t -> spaces.any { it.id == t.spaceId } })
+        currentProfileId = settings.lastProfileId.takeIf { id -> profiles.any { it.id == id } } ?: Profile.DEFAULT_ID
+        db.profile = currentProfileId
+        currentSpaceId = settings.lastSpaceId.takeIf { id -> profileSpaces.any { it.id == id } } ?: profileSpaces.first().id
     }
 
-    private fun seed() {
+    private fun seed(profileId: String) {
         val presets = SpacePalette.presets
-        listOf(
-            Space(name = "Personal", emoji = "🌿", colors = presets[0], position = 0),
-            Space(name = "Trabajo", emoji = "💼", colors = presets[3], position = 1),
-        ).forEach { spaces.add(it); db.saveSpace(it) }
+        val list = if (profileId == Profile.DEFAULT_ID) listOf(
+            Space(name = "Personal", emoji = "🌿", colors = presets[0], position = 0, profileId = profileId),
+            Space(name = "Trabajo", emoji = "💼", colors = presets[3], position = 1, profileId = profileId),
+        ) else listOf(Space(name = "General", emoji = "🌐", colors = presets[3], position = 0, profileId = profileId))
+        list.forEach { spaces.add(it); db.saveSpace(it) }
+    }
+
+    // ── Perfiles ──────────────────────────────────────────────────────
+
+    fun profileById(id: String?): Profile? = profiles.firstOrNull { it.id == id }
+
+    /** Perfil al que pertenece una pestaña (por su espacio). */
+    fun profileOf(t: Tab): Profile? = profileById(spaceById(t.spaceId)?.profileId)
+
+    fun addProfile(name: String, emoji: String): Profile {
+        val p = Profile(name = name, emoji = emoji, position = (profiles.maxOfOrNull { it.position } ?: -1) + 1)
+        profiles.add(p)
+        db.saveProfile(p)
+        seed(p.id)
+        return p
+    }
+
+    fun updateProfile(p: Profile) = db.saveProfile(p)
+
+    /**
+     * Cambia de perfil. Devuelve las pestañas del perfil anterior, que el llamador
+     * debe dormir (otras cookies, otro historial: no deben seguir cargadas).
+     */
+    fun switchProfile(id: String): List<Tab> {
+        if (id == currentProfileId || profileById(id) == null) return emptyList()
+        val leaving = tabs.filter { !it.isPrivate && spaceById(it.spaceId)?.profileId == currentProfileId }
+        flush()
+        currentProfileId = id
+        settings.lastProfileId = id
+        db.profile = id
+        selectedTabId = null
+        currentSpaceId = profileSpaces.first().id
+        return leaving
+    }
+
+    /** Borra un perfil (no el principal) con todo lo suyo. Devuelve sus pestañas para cerrarlas. */
+    fun deleteProfile(id: String): List<Tab> {
+        if (id == Profile.DEFAULT_ID) return emptyList()
+        if (currentProfileId == id) switchProfile(Profile.DEFAULT_ID)
+        val ids = spaces.filter { it.profileId == id }.map { it.id }
+        val closed = tabs.filter { it.spaceId in ids }
+        tabs.removeAll(closed)
+        spaces.removeAll { it.id in ids }
+        profiles.removeAll { it.id == id }
+        db.deleteProfile(id, ids)
+        return closed
     }
 
     // ── Consultas ─────────────────────────────────────────────────────
@@ -69,7 +133,10 @@ class Store(private val db: Db, private val settings: Settings) {
     fun spaceById(id: String): Space? = if (id == Space.PRIVATE_ID) privateSpace else spaces.firstOrNull { it.id == id }
     fun tabById(id: String): Tab? = tabs.firstOrNull { it.id == id }
 
-    fun essentials(): List<Tab> = tabs.filter { it.kind == TabKind.ESSENTIAL }.sortedBy { it.position }
+    /** Essentials del perfil activo (en Zen se ven en todos los espacios). */
+    fun essentials(): List<Tab> = tabs.filter {
+        it.kind == TabKind.ESSENTIAL && spaceById(it.spaceId)?.profileId == currentProfileId
+    }.sortedBy { it.position }
     fun pinned(spaceId: String): List<Tab> =
         tabs.filter { it.spaceId == spaceId && it.kind == TabKind.PINNED }.sortedBy { it.position }
     fun normal(spaceId: String): List<Tab> =
@@ -78,13 +145,17 @@ class Store(private val db: Db, private val settings: Settings) {
     // ── Espacios ──────────────────────────────────────────────────────
 
     fun selectSpace(id: String) {
-        if (spaceById(id) == null) return
+        val s = spaceById(id) ?: return
+        if (id != Space.PRIVATE_ID && s.profileId != currentProfileId) return
         currentSpaceId = id
         if (id != Space.PRIVATE_ID) settings.lastSpaceId = id
     }
 
     fun addSpace(name: String, emoji: String, colors: List<Int>): Space {
-        val s = Space(name = name, emoji = emoji, colors = colors, position = (spaces.maxOfOrNull { it.position } ?: -1) + 1)
+        val s = Space(
+            name = name, emoji = emoji, colors = colors, profileId = currentProfileId,
+            position = (profileSpaces.maxOfOrNull { it.position } ?: -1) + 1,
+        )
         spaces.add(s)
         db.saveSpace(s)
         return s
@@ -96,18 +167,21 @@ class Store(private val db: Db, private val settings: Settings) {
 
     /** Borra el espacio y sus pestañas (no las Essentials, que son globales). Devuelve las pestañas cerradas. */
     fun deleteSpace(id: String): List<Tab> {
-        if (spaces.size <= 1 || id == Space.PRIVATE_ID) return emptyList()
+        if (profileSpaces.size <= 1 || id == Space.PRIVATE_ID) return emptyList()
+        // Las Essentials del espacio se pasan a otro espacio del perfil (son de todo el perfil).
+        val heir = profileSpaces.first { it.id != id }
+        tabs.filter { it.spaceId == id && it.kind == TabKind.ESSENTIAL }.forEach { it.spaceId = heir.id; db.saveTab(it) }
         val closed = tabs.filter { it.spaceId == id && it.kind != TabKind.ESSENTIAL }
         tabs.removeAll(closed)
         spaces.removeAll { it.id == id }
         db.deleteSpace(id)
-        if (currentSpaceId == id) selectSpace(spaces.minBy { it.position }.id)
+        if (currentSpaceId == id) selectSpace(profileSpaces.first().id)
         if (selectedTabId in closed.map { it.id }) selectedTabId = null
         return closed
     }
 
     fun moveSpace(id: String, delta: Int) {
-        val ordered = spaces.sortedBy { it.position }.toMutableList()
+        val ordered = profileSpaces.toMutableList()
         val i = ordered.indexOfFirst { it.id == id }
         val j = i + delta
         if (i < 0 || j !in ordered.indices) return
@@ -145,7 +219,7 @@ class Store(private val db: Db, private val settings: Settings) {
         db.deleteTab(t.id)
         if (selectedTabId == t.id) selectedTabId = null
         if (t.isPrivate && tabs.none { it.isPrivate } && currentSpaceId == Space.PRIVATE_ID) {
-            selectSpace(spaces.minBy { it.position }.id)
+            selectSpace(profileSpaces.first().id)
         }
     }
 

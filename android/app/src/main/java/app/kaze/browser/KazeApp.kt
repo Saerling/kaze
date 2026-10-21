@@ -33,6 +33,11 @@ import java.io.File
  */
 class KazeApp : Application() {
 
+    override fun onCreate() {
+        super.onCreate()
+        if (isMainProcess()) CrashLog.install(this)
+    }
+
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (!isMainProcess()) return

@@ -126,3 +126,30 @@ fun UpdateSheet(onDismiss: () -> Unit) {
         }
     }
 }
+
+/** "Kaze se cerró la última vez": muestra el error para copiarlo o compartirlo. */
+@Composable
+fun CrashSheet(text: String, onCopy: () -> Unit, onShare: () -> Unit, onDismiss: () -> Unit) {
+    val k = LocalKaze.current
+    KazeSheet(onDismiss) {
+        Column(Modifier.padding(horizontal = 24.dp)) {
+            Text("Kaze se cerró la última vez", style = KazeType.sheetTitle, color = k.ink)
+            Spacer(Modifier.height(6.dp))
+            Text("Copia o comparte este detalle para poder arreglarlo.", style = KazeType.small, color = k.ink55)
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier.fillMaxWidth().heightIn(max = 260.dp).clip(RoundedCornerShape(14.dp))
+                    .background(k.lift).padding(14.dp),
+            ) {
+                Text(text, style = KazeType.small.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    color = k.ink70, modifier = Modifier.verticalScroll(rememberScrollState()))
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                TextPill("Copiar", k.ink70, Modifier.weight(1f), onCopy)
+                TextPill("Compartir", k.accent, Modifier.weight(1f)) { onShare(); onDismiss() }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}

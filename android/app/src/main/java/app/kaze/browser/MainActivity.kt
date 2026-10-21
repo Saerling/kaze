@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import app.kaze.browser.data.Settings
 import app.kaze.browser.data.Space
 import app.kaze.browser.data.Tab
 import app.kaze.browser.data.TabKind
@@ -65,6 +66,7 @@ import app.kaze.browser.ui.screens.SearchScreen
 import app.kaze.browser.ui.screens.SpacesScreen
 import app.kaze.browser.ui.sheets.ClipboardBridge
 import app.kaze.browser.ui.sheets.ContextMenuSheet
+import app.kaze.browser.ui.sheets.CrashSheet
 import app.kaze.browser.ui.sheets.HistorySheet
 import app.kaze.browser.ui.sheets.MoveToSpaceSheet
 import app.kaze.browser.ui.sheets.PageMenuSheet
@@ -131,6 +133,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Si se cerró por un error, mostrarlo ANTES de arrancar el motor (por si el fallo está ahí).
+        val crash = if (savedInstanceState == null) CrashLog.take(this) else null
+        if (crash != null) showCrash(crash) else startBrowser(savedInstanceState)
+    }
+
+    private fun showCrash(text: String) {
+        setContent {
+            KazeTheme(Engine.isDarkTheme(this, Settings(this))) {
+                Box(Modifier.fillMaxSize().background(LocalKaze.current.paper)) {
+                    CrashSheet(
+                        text = text,
+                        onCopy = {
+                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Kaze", text))
+                        },
+                        onShare = { share(text, "Error de Kaze") },
+                        onDismiss = { startBrowser(null) },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startBrowser(savedInstanceState: Bundle?) {
+        if (::app.isInitialized) return
         app = Kaze.get(this)
         geckoView = GeckoView(this).apply { visibility = View.INVISIBLE }
 
@@ -160,21 +186,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        handleIntent(intent)
+        if (::app.isInitialized) handleIntent(intent)
     }
 
     override fun onStart() {
         super.onStart()
-        if (!showSpaces) app.pool.resumeVisible()
+        if (::app.isInitialized && !showSpaces) app.pool.resumeVisible()
     }
 
     override fun onStop() {
         super.onStop()
+        if (!::app.isInitialized) return
         app.pool.hideAll()
         app.store.flush()
     }
 
     override fun onDestroy() {
+        if (!::app.isInitialized) return super.onDestroy()
         if (geckoView.session != null) geckoView.releaseSession()
         if (isFinishing) {
             app.pool.beforeClose = null

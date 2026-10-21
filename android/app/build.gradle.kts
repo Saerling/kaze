@@ -72,7 +72,9 @@ android {
     }
 
     packaging {
-        jniLibs { useLegacyPackaging = false }
+        // Librerías nativas comprimidas dentro del APK (como Firefox para Android): descarga
+        // mucho más pequeña (~70 MB en vez de ~185 MB) y Android las extrae al instalar.
+        jniLibs { useLegacyPackaging = true }
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 

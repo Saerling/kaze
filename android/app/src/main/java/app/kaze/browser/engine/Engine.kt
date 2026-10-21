@@ -6,6 +6,7 @@ package app.kaze.browser.engine
 
 import android.content.Context
 import android.content.res.Configuration
+import android.util.Log
 import app.kaze.browser.BuildConfig
 import app.kaze.browser.data.DnsMode
 import app.kaze.browser.data.Settings
@@ -13,15 +14,15 @@ import app.kaze.browser.data.ThemeMode
 import app.kaze.browser.data.TrackingLevel
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoRuntimeSettings
-import java.io.File
 
 /**
  * Crea el único [GeckoRuntime] de la app.
  *
- * Las preferencias de Gecko que no tienen API en GeckoView se escriben en un
- * YAML ([PREFS]) que GeckoView lee al arrancar (`configFilePath`). Son los mismos
- * ajustes de bajo consumo que usa Kaze en Windows.
+ * Las preferencias de Gecko sin API propia en GeckoView ([PREFS]) se aplican con
+ * GeckoPreferenceController al arrancar. (Antes iban en un YAML leído con SnakeYAML,
+ * pero el optimizador R8 de la versión publicada rompe esa librería y la app se cerraba.)
  */
 object Engine {
 
@@ -52,7 +53,6 @@ object Engine {
     )
 
     fun create(context: Context, settings: Settings): GeckoRuntime {
-        val prefsFile = writePrefs(context, settings)
 
         val blocking = ContentBlocking.Settings.Builder()
             .antiTracking(
@@ -73,7 +73,6 @@ object Engine {
             .build()
 
         val builder = GeckoRuntimeSettings.Builder()
-            .configFilePath(prefsFile.absolutePath)
             .contentBlocking(blocking)
             .javaScriptEnabled(settings.javascript)
             .preferredColorScheme(
@@ -104,21 +103,29 @@ object Engine {
                 .trustedRecursiveResolverUri("https://adblock.dns.mullvad.net/dns-query")
         }
 
-        return GeckoRuntime.create(context, builder.build())
+        val runtime = GeckoRuntime.create(context, builder.build())
+        applyPrefs(settings)
+        return runtime
     }
 
-    private fun writePrefs(context: Context, settings: Settings): File {
-        val f = File(context.filesDir, "gecko-prefs.yaml")
-        val sb = StringBuilder("prefs:\n")
-        for ((k, v) in PREFS) {
-            sb.append("  ").append(k).append(": ")
-            sb.append(if (v is String) "\"$v\"" else v.toString()).append('\n')
-        }
+    /** Se aplican en la rama "por defecto": no pisan lo que el usuario cambie en about:config. */
+    private fun applyPrefs(settings: Settings) {
+        val prefs = LinkedHashMap(PREFS)
         // Con poca RAM, un solo proceso de contenido para todas las pestañas.
-        if (settings.liveTabs <= 1) sb.append("  dom.ipc.processCount: 1\n")
-        f.writeText(sb.toString())
-        return f
+        if (settings.liveTabs <= 1) prefs["dom.ipc.processCount"] = 1
+        val branch = GeckoPreferenceController.PREF_BRANCH_DEFAULT
+        for ((name, value) in prefs) {
+            runCatching {
+                when (value) {
+                    is Boolean -> GeckoPreferenceController.setGeckoPref(name, value, branch)
+                    is Int -> GeckoPreferenceController.setGeckoPref(name, value, branch)
+                    else -> GeckoPreferenceController.setGeckoPref(name, value.toString(), branch)
+                }.accept({ }, { e -> Log.w(TAG, "No se pudo aplicar $name", e) })
+            }.onFailure { Log.w(TAG, "No se pudo aplicar $name", it) }
+        }
     }
+
+    private const val TAG = "KazeEngine"
 
     fun isDarkTheme(context: Context, settings: Settings): Boolean = when (settings.theme) {
         ThemeMode.LIGHT -> false

@@ -53,7 +53,15 @@ object Engine {
     )
 
     fun create(context: Context, settings: Settings): GeckoRuntime {
+        val runtime = GeckoRuntime.create(context, runtimeSettings(settings).build())
+        // GeckoView no conserva el factor del Builder al construir: se fija ya con el motor creado.
+        applyTextSize(runtime, settings.textSize)
+        applyPrefs(settings)
+        return runtime
+    }
 
+    /** Separado de [create] para poder probarlo sin un celular. */
+    internal fun runtimeSettings(settings: Settings): GeckoRuntimeSettings.Builder {
         val blocking = ContentBlocking.Settings.Builder()
             .antiTracking(
                 when (settings.tracking) {
@@ -90,8 +98,12 @@ object Engine {
             .webManifest(false)
             .globalPrivacyControlEnabled(true)
             .aboutConfigEnabled(true)
-            .automaticFontSizeAdjustment(settings.textSize == 100)
-            .fontSizeFactor(settings.textSize / 100f)
+            // Con el ajuste automático (tamaño del sistema) Gecko no deja fijar el factor:
+            // primero se apaga y luego se fija, nunca al revés.
+            .apply {
+                if (settings.textSize == 100) automaticFontSizeAdjustment(true)
+                else automaticFontSizeAdjustment(false).fontSizeFactor(settings.textSize / 100f)
+            }
             .consoleOutput(BuildConfig.DEBUG)
             .remoteDebuggingEnabled(BuildConfig.DEBUG)
             .debugLogging(false)
@@ -103,10 +115,7 @@ object Engine {
             DnsMode.MULLVAD -> builder.trustedRecursiveResolverMode(GeckoRuntimeSettings.TRR_MODE_FIRST)
                 .trustedRecursiveResolverUri("https://adblock.dns.mullvad.net/dns-query")
         }
-
-        val runtime = GeckoRuntime.create(context, builder.build())
-        applyPrefs(settings)
-        return runtime
+        return builder
     }
 
     /** Se aplican en la rama "por defecto": no pisan lo que el usuario cambie en about:config. */
@@ -129,9 +138,18 @@ object Engine {
     private const val TAG = "KazeEngine"
 
     /** Cambia el tamaño del texto de todas las páginas al momento (el "AA" de Safari). */
-    fun applyTextSize(runtime: GeckoRuntime, percent: Int) {
-        runtime.settings.setAutomaticFontSizeAdjustment(percent == 100)
-        runtime.settings.setFontSizeFactor(percent / 100f)
+    fun applyTextSize(runtime: GeckoRuntime, percent: Int) = applyTextSize(runtime.settings, percent)
+
+    internal fun applyTextSize(settings: GeckoRuntimeSettings, percent: Int) {
+        runCatching {
+            if (percent == 100) {
+                settings.setAutomaticFontSizeAdjustment(true)
+            } else {
+                // Primero apagar el ajuste automático: con él activo, Gecko lanza un error y la app se cierra.
+                settings.setAutomaticFontSizeAdjustment(false)
+                settings.setFontSizeFactor(percent / 100f)
+            }
+        }.onFailure { Log.w(TAG, "No se pudo cambiar el tamaño del texto", it) }
     }
 
     fun isDarkTheme(context: Context, settings: Settings): Boolean = when (settings.theme) {

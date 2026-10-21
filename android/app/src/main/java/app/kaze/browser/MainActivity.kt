@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,12 +73,16 @@ import app.kaze.browser.ui.sheets.PromptHost
 import app.kaze.browser.ui.sheets.SettingsSheet
 import app.kaze.browser.ui.sheets.SpaceEditorSheet
 import app.kaze.browser.ui.sheets.TabMenuSheet
+import app.kaze.browser.ui.sheets.UpdateSheet
 import app.kaze.browser.ui.theme.KazeTheme
 import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
 import app.kaze.browser.ui.theme.isLight
 import app.kaze.browser.ui.theme.spaceBase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.GeckoWebExecutor
@@ -259,6 +264,16 @@ class MainActivity : ComponentActivity() {
         var history by remember { mutableStateOf(false) }
         var settings by remember { mutableStateOf(false) }
         var finding by remember { mutableStateOf(false) }
+        val scope = rememberCoroutineScope()
+
+        // Buscar una versión nueva en GitHub al abrir (solo en las versiones publicadas).
+        LaunchedEffect(Unit) {
+            val u = app.updater
+            if (!BuildConfig.DEBUG && u.shouldAutoCheck()) {
+                val info = withContext(Dispatchers.IO) { u.check() }
+                if (info != null && !u.isSkipped(info)) u.showSheet = true
+            }
+        }
 
         fun open(t: Tab) {
             store.select(t)
@@ -425,7 +440,18 @@ class MainActivity : ComponentActivity() {
             if (history) {
                 HistorySheet(onDismiss = { history = false }, onOpen = { url -> history = false; store.newTab(url); showSpaces = false })
             }
-            if (settings) SettingsSheet(onDismiss = { settings = false }, onRestart = ::restart)
+            if (settings) {
+                SettingsSheet(
+                    onDismiss = { settings = false },
+                    onRestart = ::restart,
+                    onCheckUpdates = {
+                        settings = false
+                        app.updater.showSheet = true
+                        scope.launch { withContext(Dispatchers.IO) { app.updater.check() } }
+                    },
+                )
+            }
+            if (app.updater.showSheet) UpdateSheet { app.updater.showSheet = false }
 
             ui.contextMenu?.let { req ->
                 ContextMenuSheet(

@@ -143,11 +143,13 @@ private fun dayLabel(ms: Long): String {
 // ── Ajustes ───────────────────────────────────────────────────────────
 
 @Composable
-fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit) {
+fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: () -> Unit) {
     val app = LocalApp.current
     val s = app.settings
     val k = LocalKaze.current
     var needsRestart by remember { mutableStateOf(false) }
+    // autoCheck vive en SharedPreferences: este estado redibuja el interruptor al cambiarlo.
+    var autoUpdates by remember { mutableStateOf(app.updater.autoCheck) }
 
     KazeSheet(onDismiss, full = true) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
@@ -209,9 +211,17 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit) {
                 app.ui.show("Caché borrada")
             }
 
+            Section("Actualizaciones")
+            Toggle(
+                "Avisarme de versiones nuevas",
+                "Revisa GitHub al abrir Kaze (como mucho cada 3 horas).",
+                autoUpdates,
+            ) { app.updater.autoCheck = it; autoUpdates = it }
+            Action("Buscar actualizaciones ahora", onCheckUpdates)
+
             Section("Acerca de")
             Text(
-                "Kaze ${BuildConfig.VERSION_NAME} · motor Gecko (Firefox)\nInspirado en Zen Browser y Z-Sync. Código abierto (MPL 2.0).",
+                "Kaze ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · motor Gecko (Firefox)\nInspirado en Zen Browser y Z-Sync. Código abierto (MPL 2.0).",
                 style = KazeType.small, color = k.ink55, modifier = Modifier.padding(4.dp),
             )
             Spacer(Modifier.height(24.dp))

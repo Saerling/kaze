@@ -17,6 +17,7 @@ import app.kaze.browser.engine.BrowserUi
 import app.kaze.browser.engine.Downloads
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.engine.SessionPool
+import app.kaze.browser.engine.Updater
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
@@ -62,6 +63,7 @@ class Kaze private constructor(context: Context) {
     val ui = BrowserUi()
     val favicons = Favicons(context)
     val downloads = Downloads(context, ui)
+    val updater = Updater(context)
 
     /** El motor se crea al primer uso (la pantalla de espacios se dibuja antes, el arranque se siente más rápido). */
     private val runtimeLazy = lazy { Engine.create(context, settings).also(::setupExtensions) }

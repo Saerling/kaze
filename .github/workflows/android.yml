@@ -8,15 +8,24 @@ on:
     paths: ["android/**", ".github/workflows/android.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: write # para publicar cada versión en Releases (de ahí se actualiza la app)
+
 jobs:
   apk:
-    name: Pruebas y APK
+    name: Pruebas, APK y publicación
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: android
+    env:
+      KAZE_KEYSTORE_PASSWORD: ${{ secrets.KAZE_KEYSTORE_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Número de versión
+        # Cada compilación tiene un número mayor: Android la instala como actualización.
+        run: echo "KAZE_VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v6
         with:
@@ -36,17 +45,38 @@ jobs:
       - name: Compilar APK
         run: ./gradlew assembleRelease --console=plain
 
+      - name: Preparar archivos
+        run: |
+          mkdir -p ../dist
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "app/build/outputs/apk/release/app-$abi-release.apk" "../dist/kaze-0.3.$KAZE_VERSION_CODE-$abi.apk"
+          done
+          ls -la ../dist
+
       - name: Subir APK (ARM 64 bits, la mayoría de celulares)
         uses: actions/upload-artifact@v7
         with:
           name: kaze-android-arm64-v8a
-          path: android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          path: dist/*arm64-v8a.apk
 
-      - name: Subir APK (ARM 32 bits, celulares viejos)
-        uses: actions/upload-artifact@v7
-        with:
-          name: kaze-android-armeabi-v7a
-          path: android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+      - name: Publicar versión (la app la detecta y se actualiza)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.KAZE_KEYSTORE_PASSWORD != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Cambios:"
+            git log -1 --pretty=format:'%s%n%n%b' | sed '/^Co-Authored-By/d;/^Claude-Session/d'
+          } > ../notes.md
+          gh release create "android-$KAZE_VERSION_CODE" ../dist/*.apk \
+            --title "Kaze Android 0.3.$KAZE_VERSION_CODE" \
+            --notes-file ../notes.md \
+            --target "$GITHUB_SHA"
+
+      - name: Aviso si falta la clave
+        if: env.KAZE_KEYSTORE_PASSWORD == ''
+        run: |
+          echo "::warning::Falta el secreto KAZE_KEYSTORE_PASSWORD: el APK se firmó con una clave temporal y no se publicó como actualización. Ver android/README.md."
 
       - name: Subir capturas de la interfaz
         if: always()

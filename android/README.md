@@ -10,10 +10,25 @@ estética de Z-Sync: papel y tinta, degradado por espacio, Essentials y controle
   <img src="../docs/capturas/android-editar-espacio.png" width="200">
 </p>
 
-## Instalar
+## Instalar y actualizar
 
-En GitHub: pestaña **Actions** → último run de **Android** → *Artifacts* → `kaze-android-arm64-v8a`
-(casi todos los celulares; `armeabi-v7a` para los muy viejos). Descomprime e instala el `.apk`.
+Cada cambio que se sube a `main` se compila y se publica en **[Releases](https://github.com/Saerling/kaze/releases)**
+como `android-<número>`. Instala el `.apk` de tu procesador (`arm64-v8a` en casi todos los celulares).
+
+Después de eso **no hace falta volver a GitHub**: al abrir Kaze revisa si hay una versión nueva
+(como mucho cada 3 horas) y muestra *Nueva versión disponible* → **Actualizar** la descarga y la
+instala encima, sin desinstalar ni perder pestañas. También en **Ajustes → Buscar actualizaciones ahora**.
+La primera vez Android pide permitir que Kaze instale apps ("Permitir de esta fuente").
+
+### Firma (por qué ya no hay que desinstalar)
+
+Android solo acepta un APK como actualización si viene firmado con **la misma clave**. Todas las
+versiones se firman con `keystore/kaze-release.p12`; su contraseña está guardada como secreto de
+GitHub (`KAZE_KEYSTORE_PASSWORD`, en *Settings → Secrets and variables → Actions*), nunca en el código.
+Guarda una copia de esa contraseña: sin ella no se pueden publicar actualizaciones que instalen encima.
+
+Compilar en tu PC sin la contraseña firma con la clave de depuración (sirve para probar,
+pero ese APK no se instala encima del publicado).
 
 O desde Android Studio: abre la carpeta `android/` y dale ▶. Necesita el SDK con la plataforma **37.2**.
 
@@ -51,7 +66,8 @@ app/src/main/java/app/kaze/browser/
 │   ├── Engine.kt         GeckoRuntime y preferencias de Gecko de bajo consumo
 │   ├── SessionPool.kt    sesiones por pestaña: cargar, dormir, restaurar, delegados de Gecko
 │   ├── BrowserUi.kt      diálogos, permisos, menú contextual, pantalla completa, avisos
-│   └── Downloads.kt      descargas a la carpeta Descargas
+│   ├── Downloads.kt      descargas a la carpeta Descargas
+│   └── Updater.kt        actualizaciones desde GitHub Releases (descarga + instalación)
 ├── data/
 │   ├── Models.kt         Space, Tab, TabKind (Essential / Pinned / Normal)
 │   ├── Store.kt          estado de espacios y pestañas + paleta de colores

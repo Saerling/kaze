@@ -3,6 +3,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// En GitHub Actions cada compilación sube el número de versión (así se instala como actualización).
+val ciVersionCode = System.getenv("KAZE_VERSION_CODE")?.toIntOrNull()
+// Clave fija de publicación: con la misma firma, Android acepta cada APK nuevo como actualización.
+val keystorePassword: String? = System.getenv("KAZE_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "app.kaze.browser"
     // GeckoView 158 y Compose 2026.09 piden compilar contra Android 17 QPR2 (API 37.2)
@@ -14,8 +19,22 @@ android {
         applicationId = "app.kaze.browser"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = ciVersionCode ?: 2
+        versionName = "0.3.${ciVersionCode ?: 0}"
+        // Repositorio donde la app busca actualizaciones (GitHub Releases con etiqueta android-<versionCode>)
+        buildConfigField("String", "UPDATE_REPO", "\"Saerling/kaze\"")
+    }
+
+    signingConfigs {
+        if (keystorePassword != null) {
+            create("release") {
+                storeFile = rootProject.file("keystore/kaze-release.p12")
+                storeType = "PKCS12"
+                storePassword = keystorePassword
+                keyAlias = "kaze"
+                keyPassword = keystorePassword
+            }
+        }
     }
 
     buildTypes {
@@ -23,8 +42,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Firma de depuración hasta tener una clave propia de releases
-            signingConfig = signingConfigs.getByName("debug")
+            // Con la contraseña (secreto de GitHub) firma con la clave fija; si no, con la de depuración (solo pruebas locales).
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
         debug {
             applicationIdSuffix = ".debug"

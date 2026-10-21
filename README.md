@@ -44,7 +44,7 @@
 
 ## Probar
 
-- **Android:** pestaña *Actions* → último run de **Android** → *Artifacts* → `kaze-android-arm64-v8a`. O abre `android/` en Android Studio. Más en [`android/README.md`](android/README.md).
+- **Android:** descarga el APK de [Releases](https://github.com/Saerling/kaze/releases) (`arm64-v8a`). Desde ahí la app se actualiza sola. Más en [`android/README.md`](android/README.md).
 - **Windows, sin compilar:** el cargador de desarrollo pone la interfaz de Kaze sobre tu Firefox normal en un minuto. Ver [`desktop/README.md`](desktop/README.md#probar-sin-compilar).
 - **Windows, compilado:** también en [`desktop/README.md`](desktop/README.md). Compilar Firefox pide un PC con 16 GB de RAM o más y unas horas la primera vez.
 

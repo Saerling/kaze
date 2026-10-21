@@ -8,6 +8,7 @@
 - [x] Windows: configuración de compilación propia (surfer) con 3 parches y marca Kaze
 - [x] Windows: cargador de desarrollo para probar sin compilar
 - [x] CI: APK + pruebas en cada push; comprobación de parches de escritorio
+- [x] Android: actualizaciones desde la app (GitHub Releases) con firma fija para instalar encima
 
 ## Fase 2 — Primera versión para usar a diario
 - [ ] Windows: primera compilación completa en tu PC y medir RAM contra Firefox y Zen
@@ -21,4 +22,4 @@
 - [ ] Firefox Sync en Android (historial, marcadores, contraseñas, pestañas)
 - [ ] Espacios y Essentials sincronizados entre Windows y Android
 - [ ] "Continuar en el otro dispositivo"
-- [ ] Releases automáticos (instalador de Windows + APK firmado)
+- [ ] Releases automáticos del instalador de Windows

@@ -5,6 +5,8 @@
 package app.kaze.browser.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.slideInVertically
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.CleaningServices
@@ -136,9 +138,10 @@ fun SafariBottomBar(
 ) {
     AnimatedContent(
         targetState = collapsed,
+        // Se funde y crece desde abajo con un resorte suave (sin escalar: no hay saltos ni temblores).
         transitionSpec = {
-            (fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.92f)) togetherWith
-                (fadeOut(tween(120)) + scaleOut(tween(180), targetScale = 0.92f))
+            (fadeIn(tween(200, delayMillis = 70)) + slideInVertically(spring(0.86f, 420f)) { it / 3 }) togetherWith
+                fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.86f, 420f) }
         },
         contentAlignment = Alignment.BottomCenter,
         modifier = modifier,

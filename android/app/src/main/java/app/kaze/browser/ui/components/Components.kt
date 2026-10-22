@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -252,12 +253,17 @@ fun GlassCircle(icon: ImageVector, label: String, modifier: Modifier = Modifier,
 @Composable
 fun ToolbarIcon(icon: ImageVector, label: String, enabled: Boolean = true, tint: Color? = null, onClick: () -> Unit) {
     val k = LocalKaze.current
+    val source = remember { MutableInteractionSource() }
+    // Como en Safari: sin onda; el ícono se encoge un poco al tocarlo y el color cambia suave.
+    val color by animateColorAsState(if (enabled) (tint ?: k.accent) else k.ink35, tween(180), label = "iconTint")
     Box(
-        Modifier.size(48.dp).clip(CircleShape).then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+        Modifier.size(48.dp).clip(CircleShape)
+            .then(if (enabled) Modifier.clickable(source, indication = null, onClick = onClick) else Modifier)
+            .pressFeedback(source, 0.86f)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, tint = if (enabled) (tint ?: k.accent) else k.ink35, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
     }
 }
 

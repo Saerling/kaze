@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
@@ -186,6 +189,8 @@ fun TabsScreen(
                 }
             }
             items(normal, key = { it.id }) { t ->
+                // Al cerrar o abrir pestañas, las demás se acomodan con animación.
+                Box(Modifier.animateItem(fadeInSpec = tween(220), placementSpec = spring(0.85f, 380f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(160))) {
                 if (mode == "list") TabRow(
                     tab = t, selected = t.id == store.selectedTabId,
                     onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) },
@@ -194,6 +199,7 @@ fun TabsScreen(
                     tab = t, selected = t.id == store.selectedTabId,
                     onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) },
                 )
+                }
             }
             if (normal.isEmpty() && pinned.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {

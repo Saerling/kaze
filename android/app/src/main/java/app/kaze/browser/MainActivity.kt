@@ -4,14 +4,16 @@
 
 package app.kaze.browser
 
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
 import app.kaze.browser.ui.screens.ZenPanel
-import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
@@ -314,13 +316,8 @@ class MainActivity : ComponentActivity() {
         var zenPanel by remember { mutableStateOf(false) }
         // Tras buscar, la barra queda en píldora para dejarle la pantalla a la página.
         var pillAfterSearch by remember { mutableStateOf(false) }
-        // Alto real de la barra de abajo: la página se encoge para que nada quede tapado.
-        var barHeightPx by remember { mutableIntStateOf(0) }
-        var pageBottomPx by remember { mutableIntStateOf(0) }
-        LaunchedEffect(Unit) {
-            // Se espera a que termine la animación de la barra: así la página cambia de alto una sola vez.
-            snapshotFlow { barHeightPx }.collectLatest { h -> delay(220); pageBottomPx = h }
-        }
+        // Alto máximo que ha tenido la barra (para la barra dinámica de Gecko).
+        var barMaxPx by remember { mutableIntStateOf(0) }
         val scope = rememberCoroutineScope()
 
         // Buscar una versión nueva en GitHub al abrir (solo en las versiones publicadas).
@@ -476,8 +473,19 @@ class MainActivity : ComponentActivity() {
 
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
-        LaunchedEffect(showBar) { if (!showBar) barHeightPx = 0 }
         val density = LocalDensity.current
+        // La página siempre deja libre el alto de la barra encogida (nunca cambia de tamaño: nada salta
+        // ni se traba). Lo que la barra completa tapa de más se lo decimos a Gecko ("barra dinámica"):
+        // así coloca encima los botones fijos de las páginas, como en Firefox para Android.
+        val collapsedPx = with(density) { 32.dp.roundToPx() } + WindowInsets.navigationBars.getBottom(density)
+        fun onBarHeight(h: Int) {
+            geckoView.setVerticalClipping((h - collapsedPx).coerceAtLeast(0))
+            if (h > barMaxPx) {
+                barMaxPx = h
+                geckoView.setDynamicToolbarMaxHeight((h - collapsedPx).coerceAtLeast(0))
+            }
+        }
+        LaunchedEffect(showBar) { if (!showBar) geckoView.setVerticalClipping(0) }
 
         Box(Modifier.fillMaxSize().background(k.paper)) {
             Box(Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.statusBarsPadding().imePadding())) {
@@ -485,7 +493,7 @@ class MainActivity : ComponentActivity() {
                 AndroidView(
                     factory = { geckoView },
                     modifier = Modifier.fillMaxSize()
-                        .padding(bottom = with(density) { (if (showBar) pageBottomPx else 0).toDp() })
+                        .padding(bottom = with(density) { (if (showBar) collapsedPx else 0).toDp() })
                         .then(if (showBar || ui.fullscreen) Modifier else Modifier.navigationBarsPadding()),
                 )
 
@@ -509,7 +517,7 @@ class MainActivity : ComponentActivity() {
                             onPrev = { find(tab, ui.findQuery.orEmpty(), backwards = true) },
                             onClose = { finding = false; app.pool.sessionOf(tab.id)?.finder?.clear() },
                             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-                                .onSizeChanged { barHeightPx = it.height },
+                                .onSizeChanged { onBarHeight(it.height) },
                         )
                     } else {
                         SafariBottomBar(
@@ -518,7 +526,7 @@ class MainActivity : ComponentActivity() {
                             tabCount = store.tabs.count { it.spaceId == tab.spaceId && it.kind != TabKind.ESSENTIAL },
                             collapsed = collapsed,
                             a = actions,
-                            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { barHeightPx = it.height },
+                            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { onBarHeight(it.height) },
                         )
                     }
                 }
@@ -615,7 +623,11 @@ class MainActivity : ComponentActivity() {
                     },
                 )
             }
-            if (zenPanel) {
+            AnimatedVisibility(
+                visible = zenPanel,
+                enter = fadeIn(tween(160)) + slideInVertically(spring(0.85f, 420f)) { it / 5 },
+                exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 6 },
+            ) {
                 ZenPanel(
                     essentials = store.essentials(),
                     spaces = store.profileSpaces,
@@ -635,8 +647,8 @@ class MainActivity : ComponentActivity() {
                     onCompact = { zenPanel = false; barHidden = true },
                     onDismiss = { zenPanel = false },
                 )
-                BackHandler { zenPanel = false }
             }
+            BackHandler(enabled = zenPanel) { zenPanel = false }
             editSpace?.let { s -> SpaceEditorSheet(s) { editSpace = null } }
             if (newSpace) SpaceEditorSheet(null) { newSpace = false }
             if (library) {

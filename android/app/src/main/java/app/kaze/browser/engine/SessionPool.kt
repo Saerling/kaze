@@ -281,11 +281,20 @@ class SessionPool(
         s.promptDelegate = Prompts()
         s.scrollDelegate = object : ScrollDelegate {
             private var lastY = 0
+            private var acc = 0
+
             override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
                 val dy = scrollY - lastY
                 lastY = scrollY
-                if (tab.id == visibleTabId && kotlin.math.abs(dy) > 6) ui.scrollDirection = if (dy > 0) 1 else -1
-                if (scrollY <= 0) ui.scrollDirection = -1
+                if (tab.id != visibleTabId) return
+                if (scrollY <= 0) { acc = 0; ui.scrollDirection = -1; return }
+                // Solo cambia tras un desplazamiento claro en la misma dirección: la barra no parpadea.
+                acc = if ((acc >= 0) == (dy >= 0)) acc + dy else dy
+                if (kotlin.math.abs(acc) > 72) {
+                    val d = if (acc > 0) 1 else -1
+                    if (ui.scrollDirection != d) ui.scrollDirection = d
+                    acc = 0
+                }
             }
         }
     }

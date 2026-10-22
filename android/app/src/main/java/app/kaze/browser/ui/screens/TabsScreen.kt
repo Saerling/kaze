@@ -4,6 +4,11 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.automirrored.outlined.ViewList
+import app.kaze.browser.ui.components.FaviconTile
 import android.graphics.Bitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
@@ -115,6 +120,9 @@ fun TabsScreen(
         if (query.isBlank()) list else list.filter { it.title.contains(query, true) || it.url.contains(query, true) }
     }
     val grid = rememberLazyGridState()
+    // Modos de vista: tarjetas (por defecto), compacta (3 columnas) y lista.
+    val mode = app.settings.tabsView
+    val cols = when (mode) { "list" -> 1; "compact" -> 3; else -> 2 }
     LaunchedEffect(space.id) {
         // Mostrar la pestaña actual sin tener que buscarla.
         val i = normal.indexOfFirst { it.id == store.selectedTabId }
@@ -134,14 +142,14 @@ fun TabsScreen(
     ) {
         SpaceBackground(if (space.id == Space.PRIVATE_ID) listOf(0xFF3A3A55.toInt()) else space.colors, strength = 0.35f)
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(cols),
             state = grid,
             modifier = Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 170.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (mode == "compact") 10.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (mode == "list") 8.dp else 18.dp),
         ) {
-            item(span = { GridItemSpan(2) }, key = "search") {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "search") {
                 Row(
                     Modifier.fillMaxWidth().height(38.dp).liftCard(RoundedCornerShape(10.dp)).padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -154,26 +162,41 @@ fun TabsScreen(
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner -> if (query.isEmpty()) Text("Buscar pestañas", style = KazeType.body, color = k.ink55); inner() },
                     )
+                    // Cambiar la vista: tarjetas → compacta → lista.
+                    val (next, icon, label) = when (mode) {
+                        "grid" -> Triple("compact", Icons.Outlined.Apps, "Vista compacta")
+                        "compact" -> Triple("list", Icons.AutoMirrored.Outlined.ViewList, "Vista de lista")
+                        else -> Triple("grid", Icons.Outlined.GridView, "Vista de tarjetas")
+                    }
+                    Box(
+                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable { app.settings.tabsView = next }
+                            .semantics { contentDescription = label },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(icon, null, tint = k.accent, modifier = Modifier.size(19.dp)) }
                 }
             }
             if (essentials.isNotEmpty() && query.isBlank()) {
-                item(span = { GridItemSpan(2) }, key = "essentials") {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "essentials") {
                     PinnedStrip(essentials, store.selectedTabId, onOpen, onTabMenu, essential = true)
                 }
             }
             if (pinned.isNotEmpty() && query.isBlank()) {
-                item(span = { GridItemSpan(2) }, key = "pinned") {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "pinned") {
                     PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu)
                 }
             }
             items(normal, key = { it.id }) { t ->
-                TabCard(
+                if (mode == "list") TabRow(
+                    tab = t, selected = t.id == store.selectedTabId,
+                    onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) },
+                ) else TabCard(
+                    compact = mode == "compact",
                     tab = t, selected = t.id == store.selectedTabId,
                     onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) },
                 )
             }
             if (normal.isEmpty() && pinned.isEmpty()) {
-                item(span = { GridItemSpan(2) }, key = "empty") {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
                     Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(if (query.isBlank()) "Sin pestañas" else "Sin resultados", style = KazeType.title2, color = k.ink55)
                         Spacer(Modifier.height(6.dp))
@@ -241,12 +264,11 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { t ->
                     Box(
-                        Modifier.weight(1f).height(52.dp).card(RoundedCornerShape(12.dp))
-                            .then(if (t.id == selectedId) Modifier.border(2.dp, k.accent, RoundedCornerShape(12.dp)) else Modifier)
+                        Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(14.dp))
                             .tap({ onOpen(t) }, { onMenu(t) }).semantics { contentDescription = t.displayTitle },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Favicon(t.pinnedUrl ?: t.url, 26.dp)
+                        FaviconTile(t.pinnedUrl ?: t.url, 52.dp, 28.dp, selected = t.id == selectedId)
                         if (!essential) {
                             Icon(
                                 Icons.Outlined.PushPin, null, tint = k.ink35,
@@ -262,7 +284,7 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
 }
 
 @Composable
-private fun TabCard(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit) {
+private fun TabCard(compact: Boolean = false, tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit) {
     val app = LocalApp.current
     val k = LocalKaze.current
     val scope = rememberCoroutineScope()
@@ -292,7 +314,7 @@ private fun TabCard(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () 
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.74f)
+                .aspectRatio(if (compact) 0.68f else 0.74f)
                 .card(RoundedCornerShape(14.dp))
                 .then(if (selected) Modifier.border(3.dp, k.accent, RoundedCornerShape(14.dp)) else Modifier.border(0.5.dp, k.rim, RoundedCornerShape(14.dp)))
                 .tap(onOpen, onMenu),
@@ -305,9 +327,11 @@ private fun TabCard(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () 
                 )
                 else -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     if (tab.isStart) {
+                        Icon(Icons.Outlined.Home, null, tint = k.accent, modifier = Modifier.size(34.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text("Página de inicio", style = KazeType.footnote, color = k.ink55)
                     } else {
-                        Favicon(tab.url, 40.dp)
+                        FaviconTile(tab.url, 56.dp, 32.dp)
                         Spacer(Modifier.height(8.dp))
                         Text(Urls.displayHost(tab.url), style = KazeType.footnote, color = k.ink55, maxLines = 1)
                     }
@@ -331,5 +355,32 @@ private fun TabCard(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () 
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
+
+/** Fila de la vista de lista: ícono, título, sitio y cerrar. */
+@Composable
+private fun TabRow(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit) {
+    val k = LocalKaze.current
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).card(RoundedCornerShape(14.dp))
+            .then(if (selected) Modifier.border(2.dp, k.accent, RoundedCornerShape(14.dp)) else Modifier)
+            .tap(onOpen, onMenu).padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (tab.isStart) {
+            Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
+                Icon(Icons.Outlined.Home, null, tint = k.accent, modifier = Modifier.size(24.dp))
+            }
+        } else FaviconTile(tab.url, 38.dp, 22.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(tab.displayTitle, style = KazeType.body.copy(fontWeight = FontWeight.Medium), color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!tab.isStart) Text(Urls.displayHost(tab.url), style = KazeType.footnote, color = k.ink55, maxLines = 1)
+        }
+        Box(
+            Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "Cerrar pestaña" },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Outlined.Close, null, tint = k.ink55, modifier = Modifier.size(17.dp)) }
     }
 }

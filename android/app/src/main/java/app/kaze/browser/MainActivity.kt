@@ -312,6 +312,8 @@ class MainActivity : ComponentActivity() {
         var finding by remember { mutableStateOf(false) }
         var barHidden by remember { mutableStateOf(false) }
         var zenPanel by remember { mutableStateOf(false) }
+        // Tras buscar, la barra queda en píldora para dejarle la pantalla a la página.
+        var pillAfterSearch by remember { mutableStateOf(false) }
         // Alto real de la barra de abajo: la página se encoge para que nada quede tapado.
         var barHeightPx by remember { mutableIntStateOf(0) }
         var pageBottomPx by remember { mutableIntStateOf(0) }
@@ -460,13 +462,17 @@ class MainActivity : ComponentActivity() {
                 onTabs = { showTabsGrid() },
                 onTabsLong = { tabsQuick = true },
                 onSwipeTab = ::swipeTab,
-                onExpand = { barHidden = false; ui.scrollDirection = -1 },
+                onExpand = { barHidden = false; pillAfterSearch = false; ui.scrollDirection = -1 },
                 onSpaces = { zenPanel = true },
-                onSwipeSpace = ::stepSpace,
+                onHome = {
+                    // Volver a la página de inicio de Kaze en esta pestaña.
+                    store.onUrl(t, Urls.START)
+                    pillAfterSearch = false
+                },
                 onNewTab = { newTab(private = t.isPrivate) },
             )
         }
-        val collapsed = tab != null && !tab.isStart && !tab.loading && (ui.scrollDirection > 0 || barHidden)
+        val collapsed = tab != null && !tab.isStart && (ui.scrollDirection > 0 || barHidden || pillAfterSearch)
 
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
@@ -539,6 +545,7 @@ class MainActivity : ComponentActivity() {
                     private = (target as? SearchTarget.NewTab)?.private ?: (target as SearchTarget.Navigate).tab.isPrivate,
                     onSubmit = { url ->
                         search = null
+                        pillAfterSearch = true
                         when (target) {
                             is SearchTarget.NewTab -> {
                                 store.newTab(url, spaceId = target.spaceId, private = target.private)
@@ -618,6 +625,14 @@ class MainActivity : ComponentActivity() {
                     onSpace = { sp -> zenPanel = false; goToSpace(sp.id) },
                     onNewSpace = { zenPanel = false; newSpace = true },
                     onEditSpace = { sp -> zenPanel = false; editSpace = sp },
+                    onNewTab = { zenPanel = false; newTab(private = store.currentSpaceId == Space.PRIVATE_ID) },
+                    onClearSpace = {
+                        zenPanel = false
+                        store.clearNormal(store.currentSpaceId).forEach { app.pool.close(it); app.thumbnails.delete(it.id) }
+                        if (store.selectedTab == null) newTab()
+                        ui.show("Espacio limpio: se cerraron las pestañas no fijadas")
+                    },
+                    onCompact = { zenPanel = false; barHidden = true },
                     onDismiss = { zenPanel = false },
                 )
                 BackHandler { zenPanel = false }

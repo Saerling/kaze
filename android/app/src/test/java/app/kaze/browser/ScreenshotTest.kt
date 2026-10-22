@@ -108,6 +108,14 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-oscuro.png")
     }
 
+    @Test fun pestanas_lista() {
+        app.settings.tabsView = "list"
+        compose.setContent { Themed(true) { Tabs() } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-lista.png")
+        app.settings.tabsView = "grid"
+    }
+
     @Test fun inicio() {
         compose.setContent { Themed(false) { StartPage(false, {}, {}, {}, {}) } }
         compose.waitForIdle()

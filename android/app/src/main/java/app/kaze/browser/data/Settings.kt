@@ -49,6 +49,8 @@ class Settings(context: Context) {
     var lastProfileId by pref("last_profile", "")
     /** Tamaño del texto de las páginas, en % (como "AA" de Safari). */
     var textSize by pref("text_size", 100)
+    /** Vista de pestañas: "grid" (tarjetas, por defecto), "compact" (3 columnas) o "list". */
+    var tabsView by pref("tabs_view", "grid")
     /** Total de rastreadores bloqueados (Reporte de privacidad) y desde cuándo se cuentan. */
     var trackersTotal by pref("trackers_total", 0)
     var trackersSince by pref("trackers_since", "")

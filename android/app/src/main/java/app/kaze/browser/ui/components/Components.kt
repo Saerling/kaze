@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -119,6 +120,22 @@ fun Favicon(url: String, size: Dp, modifier: Modifier = Modifier) {
     } else {
         LetterIcon(host ?: url, size, modifier)
     }
+}
+
+/**
+ * Ícono del sitio sobre un mosaico claro, como los Favoritos de Safari: así los logos oscuros
+ * (negros, transparentes) también se ven en modo oscuro.
+ */
+@Composable
+fun FaviconTile(url: String, tile: Dp, icon: Dp, modifier: Modifier = Modifier, selected: Boolean = false) {
+    val k = LocalKaze.current
+    val shape = RoundedCornerShape(tile / 3.6f)
+    Box(
+        modifier.size(tile).clip(shape)
+            .background(if (k.isDark) Color(0xFFF2F2F7) else Color.White, shape)
+            .border(if (selected) 2.5.dp else 0.5.dp, if (selected) k.accent else Color.Black.copy(alpha = 0.08f), shape),
+        contentAlignment = Alignment.Center,
+    ) { Favicon(url, icon) }
 }
 
 @Composable

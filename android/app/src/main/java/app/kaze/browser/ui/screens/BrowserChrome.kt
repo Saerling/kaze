@@ -5,6 +5,12 @@
 package app.kaze.browser.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.ui.draw.shadow
+import app.kaze.browser.ui.components.FaviconTile
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -109,8 +115,8 @@ class ChromeActions(
     val onExpand: () -> Unit,
     /** Botón del espacio (Zen): abre el panel de Essentials y espacios. */
     val onSpaces: () -> Unit,
-    /** Deslizar sobre los íconos: -1 espacio anterior, +1 siguiente (como en Zen). */
-    val onSwipeSpace: (Int) -> Unit,
+    /** Casa: volver a la página de inicio de Kaze en esta pestaña. */
+    val onHome: () -> Unit,
     val onNewTab: () -> Unit,
 )
 
@@ -135,7 +141,7 @@ fun SafariBottomBar(
                 (fadeOut(tween(120)) + scaleOut(tween(180), targetScale = 0.92f))
         },
         contentAlignment = Alignment.BottomCenter,
-        modifier = modifier.navigationBarsPadding(),
+        modifier = modifier,
         label = "bar",
     ) { small ->
         if (small) CollapsedBar(tab, space, a.onExpand) else ExpandedBar(tab, space, tabCount, a)
@@ -154,10 +160,18 @@ private fun spaceTint(space: Space?): Brush {
 @Composable
 private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
     val k = LocalKaze.current
-    Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
+    // Píldora mínima pegada abajo (de borde a borde): toda la pantalla queda para la página.
+    Column(
+        Modifier.fillMaxWidth().background(k.glass).background(spaceTint(space)).clickable(onClick = onExpand)
+            .navigationBarsPadding(),
+    ) {
+        val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "progressMini")
+        Box(Modifier.fillMaxWidth().height(2.dp)) {
+            if (tab.loading) Box(Modifier.fillMaxWidth(progress.coerceIn(0.05f, 1f)).height(2.dp).background(k.accent))
+        }
         Row(
-            Modifier.glass(RoundedCornerShape(50), 8f).background(spaceTint(space)).clickable(onClick = onExpand)
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().height(30.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (space != null) {
@@ -166,6 +180,9 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
             }
             if (!tab.isSecure && !tab.isStart) {
                 Icon(Icons.Outlined.Warning, null, tint = Color(0xFFFF9500), modifier = Modifier.size(12.dp))
+                Spacer(Modifier.width(4.dp))
+            } else if (tab.isSecure) {
+                Icon(Icons.Outlined.Lock, null, tint = k.ink55, modifier = Modifier.size(11.dp))
                 Spacer(Modifier.width(4.dp))
             }
             Text(
@@ -178,67 +195,47 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
 
 @Composable
 private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions) {
-    val scope = rememberCoroutineScope()
-    val drag = remember { Animatable(0f) }
+    val k = LocalKaze.current
+    // Barra pegada abajo (de borde a borde, sin huecos), con las esquinas de arriba redondeadas.
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .glass(RoundedCornerShape(28.dp))
+            .shadow(14.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), ambientColor = Color.Black.copy(alpha = 0.2f))
+            .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+            .background(k.glass)
             .background(spaceTint(space))
-            .padding(top = 8.dp, start = 8.dp, end = 8.dp),
+            .navigationBarsPadding()
+            .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
         AddressPill(tab, a)
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 2.dp)
-                .offset { IntOffset(drag.value.roundToInt(), 0) }
-                // Deslizar sobre los íconos cambia de espacio, como los gestos de Zen.
-                .pointerInput(space?.id) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            val d = drag.value
-                            scope.launch { drag.animateTo(0f, spring(0.8f, 500f)) }
-                            if (abs(d) > 70) a.onSwipeSpace(if (d < 0) 1 else -1)
-                        },
-                        onDragCancel = { scope.launch { drag.animateTo(0f) } },
-                    ) { change, dx ->
-                        change.consume()
-                        scope.launch { drag.snapTo((drag.value + dx * 0.5f).coerceIn(-120f, 120f)) }
-                    }
-                },
+            Modifier.fillMaxWidth().padding(top = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onClick = a.onBack)
             ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante", enabled = tab.canGoForward, onClick = a.onForward)
+            HomeButton(tab.isStart, a.onHome, a.onSpaces)
             ToolbarIcon(Icons.Outlined.IosShare, "Compartir y más", enabled = !tab.isStart, onClick = a.onShare)
-            SpaceButton(space, a.onSpaces, a.onNewTab)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
             TabsButton(tabCount, a.onTabs, a.onTabsLong)
         }
     }
 }
 
-/** El espacio activo (Zen): toque = Essentials y espacios; mantener = pestaña nueva. */
+/** Casa: toque = página de inicio de Kaze; mantener = panel de Zen (Essentials, espacios, acciones). */
 @Composable
-private fun SpaceButton(space: Space?, onClick: () -> Unit, onLong: () -> Unit) {
+private fun HomeButton(atHome: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
     val k = LocalKaze.current
-    val ring = space?.colors?.map { Color(it) }.orEmpty().ifEmpty { listOf(k.accent, k.accent) }
     Box(
         Modifier.size(48.dp).clip(CircleShape).tap(onClick, onLong)
-            .semantics { contentDescription = "Espacio ${space?.name.orEmpty()}: Essentials y espacios" },
+            .semantics { contentDescription = "Página de inicio (mantén presionado: Essentials y espacios)" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier.size(34.dp).clip(CircleShape)
-                .background(Brush.linearGradient(if (ring.size > 1) ring else ring + ring))
-                .padding(2.dp).clip(CircleShape).background(k.glass),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(space?.emoji ?: "🌿", fontSize = 16.sp)
-        }
+        Icon(
+            if (atHome) Icons.Filled.Home else Icons.Outlined.Home, null,
+            tint = k.accent, modifier = Modifier.size(25.dp),
+        )
     }
 }
 
@@ -274,6 +271,9 @@ fun ZenPanel(
     onSpace: (Space) -> Unit,
     onNewSpace: () -> Unit,
     onEditSpace: (Space) -> Unit,
+    onNewTab: () -> Unit = {},
+    onClearSpace: () -> Unit = {},
+    onCompact: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val k = LocalKaze.current
@@ -288,6 +288,13 @@ fun ZenPanel(
                 .clickable(enabled = false) {}
                 .padding(14.dp),
         ) {
+            // Acciones rápidas de Zen.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ZenAction(Icons.Outlined.Add, "Pestaña", onNewTab, Modifier.weight(1f))
+                ZenAction(Icons.Outlined.CleaningServices, "Limpiar", onClearSpace, Modifier.weight(1f))
+                ZenAction(Icons.Outlined.Fullscreen, "Compacto", onCompact, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(14.dp))
             if (essentials.isNotEmpty()) {
                 Text("Essentials", style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink55)
                 Spacer(Modifier.height(8.dp))
@@ -297,9 +304,7 @@ fun ZenPanel(
                             Modifier.width(62.dp).clip(RoundedCornerShape(14.dp)).clickable { onEssential(t) }.padding(vertical = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Box(Modifier.size(48.dp).liftCard(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                                Favicon(t.url, size = 26.dp)
-                            }
+                            FaviconTile(t.pinnedUrl ?: t.url, 48.dp, 26.dp)
                             Spacer(Modifier.height(4.dp))
                             Text(t.displayTitle, style = KazeType.caption, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -339,7 +344,7 @@ fun ZenPanel(
                 Text("Nuevo espacio", style = KazeType.body, color = k.accent)
             }
             Text(
-                "Desliza sobre los botones de la barra para cambiar de espacio · mantén presionado un espacio para editarlo",
+                "Mantén presionada la casa para abrir este panel · mantén presionado un espacio para editarlo",
                 style = KazeType.caption, color = k.ink35, modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
             )
         }
@@ -511,5 +516,18 @@ fun FindBar(
             "OK", style = KazeType.headline, color = k.accent,
             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose).padding(horizontal = 10.dp, vertical = 8.dp),
         )
+    }
+}
+
+@Composable
+private fun ZenAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, modifier: Modifier) {
+    val k = LocalKaze.current
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).background(k.card).clickable(onClick = onClick).padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, null, tint = k.accent, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = KazeType.caption, color = k.ink)
     }
 }

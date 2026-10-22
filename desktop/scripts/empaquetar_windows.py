@@ -174,6 +174,9 @@ def main() -> None:
     ap.add_argument("--salida", type=Path, default=DESKTOP / "dist")
     ap.add_argument("--sin-instalador", action="store_true", help="solo la carpeta, sin llamar a makensis")
     a = ap.parse_args()
+    # NSIS resuelve las rutas relativas desde la carpeta del .nsi: todo absoluto.
+    a.setup = a.setup.resolve()
+    a.salida = a.salida.resolve()
 
     surfer = json.loads((DESKTOP / "surfer.json").read_text(encoding="utf-8"))
     firefox = surfer["version"]["version"]

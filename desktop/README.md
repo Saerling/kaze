@@ -1,44 +1,81 @@
 # Kaze para Windows
 
-Firefox 158 compilado como **Kaze**, con la interfaz de Kaze (espacios, Essentials, modo compacto,
-pestañas que se duermen) escrita desde cero sobre las pestañas verticales de Firefox.
+Las funciones de Zen (espacios, Essentials, modo compacto, pestañas que se duermen) con la
+estética de Safari, sobre Firefox 158.
 
 <img src="../docs/capturas/escritorio-claro.png" width="720" alt="Kaze en Windows">
 
-```
-desktop/
-├── surfer.json                 nombre, versión de Firefox, marca
-├── package.json                comandos (usa surfer, la herramienta de compilación de Zen)
-├── configs/
-│   ├── common/mozconfig        opciones de compilación (optimizado, sin telemetría)
-│   ├── windows/mozconfig
-│   ├── linux/mozconfig
-│   └── branding/release/       íconos (los genera branding/generar_iconos.py)
-├── src/browser/
-│   ├── kaze/                   ← la interfaz de Kaze
-│   │   ├── content/kaze.js       espacios, Essentials, menús, atajos, dormir pestañas
-│   │   ├── content/kaze.css      estética papel y tinta, página flotante, modo compacto
-│   │   ├── kaze-prefs.js         preferencias por defecto (memoria, privacidad, interfaz)
-│   │   └── jar.inc.mn
-│   ├── base/content/browser-xhtml.patch   ┐
-│   ├── base/jar-mn.patch                  ├ los únicos 3 cambios al código de Firefox
-│   └── app/profile/firefox-js.patch       ┘
-├── dev/                        probar la interfaz sobre un Firefox normal, sin compilar
-└── scripts/check.py            comprueba que los parches aplican (segundos, sin compilar)
-```
+<img src="../docs/capturas/escritorio-pestanas.png" width="356" alt="Vista de pestañas"> <img src="../docs/capturas/escritorio-inicio.png" width="356" alt="Página de inicio">
+
+## Instalar
+
+1. Descarga **`Kaze-0.4.N-setup.exe`** de [Releases](https://github.com/Saerling/kaze/releases)
+   (la versión `windows-N` más reciente).
+2. Ábrelo. Si Windows muestra "Windows protegió su PC", toca **Más información → Ejecutar de todas formas**
+   (el instalador no está firmado con un certificado de pago).
+3. Listo: Kaze queda en el menú Inicio y en el escritorio. No hace falta ser administrador.
+
+Cuando sale una versión nueva, Kaze lo avisa arriba de la ventana: **Actualizar** la descarga,
+y **Reiniciar y actualizar** la instala encima y vuelve a abrir Kaze, sin perder nada.
+
+Kaze tiene su propia carpeta de datos (`%APPDATA%\Kaze`), separada de Firefox si lo tienes instalado.
+
+## Qué tiene
+
+| | |
+|---|---|
+| **Espacios** | Cada pestaña pertenece a un espacio (emoji, nombre y color). Selector abajo en la barra lateral, rueda del ratón sobre los emojis o `Ctrl+Alt+←/→`. |
+| **Essentials** | Mosaicos arriba, visibles en todos los espacios del perfil. Clic derecho en una pestaña → *Añadir a Essentials*. |
+| **Perfiles** | Grupos de espacios con sus propias cookies y sesiones (un contenedor de Firefox por perfil): por ejemplo, tu cuenta de Google personal en uno y la del trabajo en otro. Botón del perfil abajo a la izquierda. |
+| **Todas las pestañas** | Tarjetas con miniatura, como en Safari. Botón ▦ arriba a la derecha o `Ctrl+Mayús+\`. Buscar, cambiar de espacio, cerrar. |
+| **Menú aA** | En la barra de dirección: tamaño del texto, Lector, Traducir (en el propio equipo, sin enviar la página a nadie), buscar en la página, lista de lectura, favoritos, compartir, informe de privacidad, ocultar barras. |
+| **Página de inicio** | Favoritos (la barra de marcadores), sitios frecuentes, lista de lectura y rastreadores bloqueados en la semana. |
+| **Modo compacto** | Barra lateral y barra de dirección ocultas hasta pasar el ratón (`Ctrl+Alt+C`). |
+| **Poca RAM** | Las pestañas sin usar se duermen a los 20 min y al faltar memoria; menos procesos y cachés más pequeñas que Firefox; las miniaturas son JPEG pequeños y solo de pestañas abiertas. |
+| **Privacidad** | Bloqueo de rastreadores estricto, sin telemetría ni estudios, sin contenido patrocinado. |
+
+En Windows 11 el fondo de la ventana es acrílico (translúcido, como Safari en macOS).
 
 ## Atajos
 
 | | |
 |---|---|
-| `Ctrl+Alt+1…9` | ir al espacio 1…9 |
-| `Ctrl+Alt+←` / `→` | espacio anterior / siguiente (o rueda del ratón sobre los emojis de abajo) |
+| `Ctrl+Alt+1…9` | ir al espacio 1…9 del perfil |
+| `Ctrl+Alt+←` / `→` | espacio anterior / siguiente |
+| `Ctrl+Mayús+\` | todas las pestañas |
 | `Ctrl+Alt+C` | modo compacto |
+| `Ctrl+Alt+R` | Lector |
 | Clic derecho en una pestaña | Añadir a Essentials · Mover a espacio |
 | Clic derecho en un emoji / `⋯` | renombrar, ícono, colores, mover, eliminar espacio |
 
 Preferencias en `about:config`: `kaze.unloader.minutes` (dormir pestañas, por defecto 20),
-`kaze.theme.floating` (página flotante), `kaze.compact.enabled`.
+`kaze.theme.floating` (página flotante), `kaze.compact.enabled`, `kaze.startpage.enabled`.
+
+## Cómo se arma el instalador
+
+Compilar Firefox entero tarda horas y pide un PC potente, así que el instalador se arma sobre el
+**Firefox oficial de Mozilla** (en español) y le pone Kaze encima, en unos minutos
+([`scripts/empaquetar_windows.py`](scripts/empaquetar_windows.py)):
+
+- **Identidad propia**: `browser/application.ini` con `Name=Kaze`; los accesos directos abren
+  `firefox.exe -app browser\application.ini`, así Kaze tiene su carpeta de perfiles y nunca toca la de Firefox.
+- **Marca**: nombre "Kaze" e íconos dentro de `browser/omni.ja` y en la ventana.
+- **Interfaz**: la carpeta `kaze/` (la misma de `src/browser/kaze/`) se registra como `chrome://kaze/`
+  con un cargador autoconfig ([`src/browser/kaze/cargador.cfg`](src/browser/kaze/cargador.cfg)).
+- **Actualizaciones**: el actualizador de Mozilla queda desactivado (políticas); Kaze se actualiza
+  desde las versiones `windows-N` de GitHub Releases.
+- **Instalador** NSIS ([`windows/kaze.nsi`](windows/kaze.nsi)) por usuario, en `%LOCALAPPDATA%\Programs\Kaze`.
+
+GitHub Actions ([`.github/workflows/desktop.yml`](../.github/workflows/desktop.yml)) lo hace con cada
+cambio en `desktop/` y publica el `.exe` en Releases. Para armarlo a mano (en Linux, con `p7zip-full` y `nsis`):
+
+```bash
+curl -LO "https://archive.mozilla.org/pub/firefox/releases/158.0.1/win64/es-MX/Firefox%20Setup%20158.0.1.exe"
+python3 desktop/scripts/empaquetar_windows.py --setup "Firefox Setup 158.0.1.exe" --build 1
+```
+
+Todavía no se puede poner Kaze como navegador predeterminado de Windows (los enlaces de otras apps
+abren tu navegador de siempre).
 
 ## Probar sin compilar
 

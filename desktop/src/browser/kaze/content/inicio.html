@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src chrome:; img-src chrome: page-icon: moz-icon: data: blob:; style-src chrome: 'unsafe-inline'; object-src 'none'">
+  <meta name="color-scheme" content="light dark">
+  <title>Página de inicio</title>
+  <link rel="icon" href="chrome://kaze/content/iconos/kaze.svg">
+  <link rel="stylesheet" href="chrome://kaze/content/inicio.css">
+  <script src="chrome://kaze/content/inicio.js" defer></script>
+</head>
+<body>
+  <main>
+    <button id="buscar" type="button">
+      <span class="lupa"></span>
+      <span>Buscar o escribir una dirección</span>
+    </button>
+
+    <section id="favoritos" hidden>
+      <h2>Favoritos</h2>
+      <div class="cuadricula"></div>
+    </section>
+
+    <section id="frecuentes" hidden>
+      <h2>Visitados con frecuencia</h2>
+      <div class="cuadricula"></div>
+    </section>
+
+    <section id="privacidad">
+      <h2>Informe de privacidad</h2>
+      <a class="tarjeta privacidad" href="about:protections">
+        <span class="escudo"></span>
+        <span class="cifra" id="rastreadores">0</span>
+        <span class="texto" id="rastreadores-texto">En los últimos siete días, Kaze evitó que los rastreadores te siguieran.</span>
+      </a>
+    </section>
+
+    <section id="lectura" hidden>
+      <h2>Lista de lectura</h2>
+      <div class="lista"></div>
+    </section>
+
+    <p id="vacio" hidden>Aquí aparecerán tus favoritos, los sitios que más visitas y tu lista de lectura.</p>
+  </main>
+</body>
+</html>

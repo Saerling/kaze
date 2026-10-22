@@ -2,6 +2,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-# Archivos de Kaze dentro de browser.jar → chrome://browser/content/kaze/
-        content/browser/kaze/kaze.js     (../kaze/content/kaze.js)
-        content/browser/kaze/kaze.css    (../kaze/content/kaze.css)
+# Archivos de Kaze dentro de browser.jar → chrome://kaze/content/
+% content kaze %content/kaze/
+        content/kaze/kaze.js                (../kaze/content/kaze.js)
+        content/kaze/kaze.css               (../kaze/content/kaze.css)
+        content/kaze/inicio.html            (../kaze/content/inicio.html)
+        content/kaze/inicio.js              (../kaze/content/inicio.js)
+        content/kaze/inicio.css             (../kaze/content/inicio.css)
+        content/kaze/iconos/kaze.svg        (../kaze/content/iconos/kaze.svg)
+        content/kaze/iconos/pestanas.svg    (../kaze/content/iconos/pestanas.svg)
+        content/kaze/iconos/aa.svg          (../kaze/content/iconos/aa.svg)

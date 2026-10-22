@@ -7,6 +7,8 @@
 - [x] Windows: interfaz Kaze sobre las pestañas verticales de Firefox (espacios, Essentials, compacto, página flotante, dormir pestañas)
 - [x] Windows: configuración de compilación propia (surfer) con 3 parches y marca Kaze
 - [x] Windows: cargador de desarrollo para probar sin compilar
+- [x] Windows: estética Safari (barra centrada, menú aA, vista de pestañas en tarjetas, página de inicio, perfiles con contenedores)
+- [x] Windows: instalador .exe en Releases armado sobre el Firefox oficial, con identidad propia y actualizaciones desde la app
 - [x] CI: APK + pruebas en cada push; comprobación de parches de escritorio
 - [x] Android: actualizaciones desde la app (GitHub Releases) con firma fija para instalar encima
 
@@ -22,4 +24,4 @@
 - [ ] Firefox Sync en Android (historial, marcadores, contraseñas, pestañas)
 - [ ] Espacios y Essentials sincronizados entre Windows y Android
 - [ ] "Continuar en el otro dispositivo"
-- [ ] Releases automáticos del instalador de Windows
+- [ ] Windows: poder poner Kaze como navegador predeterminado

@@ -9,35 +9,21 @@ Prueba la interfaz de Kaze en un Firefox normal, sin compilar nada.
     python desktop/dev/instalar.py /ruta/a/firefox                          (Linux)
     python desktop/dev/instalar.py /ruta/a/firefox --quitar                 (deshacer)
 
-Copia a la carpeta de Firefox un cargador (autoconfig) que inyecta kaze.js y kaze.css
-desde este repositorio, y las preferencias de Kaze. Al editar kaze.js/kaze.css solo
-hace falta reiniciar Firefox para ver los cambios.
+Copia a la carpeta de Firefox el cargador de Kaze (autoconfig), que registra
+chrome://kaze/ apuntando a este repositorio, y las preferencias de Kaze.
+Al editar kaze.js/kaze.css solo hace falta reiniciar Firefox para ver los cambios.
 
 Úsalo con un perfil aparte:  firefox -P   (crea uno llamado "kaze").
 """
 import argparse
-import re
 import sys
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
-KAZE = AQUI.parent / "src" / "browser" / "kaze"
+sys.path.insert(0, str(AQUI.parent / "scripts"))
+from kaze_comun import KAZE, cargador, preferencias_cfg  # noqa: E402
 
-
-def prefs_planas(texto: str, windows: bool) -> str:
-    """Quita el preprocesador (#ifdef) de kaze-prefs.js para usarlo como archivo de defaults."""
-    out, activo = [], [True]
-    for linea in texto.splitlines():
-        s = linea.strip()
-        if s.startswith("#ifdef"):
-            activo.append(activo[-1] and (s.split()[1] == "XP_WIN") == windows)
-        elif s.startswith("#endif"):
-            activo.pop()
-        elif s.startswith("#"):
-            continue
-        elif activo[-1]:
-            out.append(linea)
-    return "\n".join(out) + "\n"
+LOADER_PREF = "defaults/pref/kaze-dev-loader.js"
 
 
 def main() -> None:
@@ -49,19 +35,15 @@ def main() -> None:
     ff = Path(a.firefox)
     if not (ff / "omni.ja").exists():
         sys.exit(f"No parece una instalación de Firefox: {ff}")
-    archivos = [ff / "kaze-dev.cfg", ff / "defaults/pref/kaze-dev-loader.js"]
+    archivos = [ff / "kaze-dev.cfg", ff / LOADER_PREF]
 
     if a.quitar:
-        for f in archivos + [ff / "defaults/pref/kaze-prefs.js"]:
+        for f in archivos:
             f.unlink(missing_ok=True)
         print("Cargador de Kaze quitado.")
         return
 
-    windows = sys.platform == "win32"
-    # Las preferencias se aplican desde el .cfg (corre después de las de Firefox, así que las sobrescribe).
-    prefs = re.sub(r"^pref\(", "defaultPref(", prefs_planas((KAZE / "kaze-prefs.js").read_text(encoding="utf-8"), windows), flags=re.M)
-    cfg = (AQUI / "kaze-dev.cfg").read_text(encoding="utf-8").replace("@KAZE_DIR@", str(KAZE).replace("\\", "\\\\"))
-    cfg += "\n// Preferencias de Kaze (desktop/src/browser/kaze/kaze-prefs.js)\n" + prefs
+    cfg = cargador(str(KAZE)) + preferencias_cfg(windows=sys.platform == "win32")
     archivos[0].write_text(cfg, encoding="utf-8")
     archivos[1].write_text(
         'pref("general.config.filename", "kaze-dev.cfg");\n'

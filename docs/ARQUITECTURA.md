@@ -27,7 +27,7 @@ Zen mantiene ~260 parches sobre Firefox y su propia barra lateral. Kaze usa **3 
 | Parche | Para qué |
 |---|---|
 | `browser/base/content/browser-xhtml.patch` | carga `kaze.css` y `kaze.js` en la ventana del navegador |
-| `browser/base/jar-mn.patch` | empaqueta los archivos de Kaze en `chrome://browser/content/kaze/` |
+| `browser/base/jar-mn.patch` | empaqueta los archivos de Kaze en `chrome://kaze/content/` (en el instalador de Windows los registra el cargador `cargador.cfg`) |
 | `browser/app/profile/firefox-js.patch` | incluye `kaze-prefs.js` (preferencias por defecto) |
 
 Todo lo demás vive en `desktop/src/browser/kaze/` y se construye **encima de las pestañas

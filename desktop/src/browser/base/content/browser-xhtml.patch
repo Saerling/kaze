@@ -6,8 +6,8 @@ index cb8fc31..6bcc619 100644
  
    <script src="chrome://browser/content/global-scripts.js"></script>
    <script src="chrome://browser/content/browser-main.js"></script>
-+  <link rel="stylesheet" href="chrome://browser/content/kaze/kaze.css"/>
-+  <script src="chrome://browser/content/kaze/kaze.js"></script>
++  <link rel="stylesheet" href="chrome://kaze/content/kaze.css"/>
++  <script src="chrome://kaze/content/kaze.js"></script>
  </head>
  <html:body xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
  # All sets except for popupsets (commands, keys, and stringbundles)

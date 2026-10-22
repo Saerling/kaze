@@ -3,69 +3,88 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * Kaze — tema "papel y tinta" (el de Z-Sync / Zen) sobre las pestañas verticales de Firefox.
+ * Kaze — estética Safari sobre las pestañas verticales de Firefox, con las funciones de Zen.
  * Todo cuelga de :root[kaze], que pone kaze.js al arrancar.
+ * En Windows 11 el fondo de la ventana es acrílico (translúcido, como Safari en macOS);
+ * en otros sistemas, un gris claro con un toque del color del espacio.
  */
 
 :root[kaze] {
-  --kaze-paper: #F3ECE6;
-  --kaze-ink: #2E2E2E;
-  --kaze-ink-soft: color-mix(in srgb, var(--kaze-ink) 60%, transparent);
-  --kaze-lift: rgb(0 0 0 / 0.06);
-  --kaze-lift-strong: rgb(255 255 255 / 0.55);
-  --kaze-rim: rgb(0 0 0 / 0.06);
-  --kaze-accent: #264540;
+  --kaze-window: #F2F2F4;
+  --kaze-ink: #1D1D1F;
+  --kaze-ink-soft: #6E6E73;
+  --kaze-hover: rgb(0 0 0 / 0.05);
+  --kaze-active: rgb(0 0 0 / 0.09);
+  --kaze-card: #FFFFFF;
+  --kaze-field: rgb(0 0 0 / 0.055);
+  --kaze-rim: rgb(0 0 0 / 0.08);
+  --kaze-accent: #007AFF;
+  --kaze-focus: color-mix(in srgb, var(--kaze-accent) 40%, transparent);
   --kaze-radius: 10px;
   --kaze-gap: 8px;
+  --kaze-font: system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --kaze-overlay: rgb(240 240 243 / 0.975);
 
-  /* Colores del espacio activo (los pone kaze.js); en claro se mezclan con el papel. */
-  --kaze-s1: color-mix(in srgb, var(--kaze-c1, #DCE8D4) 85%, var(--kaze-paper));
-  --kaze-s2: color-mix(in srgb, var(--kaze-c2, #B9D3B0) 90%, transparent);
-  --kaze-s3: color-mix(in srgb, var(--kaze-c3, #B9D3B0) 90%, transparent);
+  /* Colores del espacio activo (los pone kaze.js): un tinte suave, no un fondo de color. */
+  --kaze-tint1: color-mix(in srgb, var(--kaze-c1, #DCE8D4) 40%, transparent);
+  --kaze-tint2: color-mix(in srgb, var(--kaze-c2, #B9D3B0) 30%, transparent);
+  --kaze-background:
+    radial-gradient(ellipse 60% 80% at 0% 100%, var(--kaze-tint2), transparent 70%),
+    radial-gradient(ellipse 50% 60% at 0% 0%, var(--kaze-tint1), transparent 70%),
+    var(--kaze-window);
 
-  --kaze-gradient:
-    radial-gradient(ellipse at 100% 10%, var(--kaze-s2), transparent 70%),
-    radial-gradient(ellipse at 10% 95%, var(--kaze-s3), transparent 70%),
-    linear-gradient(var(--kaze-s1), var(--kaze-s1));
-
-  /* Variables de Firefox: todo el cromo transparente sobre el degradado. */
+  /* Variables de Firefox: el cromo transparente sobre el fondo de la ventana. */
   --toolbox-background-color: transparent;
   --toolbox-background-color-inactive: transparent;
   --toolbar-background-color: transparent;
   --toolbox-text-color: var(--kaze-ink);
   --toolbar-text-color: var(--kaze-ink);
+  --toolbarbutton-icon-fill: var(--kaze-ink);
   --sidebar-background-color: transparent;
   --sidebar-border-color: transparent;
   --chrome-content-separator-color: transparent;
-  --tab-background-color-selected: var(--kaze-lift-strong);
-  --tab-background-color-hover: var(--kaze-lift);
+  --tab-background-color-selected: var(--kaze-card);
+  --tab-background-color-hover: var(--kaze-hover);
   --tab-text-color: var(--kaze-ink);
   --tab-selected-color: var(--kaze-ink);
-  --toolbar-field-background-color: var(--kaze-lift);
-  --toolbar-field-focus-background-color: var(--kaze-paper);
+  --toolbar-field-background-color: var(--kaze-field);
+  --toolbar-field-focus-background-color: var(--kaze-card);
   --toolbar-field-border-color: transparent;
-  --toolbarbutton-background-color-hover: var(--kaze-lift);
-  --toolbarbutton-background-color-active: var(--kaze-lift);
+  --toolbar-field-focus-border-color: var(--kaze-accent);
+  --focus-outline-color: var(--kaze-accent);
+  --toolbarbutton-border-radius: 7px;
+  --toolbarbutton-background-color-hover: var(--kaze-hover);
+  --toolbarbutton-background-color-active: var(--kaze-active);
 
-  background: var(--kaze-gradient) !important;
+  background: var(--kaze-background) !important;
   color: var(--kaze-ink);
   transition: background 300ms ease;
 
   @media (prefers-color-scheme: dark) {
-    --kaze-paper: #1C1C1E;
-    --kaze-ink: #F3ECE6;
-    --kaze-lift: rgb(255 255 255 / 0.07);
-    --kaze-lift-strong: rgb(255 255 255 / 0.12);
-    --kaze-rim: rgb(255 255 255 / 0.06);
-    --kaze-accent: #A3CCC6;
-    /* En oscuro, los colores del espacio se oscurecen para no deslumbrar. */
-    --kaze-s1: color-mix(in srgb, var(--kaze-c1, #DCE8D4) 28%, #141416);
-    --kaze-s2: color-mix(in srgb, var(--kaze-c2, #B9D3B0) 30%, transparent);
-    --kaze-s3: color-mix(in srgb, var(--kaze-c3, #B9D3B0) 26%, transparent);
+    --kaze-window: #232325;
+    --kaze-ink: #F5F5F7;
+    --kaze-ink-soft: #98989D;
+    --kaze-hover: rgb(255 255 255 / 0.06);
+    --kaze-active: rgb(255 255 255 / 0.1);
+    --kaze-card: #3A3A3C;
+    --kaze-field: rgb(255 255 255 / 0.08);
+    --kaze-rim: rgb(255 255 255 / 0.08);
+    --kaze-accent: #0A84FF;
+    --kaze-overlay: rgb(30 30 32 / 0.975);
+    --kaze-tint1: color-mix(in srgb, var(--kaze-c1, #DCE8D4) 12%, transparent);
+    --kaze-tint2: color-mix(in srgb, var(--kaze-c2, #B9D3B0) 10%, transparent);
+  }
+
+  /* Windows 11: se deja ver el acrílico del sistema con un velo y el tinte del espacio. */
+  @media (-moz-windows-mica) {
+    --kaze-window: rgb(243 243 245 / 0.62);
+    @media (prefers-color-scheme: dark) {
+      --kaze-window: rgb(32 32 34 / 0.62);
+    }
   }
 }
 
-/* El cromo deja ver el degradado del fondo. */
+/* El cromo deja ver el fondo de la ventana. */
 :root[kaze] {
   & #navigator-toolbox,
   & #nav-bar,
@@ -82,20 +101,52 @@
     box-shadow: none !important;
   }
 
-  & #nav-bar {
-    padding-block: 4px;
+  & #navigator-toolbox {
+    font-family: var(--kaze-font);
   }
 
-  /* Barra de dirección: cápsula levantada, como en la app. */
+  & #nav-bar {
+    padding-block: 5px;
+    min-height: 44px;
+  }
+
+  /* Barra de dirección centrada, como en Safari. */
+  & #urlbar-container {
+    flex: 0 1 720px !important;
+    margin-inline: auto !important;
+    max-width: 720px !important;
+  }
   & #urlbar-background {
-    border-radius: 12px !important;
-    border: 0.5px solid var(--kaze-rim) !important;
-    background-color: var(--kaze-lift) !important;
+    border-radius: 9px !important;
+    border: 0 !important;
+    background-color: var(--kaze-field) !important;
+    box-shadow: none !important;
+  }
+  & #urlbar:not([focused], [open]) .urlbar-input {
+    text-align: center;
   }
   & #urlbar[focused] #urlbar-background,
   & #urlbar[open] #urlbar-background {
-    background-color: var(--kaze-paper) !important;
-    box-shadow: 0 8px 30px rgb(0 0 0 / 0.18) !important;
+    background-color: var(--kaze-card) !important;
+    outline: 3.5px solid var(--kaze-focus) !important;
+    outline-offset: 0 !important;
+    box-shadow: 0 10px 34px rgb(0 0 0 / 0.16) !important;
+  }
+
+  /* Botones redondeados y discretos. */
+  & #nav-bar toolbarbutton > .toolbarbutton-icon,
+  & #nav-bar toolbarbutton > .toolbarbutton-badge-stack {
+    border-radius: 7px !important;
+  }
+
+  & #kaze-aa-button {
+    list-style-image: url("chrome://kaze/content/iconos/aa.svg");
+    -moz-context-properties: fill, fill-opacity;
+    fill: currentColor;
+    fill-opacity: 0.85;
+  }
+  & #kaze-overview-button {
+    list-style-image: url("chrome://kaze/content/iconos/pestanas.svg");
   }
 }
 
@@ -106,40 +157,50 @@
     margin: 0 var(--kaze-gap) var(--kaze-gap) 2px !important;
     border-radius: var(--kaze-radius);
     overflow: clip;
-    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 2px 12px rgb(0 0 0 / 0.08);
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 1px 3px rgb(0 0 0 / 0.06), 0 6px 22px rgb(0 0 0 / 0.07);
   }
   & .browserStack > browser {
     border-radius: var(--kaze-radius);
   }
 }
 
-/* ── Pestañas verticales ──────────────────────────────────────────────── */
+/* ── Barra lateral: pestañas verticales como la barra lateral de Safari ── */
+
+:root[kaze] #vertical-tabs {
+  font-family: var(--kaze-font);
+}
 
 :root[kaze] #tabbrowser-tabs[orient="vertical"] {
   & .tabbrowser-tab {
-    --tab-min-height: 34px;
-    --tab-border-radius: 10px;
+    --tab-min-height: 32px;
+    --tab-border-radius: 8px;
     --tab-block-margin: 1px;
   }
   & .tab-background {
-    border-radius: 10px !important;
+    border-radius: 8px !important;
     box-shadow: none !important;
     outline: none !important;
   }
   & .tabbrowser-tab[selected] .tab-background {
-    background: var(--kaze-lift-strong) !important;
-    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 1px 3px rgb(0 0 0 / 0.06) !important;
+    background: var(--kaze-card) !important;
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 1px 2px rgb(0 0 0 / 0.06) !important;
   }
   & .tab-label {
-    font-weight: 500;
+    font-size: 13px;
+  }
+  & .tabbrowser-tab[selected] .tab-label {
+    font-weight: 600;
   }
   & .tabbrowser-tab[pending] .tab-label,
   & .tabbrowser-tab[discarded] .tab-label {
-    opacity: 0.6;
+    opacity: 0.55;
+  }
+  & .tab-close-button {
+    border-radius: 6px;
   }
 }
 
-/* Essentials: cuadrícula de tarjetas arriba, en todos los espacios.
+/* Essentials: cuadrícula de mosaicos arriba, como los Favoritos de Safari.
    Firefox ya pone las fijadas en una cuadrícula (::part(items-wrapper)); solo se ajusta. */
 :root[kaze] #pinned-tabs-container[orient="vertical"] {
   &::part(items-wrapper) {
@@ -147,7 +208,7 @@
     grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)) !important;
     grid-auto-rows: auto !important;
     gap: 6px;
-    padding: 6px 8px 2px !important;
+    padding: 4px 8px 2px !important;
   }
   & .tabbrowser-tab {
     --tab-min-height: 36px;
@@ -158,17 +219,18 @@
 }
 :root[kaze] #pinned-tabs-container .tabbrowser-tab[kaze-essential] {
   & .tab-background {
-    background: var(--kaze-lift) !important;
+    background: var(--kaze-hover) !important;
     border: 0.5px solid var(--kaze-rim);
-    border-radius: 14px !important;
-    min-height: 46px;
+    border-radius: 12px !important;
+    min-height: 44px;
   }
   &[selected] .tab-background {
-    background: var(--kaze-lift-strong) !important;
+    background: var(--kaze-card) !important;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.08) !important;
   }
   & .tab-content {
     justify-content: center;
-    min-height: 46px;
+    min-height: 44px;
   }
   & .tab-icon-image,
   & .tab-throbber {
@@ -192,9 +254,7 @@
   }
 }
 
-/* ── Cabecera del espacio y selector ──────────────────────────────────── */
-
-/* #vertical-tabs apila: pestañas (ocupan el alto) y el selector de espacios abajo. */
+/* #vertical-tabs apila: cabecera, pestañas (ocupan el alto) y el pie con perfil y espacios. */
 :root[kaze] #vertical-tabs {
   display: flex !important;
   flex-direction: column !important;
@@ -206,10 +266,10 @@
 
 /* Línea entre las fijadas y las pestañas normales (como en Zen). */
 :root[kaze] #pinned-tabs-container[orient="vertical"]:not(:empty) {
-  margin-inline: 8px;
+  margin-inline: 10px;
   padding-bottom: 8px;
   margin-bottom: 6px;
-  border-bottom: 1px solid color-mix(in srgb, var(--kaze-ink) 20%, transparent);
+  border-bottom: 0.5px solid var(--kaze-rim);
   &::part(items-wrapper) {
     padding-inline: 0 !important;
   }
@@ -218,10 +278,10 @@
 #kaze-space-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 6px 8px 2px;
-  padding: 4px 4px 4px 10px;
-  font: menu;
+  gap: 8px;
+  margin: 4px 8px 4px;
+  padding: 4px 4px 4px 8px;
+  font-family: var(--kaze-font);
   color: var(--kaze-ink);
 
   & .kaze-emoji {
@@ -230,27 +290,30 @@
     text-align: center;
   }
   & .kaze-name {
-    flex: 1;
     font-weight: 700;
-    font-size: 14px;
-    letter-spacing: -0.2px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  & .kaze-count {
+    flex: 1;
+    font-size: 12px;
+    color: var(--kaze-ink-soft);
   }
   & button {
     appearance: none;
     border: 0;
     background: transparent;
     color: var(--kaze-ink-soft);
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 2px 8px;
     font: inherit;
     font-size: 12px;
     cursor: pointer;
   }
   & button:hover {
-    background: var(--kaze-lift);
+    background: var(--kaze-hover);
     color: var(--kaze-ink);
   }
   & .kaze-clear {
@@ -262,34 +325,72 @@
   }
 }
 
-#kaze-space-bar {
+#kaze-sidebar-footer {
   display: flex;
-  justify-content: center;
   align-items: center;
   gap: 4px;
   padding: 6px 8px 10px;
+  border-top: 0.5px solid var(--kaze-rim);
+  margin-inline: 4px;
+}
+
+#kaze-profile-btn {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 45%;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: var(--kaze-hover);
+  color: var(--kaze-ink);
+  font: 12px var(--kaze-font);
+  font-weight: 600;
+  cursor: pointer;
+  & .kaze-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &:hover {
+    background: var(--kaze-active);
+  }
+  &[hidden] {
+    display: none;
+  }
+}
+
+#kaze-space-bar {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
   flex-wrap: wrap;
 
   & .kaze-space-btn {
     appearance: none;
     border: 0;
     background: transparent;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    font-size: 18px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-size: 16px;
     line-height: 1;
     cursor: pointer;
-    opacity: 0.38;
-    transition: opacity 180ms, transform 180ms, background 180ms;
+    opacity: 0.42;
+    transition: opacity 160ms, transform 160ms, background 160ms;
     color: var(--kaze-ink);
   }
   & .kaze-space-btn:hover {
-    opacity: 0.8;
-    background: var(--kaze-lift);
+    opacity: 0.85;
+    background: var(--kaze-hover);
   }
   & .kaze-space-btn[selected] {
     opacity: 1;
+    background: var(--kaze-card);
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 1px 2px rgb(0 0 0 / 0.06);
   }
   & .kaze-space-btn:active {
     transform: scale(0.9);
@@ -301,11 +402,329 @@
 }
 
 /* Barra lateral contraída (solo íconos): esconder textos de Kaze. */
-:root[kaze] sidebar-main:not([expanded]) {
-  & ~ * #kaze-space-header .kaze-name,
-  & ~ * #kaze-space-header button {
+:root[kaze] sidebar-main:not([expanded]) ~ * {
+  & #kaze-space-header .kaze-name,
+  & #kaze-space-header .kaze-count,
+  & #kaze-space-header button,
+  & #kaze-profile-btn .kaze-name {
     display: none;
   }
+}
+
+/* ── Menú aA ──────────────────────────────────────────────────────────── */
+
+#kaze-page-panel {
+  --panel-padding: 6px;
+  --panel-border-radius: 12px;
+}
+
+.kaze-page-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  font: 13px var(--kaze-font, system-ui);
+
+  & .kaze-zoom {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px;
+  }
+  & .kaze-zoom button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 6px 0;
+  }
+  & .kaze-zoom button:hover {
+    background: rgb(128 128 128 / 0.14);
+  }
+  & .kaze-zoom-small,
+  & .kaze-zoom-big {
+    width: 56px;
+  }
+  & .kaze-zoom-small {
+    font-size: 12px !important;
+  }
+  & .kaze-zoom-big {
+    font-size: 19px !important;
+  }
+  & .kaze-zoom-value {
+    flex: 1;
+    font-weight: 600 !important;
+    font-variant-numeric: tabular-nums;
+  }
+
+  & .kaze-sep {
+    height: 0.5px;
+    background: rgb(128 128 128 / 0.3);
+    margin: 5px 8px;
+  }
+
+  & .kaze-row {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    border-radius: 7px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  & .kaze-row:hover:not(:disabled) {
+    background: var(--kaze-accent, #007AFF);
+    color: white;
+  }
+  & .kaze-row:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  & .kaze-row-icon {
+    width: 18px;
+    text-align: center;
+  }
+  & .kaze-row-label {
+    flex: 1;
+  }
+  & .kaze-row-hint {
+    font-size: 11px;
+    opacity: 0.55;
+  }
+}
+
+/* ── Vista de pestañas en tarjetas ────────────────────────────────────── */
+
+#kaze-overview {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  background: var(--kaze-overlay);
+  backdrop-filter: blur(24px) saturate(1.4);
+  font-family: var(--kaze-font);
+  color: var(--kaze-ink);
+  outline: none;
+  animation: kaze-fade 140ms ease-out;
+}
+
+@keyframes kaze-fade {
+  from {
+    opacity: 0;
+    scale: 1.02;
+  }
+}
+
+.kaze-overview-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 20px 32px 28px;
+  gap: 18px;
+}
+
+.kaze-overview-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  & input {
+    flex: 0 1 300px;
+    margin-inline-start: auto;
+    border: 0;
+    border-radius: 9px;
+    padding: 7px 12px;
+    background: var(--kaze-field);
+    color: inherit;
+    font: 13px var(--kaze-font);
+    outline: none;
+  }
+  & input:focus {
+    background: var(--kaze-card);
+    outline: 3px solid var(--kaze-focus);
+  }
+  & > button {
+    appearance: none;
+    border: 0;
+    border-radius: 8px;
+    font: 13px var(--kaze-font);
+    cursor: pointer;
+    color: inherit;
+    background: var(--kaze-hover);
+    padding: 7px 14px;
+  }
+  & .kaze-overview-new {
+    font-size: 18px;
+    line-height: 1;
+    padding: 5px 12px;
+  }
+  & .kaze-overview-done {
+    background: var(--kaze-accent);
+    color: white;
+    font-weight: 600;
+  }
+}
+
+.kaze-overview-spaces {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kaze-chip {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 99px;
+  padding: 6px 12px;
+  background: var(--kaze-hover);
+  color: inherit;
+  font: 13px var(--kaze-font);
+  cursor: pointer;
+  &:hover {
+    background: var(--kaze-active);
+  }
+  &[selected] {
+    background: var(--kaze-card);
+    font-weight: 600;
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 1px 3px rgb(0 0 0 / 0.08);
+  }
+  & .kaze-chip-count {
+    font-size: 11px;
+    color: var(--kaze-ink-soft);
+  }
+}
+
+.kaze-overview-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-content: start;
+  gap: 22px 18px;
+  padding: 4px;
+}
+
+.kaze-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+
+  & .kaze-card-thumb {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--kaze-card);
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 2px 10px rgb(0 0 0 / 0.08);
+    display: grid;
+    place-items: center;
+    transition: transform 140ms ease, box-shadow 140ms ease;
+  }
+  & .kaze-card-thumb > img:not(.kaze-card-icon) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+  }
+  & .kaze-card-icon {
+    width: 40px;
+    height: 40px;
+    opacity: 0.85;
+  }
+  & .kaze-card-badge {
+    position: absolute;
+    top: 6px;
+    inset-inline-start: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+    background: rgb(0 0 0 / 0.55);
+    color: white;
+  }
+  &:hover .kaze-card-thumb {
+    transform: translateY(-2px);
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 8px 24px rgb(0 0 0 / 0.14);
+  }
+  &[selected] .kaze-card-thumb {
+    box-shadow: 0 0 0 3px var(--kaze-accent), 0 6px 20px rgb(0 0 0 / 0.12);
+  }
+
+  & .kaze-card-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding-inline: 2px;
+    min-width: 0;
+  }
+  & .kaze-card-title > img {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
+  & .kaze-card-title > span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  & .kaze-card-close {
+    appearance: none;
+    border: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--kaze-ink-soft);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+  }
+  &:hover .kaze-card-close {
+    opacity: 1;
+  }
+  & .kaze-card-close:hover {
+    background: var(--kaze-active);
+    color: var(--kaze-ink);
+  }
+}
+
+.kaze-overview-empty {
+  margin: auto;
+  color: var(--kaze-ink-soft);
+}
+
+/* ── Aviso breve ──────────────────────────────────────────────────────── */
+
+#kaze-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 1100;
+  padding: 9px 16px;
+  border-radius: 99px;
+  background: rgb(30 30 32 / 0.88);
+  color: white;
+  font: 13px var(--kaze-font);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+  animation: kaze-fade 140ms ease-out;
 }
 
 /* ── Modo compacto: barra lateral y barra de dirección aparecen al pasar el ratón ── */
@@ -319,7 +738,7 @@
     z-index: 10;
     translate: calc(-100% + 6px) 0;
     transition: translate 220ms cubic-bezier(.2, .8, .2, 1);
-    background: var(--kaze-gradient) !important;
+    background: var(--kaze-background) !important;
     border-radius: 0 var(--kaze-radius) var(--kaze-radius) 0;
     box-shadow: 0 10px 40px rgb(0 0 0 / 0.25) !important;
   }
@@ -339,7 +758,7 @@
   & #navigator-toolbox:hover,
   & #navigator-toolbox:focus-within {
     translate: 0 0;
-    background: var(--kaze-gradient) !important;
+    background: var(--kaze-background) !important;
     box-shadow: 0 10px 40px rgb(0 0 0 / 0.2) !important;
   }
 

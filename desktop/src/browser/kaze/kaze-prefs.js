@@ -19,6 +19,18 @@ pref("browser.compactmode.show", true);
 pref("browser.uidensity", 0);
 pref("browser.aboutConfig.showWarning", false);
 pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+// Página de inicio de Kaze (favoritos, frecuentes, lista de lectura, privacidad).
+pref("browser.startup.homepage", "chrome://kaze/content/inicio.html");
+pref("browser.startup.homepage_override.mstone", "ignore");
+pref("startup.homepage_welcome_url", "");
+// Los perfiles de Kaze usan contenedores de Firefox (cookies y sesiones separadas).
+pref("privacy.userContext.enabled", true);
+pref("privacy.userContext.ui.enabled", true);
+#ifdef XP_WIN
+// Windows 11: fondo acrílico translúcido detrás de la barra lateral, como Safari en macOS.
+pref("widget.windows.mica", true);
+pref("widget.windows.mica.toplevel-backdrop", 2);
+#endif
 
 // Kaze
 pref("kaze.spaces.data", "");                 // JSON con los espacios (lo gestiona Kaze)
@@ -26,6 +38,10 @@ pref("kaze.compact.enabled", false);          // modo compacto: barra lateral y 
 pref("kaze.unloader.enabled", true);          // dormir pestañas sin usar
 pref("kaze.unloader.minutes", 20);
 pref("kaze.theme.floating", true);            // página "flotante" con bordes redondeados (estilo Zen)
+pref("kaze.startpage.enabled", true);         // página de inicio de Kaze en las pestañas nuevas
+pref("kaze.profiles.data", "");               // JSON con los perfiles (lo gestiona Kaze)
+pref("kaze.build", 0);                        // número de versión de Windows (lo pone el instalador)
+pref("kaze.update.repo", "Saerling/kaze");    // de dónde salen las actualizaciones
 
 // ── Memoria ──────────────────────────────────────────────────────────
 // Descargar pestañas cuando el sistema se queda sin memoria (y empezar antes que Firefox).

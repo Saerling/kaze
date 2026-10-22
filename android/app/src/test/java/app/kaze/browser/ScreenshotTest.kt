@@ -23,6 +23,7 @@ import app.kaze.browser.ui.components.LocalApp
 import app.kaze.browser.ui.screens.ChromeActions
 import app.kaze.browser.ui.screens.SafariBottomBar
 import app.kaze.browser.ui.screens.StartPage
+import app.kaze.browser.ui.screens.ZenPanel
 import app.kaze.browser.ui.screens.TabsScreen
 import app.kaze.browser.ui.sheets.GroupsSheet
 import app.kaze.browser.ui.theme.KazeTheme
@@ -113,7 +114,22 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-inicio.png")
     }
 
-    private fun actions() = ChromeActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+    private fun actions() = ChromeActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+
+    @Test fun panelZen() {
+        app.store.pinned(app.store.currentSpaceId).take(3).forEach { app.store.setKind(it, TabKind.ESSENTIAL) }
+        compose.setContent { Themed(false) { Box(Modifier.fillMaxSize().background(Color.White)) { FakePage()
+            ZenPanel(
+                essentials = app.store.essentials(),
+                spaces = app.store.profileSpaces,
+                currentSpaceId = app.store.currentSpaceId,
+                tabCount = { sp -> app.store.normal(sp.id).size },
+                onEssential = {}, onSpace = {}, onNewSpace = {}, onEditSpace = {}, onDismiss = {},
+            )
+        } } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-panel-zen.png")
+    }
 
     @Test fun navegador() {
         val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
@@ -122,7 +138,7 @@ class ScreenshotTest {
             Themed(false) {
                 Box(Modifier.fillMaxSize().background(Color.White)) {
                     FakePage()
-                    SafariBottomBar(tab, false, actions(), Modifier.align(Alignment.BottomCenter))
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter))
                 }
             }
         }
@@ -136,7 +152,7 @@ class ScreenshotTest {
             Themed(true) {
                 Box(Modifier.fillMaxSize().background(Color.White)) {
                     FakePage()
-                    SafariBottomBar(tab, true, actions(), Modifier.align(Alignment.BottomCenter))
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, true, actions(), Modifier.align(Alignment.BottomCenter))
                 }
             }
         }

@@ -4,6 +4,15 @@
 
 package app.kaze.browser
 
+import app.kaze.browser.ui.screens.ZenPanel
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -280,6 +289,7 @@ class MainActivity : ComponentActivity() {
 
     // ── UI ────────────────────────────────────────────────────────────
 
+    @OptIn(ExperimentalLayoutApi::class)
     @Composable
     private fun Root() {
         val store = app.store
@@ -301,6 +311,14 @@ class MainActivity : ComponentActivity() {
         var privacy by remember { mutableStateOf(false) }
         var finding by remember { mutableStateOf(false) }
         var barHidden by remember { mutableStateOf(false) }
+        var zenPanel by remember { mutableStateOf(false) }
+        // Alto real de la barra de abajo: la página se encoge para que nada quede tapado.
+        var barHeightPx by remember { mutableIntStateOf(0) }
+        var pageBottomPx by remember { mutableIntStateOf(0) }
+        LaunchedEffect(Unit) {
+            // Se espera a que termine la animación de la barra: así la página cambia de alto una sola vez.
+            snapshotFlow { barHeightPx }.collectLatest { h -> delay(220); pageBottomPx = h }
+        }
         val scope = rememberCoroutineScope()
 
         // Buscar una versión nueva en GitHub al abrir (solo en las versiones publicadas).
@@ -356,6 +374,21 @@ class MainActivity : ComponentActivity() {
             val i = list.indexOfFirst { it.id == t.id }
             val next = list.getOrNull(i + delta) ?: return
             snapshot { open(next) }
+        }
+
+        /** Ir a otro espacio (Zen): su última pestaña, o una nueva con la página de inicio. */
+        fun goToSpace(id: String) {
+            if (id == store.currentSpaceId) return
+            store.selectSpace(id)
+            val last = (store.pinned(id) + store.normal(id)).maxByOrNull { it.lastUsed }
+            snapshot { if (last != null) open(last) else newTab(private = id == Space.PRIVATE_ID) }
+        }
+
+        fun stepSpace(delta: Int) {
+            val list = store.profileSpaces
+            val i = list.indexOfFirst { it.id == store.currentSpaceId }
+            if (i < 0 || list.isEmpty()) return
+            goToSpace(list[(i + delta + list.size) % list.size].id)
         }
 
         // Mostrar la pestaña seleccionada en el GeckoView (o pausar todo en la vista de pestañas).
@@ -428,13 +461,27 @@ class MainActivity : ComponentActivity() {
                 onTabsLong = { tabsQuick = true },
                 onSwipeTab = ::swipeTab,
                 onExpand = { barHidden = false; ui.scrollDirection = -1 },
+                onSpaces = { zenPanel = true },
+                onSwipeSpace = ::stepSpace,
+                onNewTab = { newTab(private = t.isPrivate) },
             )
         }
         val collapsed = tab != null && !tab.isStart && !tab.loading && (ui.scrollDirection > 0 || barHidden)
 
+        val imeVisible = WindowInsets.isImeVisible
+        val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
+        LaunchedEffect(showBar) { if (!showBar) barHeightPx = 0 }
+        val density = LocalDensity.current
+
         Box(Modifier.fillMaxSize().background(k.paper)) {
             Box(Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.statusBarsPadding().imePadding())) {
-                AndroidView(factory = { geckoView }, modifier = Modifier.fillMaxSize())
+                // La página termina donde empieza la barra (y los botones de Android): nada queda debajo.
+                AndroidView(
+                    factory = { geckoView },
+                    modifier = Modifier.fillMaxSize()
+                        .padding(bottom = with(density) { (if (showBar) pageBottomPx else 0).toDp() })
+                        .then(if (showBar || ui.fullscreen) Modifier else Modifier.navigationBarsPadding()),
+                )
 
                 if (tab != null && tab.isStart && !showTabs) {
                     StartPage(
@@ -446,7 +493,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (!ui.fullscreen && tab != null && !showTabs && actions != null) {
+                if (showBar && tab != null && actions != null) {
                     if (finding) {
                         FindBar(
                             query = ui.findQuery.orEmpty(),
@@ -455,14 +502,17 @@ class MainActivity : ComponentActivity() {
                             onNext = { find(tab, ui.findQuery.orEmpty(), backwards = false) },
                             onPrev = { find(tab, ui.findQuery.orEmpty(), backwards = true) },
                             onClose = { finding = false; app.pool.sessionOf(tab.id)?.finder?.clear() },
-                            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+                            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+                                .onSizeChanged { barHeightPx = it.height },
                         )
                     } else {
                         SafariBottomBar(
                             tab = tab,
+                            space = store.spaceById(tab.spaceId),
+                            tabCount = store.tabs.count { it.spaceId == tab.spaceId && it.kind != TabKind.ESSENTIAL },
                             collapsed = collapsed,
                             a = actions,
-                            modifier = Modifier.align(Alignment.BottomCenter),
+                            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { barHeightPx = it.height },
                         )
                     }
                 }
@@ -557,6 +607,20 @@ class MainActivity : ComponentActivity() {
                         showTabs = true
                     },
                 )
+            }
+            if (zenPanel) {
+                ZenPanel(
+                    essentials = store.essentials(),
+                    spaces = store.profileSpaces,
+                    currentSpaceId = store.currentSpaceId,
+                    tabCount = { sp -> store.tabs.count { it.spaceId == sp.id && it.kind != TabKind.ESSENTIAL } },
+                    onEssential = { t -> zenPanel = false; snapshot { open(t) } },
+                    onSpace = { sp -> zenPanel = false; goToSpace(sp.id) },
+                    onNewSpace = { zenPanel = false; newSpace = true },
+                    onEditSpace = { sp -> zenPanel = false; editSpace = sp },
+                    onDismiss = { zenPanel = false },
+                )
+                BackHandler { zenPanel = false }
             }
             editSpace?.let { s -> SpaceEditorSheet(s) { editSpace = null } }
             if (newSpace) SpaceEditorSheet(null) { newSpace = false }

@@ -5,6 +5,13 @@
 package app.kaze.browser.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.ui.graphics.Brush
+import app.kaze.browser.data.Space
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -74,6 +81,7 @@ import androidx.compose.ui.unit.sp
 import app.kaze.browser.data.Tab
 import app.kaze.browser.data.Urls
 import app.kaze.browser.ui.components.LocalApp
+import app.kaze.browser.ui.components.Favicon
 import app.kaze.browser.ui.components.ToolbarIcon
 import app.kaze.browser.ui.components.tap
 import app.kaze.browser.ui.theme.KazeType
@@ -99,15 +107,27 @@ class ChromeActions(
     /** Deslizar la barra: -1 pestaña anterior, +1 siguiente. */
     val onSwipeTab: (Int) -> Unit,
     val onExpand: () -> Unit,
+    /** Botón del espacio (Zen): abre el panel de Essentials y espacios. */
+    val onSpaces: () -> Unit,
+    /** Deslizar sobre los íconos: -1 espacio anterior, +1 siguiente (como en Zen). */
+    val onSwipeSpace: (Int) -> Unit,
+    val onNewTab: () -> Unit,
 )
 
 /**
- * Barra inferior de Safari: cápsula de dirección (AA · sitio · recargar) y debajo
- * atrás, adelante, compartir, marcadores y pestañas. Al bajar por la página se
- * encoge a una cápsula pequeña con el dominio; un toque la vuelve a abrir.
+ * Barra inferior: la de Safari (cápsula de dirección y botones) con lo de Zen
+ * (el espacio activo, su color y cambiar de espacio deslizando).
+ * Va por encima de los botones de Android; al bajar por la página se encoge.
  */
 @Composable
-fun SafariBottomBar(tab: Tab, collapsed: Boolean, a: ChromeActions, modifier: Modifier = Modifier) {
+fun SafariBottomBar(
+    tab: Tab,
+    space: Space?,
+    tabCount: Int,
+    collapsed: Boolean,
+    a: ChromeActions,
+    modifier: Modifier = Modifier,
+) {
     AnimatedContent(
         targetState = collapsed,
         transitionSpec = {
@@ -115,21 +135,35 @@ fun SafariBottomBar(tab: Tab, collapsed: Boolean, a: ChromeActions, modifier: Mo
                 (fadeOut(tween(120)) + scaleOut(tween(180), targetScale = 0.92f))
         },
         contentAlignment = Alignment.BottomCenter,
-        modifier = modifier,
+        modifier = modifier.navigationBarsPadding(),
         label = "bar",
     ) { small ->
-        if (small) CollapsedBar(tab, a.onExpand) else ExpandedBar(tab, a)
+        if (small) CollapsedBar(tab, space, a.onExpand) else ExpandedBar(tab, space, tabCount, a)
     }
 }
 
+/** Degradado suave con los colores del espacio, como el fondo de Zen. */
 @Composable
-private fun CollapsedBar(tab: Tab, onExpand: () -> Unit) {
+private fun spaceTint(space: Space?): Brush {
     val k = LocalKaze.current
-    Box(Modifier.fillMaxWidth().padding(bottom = 6.dp), contentAlignment = Alignment.Center) {
+    val colors = space?.colors?.map { Color(it) }.orEmpty().ifEmpty { listOf(k.accent) }
+    val alpha = if (k.isDark) 0.16f else 0.30f
+    return Brush.linearGradient(colors.map { it.copy(alpha = alpha) } + colors.first().copy(alpha = alpha * 0.4f))
+}
+
+@Composable
+private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
+    val k = LocalKaze.current
+    Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.glass(RoundedCornerShape(50), 8f).clickable(onClick = onExpand).padding(horizontal = 16.dp, vertical = 6.dp),
+            Modifier.glass(RoundedCornerShape(50), 8f).background(spaceTint(space)).clickable(onClick = onExpand)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (space != null) {
+                Text(space.emoji, fontSize = 12.sp)
+                Spacer(Modifier.width(6.dp))
+            }
             if (!tab.isSecure && !tab.isStart) {
                 Icon(Icons.Outlined.Warning, null, tint = Color(0xFFFF9500), modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
@@ -143,41 +177,171 @@ private fun CollapsedBar(tab: Tab, onExpand: () -> Unit) {
 }
 
 @Composable
-private fun ExpandedBar(tab: Tab, a: ChromeActions) {
-    val k = LocalKaze.current
+private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions) {
+    val scope = rememberCoroutineScope()
+    val drag = remember { Animatable(0f) }
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
             .glass(RoundedCornerShape(28.dp))
+            .background(spaceTint(space))
             .padding(top = 8.dp, start = 8.dp, end = 8.dp),
     ) {
         AddressPill(tab, a)
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+                .offset { IntOffset(drag.value.roundToInt(), 0) }
+                // Deslizar sobre los íconos cambia de espacio, como los gestos de Zen.
+                .pointerInput(space?.id) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val d = drag.value
+                            scope.launch { drag.animateTo(0f, spring(0.8f, 500f)) }
+                            if (abs(d) > 70) a.onSwipeSpace(if (d < 0) 1 else -1)
+                        },
+                        onDragCancel = { scope.launch { drag.animateTo(0f) } },
+                    ) { change, dx ->
+                        change.consume()
+                        scope.launch { drag.snapTo((drag.value + dx * 0.5f).coerceIn(-120f, 120f)) }
+                    }
+                },
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onClick = a.onBack)
             ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante", enabled = tab.canGoForward, onClick = a.onForward)
             ToolbarIcon(Icons.Outlined.IosShare, "Compartir y más", enabled = !tab.isStart, onClick = a.onShare)
+            SpaceButton(space, a.onSpaces, a.onNewTab)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
-            TabsButton(a.onTabs, a.onTabsLong)
+            TabsButton(tabCount, a.onTabs, a.onTabsLong)
         }
     }
 }
 
-/** El ícono de pestañas de Safari (dos cuadrados); mantener presionado abre el menú rápido. */
+/** El espacio activo (Zen): toque = Essentials y espacios; mantener = pestaña nueva. */
 @Composable
-private fun TabsButton(onClick: () -> Unit, onLong: () -> Unit) {
+private fun SpaceButton(space: Space?, onClick: () -> Unit, onLong: () -> Unit) {
     val k = LocalKaze.current
+    val ring = space?.colors?.map { Color(it) }.orEmpty().ifEmpty { listOf(k.accent, k.accent) }
     Box(
-        Modifier.size(48.dp).clip(CircleShape).tap(onClick, onLong).semantics { contentDescription = "Pestañas" },
+        Modifier.size(48.dp).clip(CircleShape).tap(onClick, onLong)
+            .semantics { contentDescription = "Espacio ${space?.name.orEmpty()}: Essentials y espacios" },
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.offset(3.dp, (-3).dp).size(15.dp).clip(RoundedCornerShape(4.dp)).background(k.accent.copy(alpha = 0.35f)))
-        Box(Modifier.offset((-2).dp, 2.dp).size(16.dp).clip(RoundedCornerShape(4.dp)).background(k.accent).padding(1.8.dp)) {
-            Box(Modifier.size(12.4.dp).clip(RoundedCornerShape(3.dp)).background(k.glass))
+        Box(
+            Modifier.size(34.dp).clip(CircleShape)
+                .background(Brush.linearGradient(if (ring.size > 1) ring else ring + ring))
+                .padding(2.dp).clip(CircleShape).background(k.glass),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(space?.emoji ?: "🌿", fontSize = 16.sp)
+        }
+    }
+}
+
+/** El ícono de pestañas de Safari, con el número de pestañas abiertas; mantener presionado abre el menú rápido. */
+@Composable
+private fun TabsButton(count: Int, onClick: () -> Unit, onLong: () -> Unit) {
+    val k = LocalKaze.current
+    Box(
+        Modifier.size(48.dp).clip(CircleShape).tap(onClick, onLong).semantics { contentDescription = "$count pestañas" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.offset(3.dp, (-3).dp).size(17.dp).clip(RoundedCornerShape(5.dp)).background(k.accent.copy(alpha = 0.35f)))
+        Box(
+            Modifier.offset((-2).dp, 2.dp).size(19.dp).clip(RoundedCornerShape(5.dp)).background(k.accent).padding(1.8.dp)
+                .clip(RoundedCornerShape(4.dp)).background(k.glass),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (count > 99) "∞" else count.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = k.accent)
+        }
+    }
+}
+
+/**
+ * Panel de Zen: Essentials arriba (siempre a mano) y los espacios del perfil para saltar entre ellos.
+ */
+@Composable
+fun ZenPanel(
+    essentials: List<Tab>,
+    spaces: List<Space>,
+    currentSpaceId: String,
+    tabCount: (Space) -> Int,
+    onEssential: (Tab) -> Unit,
+    onSpace: (Space) -> Unit,
+    onNewSpace: () -> Unit,
+    onEditSpace: (Space) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val k = LocalKaze.current
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)).clickable(onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier.navigationBarsPadding().padding(10.dp).fillMaxWidth()
+                .glass(RoundedCornerShape(26.dp))
+                .background(spaceTint(spaces.firstOrNull { it.id == currentSpaceId }))
+                .clickable(enabled = false) {}
+                .padding(14.dp),
+        ) {
+            if (essentials.isNotEmpty()) {
+                Text("Essentials", style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink55)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    essentials.forEach { t ->
+                        Column(
+                            Modifier.width(62.dp).clip(RoundedCornerShape(14.dp)).clickable { onEssential(t) }.padding(vertical = 4.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(Modifier.size(48.dp).liftCard(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                                Favicon(t.url, size = 26.dp)
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(t.displayTitle, style = KazeType.caption, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+            }
+            Text("Espacios", style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink55)
+            Spacer(Modifier.height(6.dp))
+            spaces.forEach { sp ->
+                val selected = sp.id == currentSpaceId
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) k.card else Color.Transparent)
+                        .tap({ onSpace(sp) }, { onEditSpace(sp) })
+                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(30.dp).clip(CircleShape)
+                            .background(Brush.linearGradient(sp.colors.map { Color(it) }.let { if (it.size > 1) it else it + it })),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(sp.emoji, fontSize = 15.sp) }
+                    Spacer(Modifier.width(12.dp))
+                    Text(sp.name, style = KazeType.body.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal), color = k.ink, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text(tabCount(sp).toString(), style = KazeType.footnote, color = k.ink55)
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onNewSpace).padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(30.dp).clip(CircleShape).liftCard(CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Add, null, tint = k.accent, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text("Nuevo espacio", style = KazeType.body, color = k.accent)
+            }
+            Text(
+                "Desliza sobre los botones de la barra para cambiar de espacio · mantén presionado un espacio para editarlo",
+                style = KazeType.caption, color = k.ink35, modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
+            )
         }
     }
 }

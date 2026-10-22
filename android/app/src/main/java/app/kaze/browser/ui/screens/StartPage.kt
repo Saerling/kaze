@@ -95,21 +95,21 @@ fun StartPage(
                 }
             }
 
-            if (favorites.isNotEmpty()) {
+            if (favorites.isNotEmpty() && app.settings.startFavorites) {
                 Section("Favoritos")
                 TileGrid(favorites.map { (it.pinnedUrl ?: it.url) to it.displayTitle }) { i, long ->
                     if (long) onFavoriteMenu(favorites[i]) else onOpenFavorite(favorites[i])
                 }
             }
 
-            if (frequent.isNotEmpty()) {
+            if (frequent.isNotEmpty() && app.settings.startFrequent) {
                 Section("Visitados con frecuencia")
                 TileGrid(frequent.map { it.url to it.title.ifBlank { Urls.displayHost(it.url) } }) { i, long ->
                     if (!long) onOpenUrl(frequent[i].url)
                 }
             }
 
-            if (!private) {
+            if (!private && app.settings.startPrivacy) {
                 Section("Reporte de privacidad")
                 Row(
                     Modifier.padding(horizontal = 20.dp).fillMaxWidth().card(RoundedCornerShape(16.dp))
@@ -128,7 +128,7 @@ fun StartPage(
                 }
             }
 
-            if (reading.isNotEmpty()) {
+            if (reading.isNotEmpty() && app.settings.startReading) {
                 Section("Lista de lectura")
                 Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().card(RoundedCornerShape(16.dp))) {
                     reading.forEach { r ->

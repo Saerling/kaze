@@ -12,6 +12,15 @@ import androidx.compose.runtime.setValue
 
 enum class ThemeMode(val label: String) { SYSTEM("Sistema"), LIGHT("Claro"), DARK("Oscuro") }
 
+/** Estilo de la interfaz: Safari (vidrio, azul) o Material You (colores del fondo de pantalla, Android 12+). */
+enum class UiStyle(val label: String) { SAFARI("Safari"), MATERIAL("Material You") }
+
+/** Color principal. AUTO = azul en Safari, el del fondo de pantalla en Material You. */
+enum class AccentColor(val label: String, val argb: Long) {
+    AUTO("Automático", 0), BLUE("Azul", 0xFF007AFF), TEAL("Verde azulado", 0xFF2A9D8F), GREEN("Verde", 0xFF34A853),
+    PURPLE("Morado", 0xFF7E57C2), PINK("Rosa", 0xFFE0559A), ORANGE("Naranja", 0xFFF08A24), RED("Rojo", 0xFFE5484D),
+}
+
 enum class TrackingLevel(val label: String) { STANDARD("Estándar"), STRICT("Estricto") }
 
 enum class DnsMode(val label: String) { OFF("Desactivado"), CLOUDFLARE("Cloudflare"), MULLVAD("Mullvad (bloquea anuncios)") }
@@ -51,6 +60,13 @@ class Settings(context: Context) {
     var textSize by pref("text_size", 100)
     /** Vista de pestañas: "grid" (tarjetas, por defecto), "compact" (3 columnas) o "list". */
     var tabsView by pref("tabs_view", "grid")
+    var uiStyle by pref("ui_style", UiStyle.SAFARI) { UiStyle.valueOf(it) }
+    var accent by pref("accent", AccentColor.AUTO) { AccentColor.valueOf(it) }
+    // Secciones de la página de inicio.
+    var startFavorites by pref("start_favorites", true)
+    var startFrequent by pref("start_frequent", true)
+    var startPrivacy by pref("start_privacy", true)
+    var startReading by pref("start_reading", true)
     /** Total de rastreadores bloqueados (Reporte de privacidad) y desde cuándo se cuentan. */
     var trackersTotal by pref("trackers_total", 0)
     var trackersSince by pref("trackers_since", "")

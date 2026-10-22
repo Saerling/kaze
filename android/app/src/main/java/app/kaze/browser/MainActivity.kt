@@ -4,6 +4,10 @@
 
 package app.kaze.browser
 
+import app.kaze.browser.ui.sheets.RecentlyClosedSheet
+import app.kaze.browser.ui.sheets.ClearDataSheet
+import app.kaze.browser.ui.sheets.MenuActions
+import app.kaze.browser.ui.sheets.MainMenuSheet
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideInVertically
@@ -193,7 +197,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val dark = Engine.isDarkTheme(this, app.settings)
-            KazeTheme(dark) {
+            KazeTheme(dark, app.settings.uiStyle, app.settings.accent) {
                 CompositionLocalProvider(LocalApp provides app) { Root() }
             }
         }
@@ -304,6 +308,9 @@ class MainActivity : ComponentActivity() {
         var moveTab by remember { mutableStateOf<Tab?>(null) }
         var aaMenu by remember { mutableStateOf(false) }
         var shareMenu by remember { mutableStateOf(false) }
+        var mainMenu by remember { mutableStateOf(false) }
+        var clearData by remember { mutableStateOf(false) }
+        var recentClosed by remember { mutableStateOf(false) }
         var tabsQuick by remember { mutableStateOf(false) }
         var groups by remember { mutableStateOf(false) }
         var editSpace by remember { mutableStateOf<Space?>(null) }
@@ -454,7 +461,7 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 onForward = { app.pool.sessionOf(t.id)?.goForward() },
-                onShare = { shareMenu = true },
+                onShare = { mainMenu = true },
                 onLibrary = { library = true },
                 onTabs = { showTabsGrid() },
                 onTabsLong = { tabsQuick = true },
@@ -583,6 +590,51 @@ class MainActivity : ComponentActivity() {
                     onHideBar = { aaMenu = false; barHidden = true },
                     onPrivacyReport = { aaMenu = false; privacy = true },
                 )
+            }
+            if (mainMenu && tab != null) {
+                MainMenuSheet(
+                    tab = tab,
+                    onDismiss = { mainMenu = false },
+                    a = MenuActions(
+                        onNewTab = { newTab() },
+                        onNewPrivate = { newTab(private = true) },
+                        onMove = { moveTab = tab },
+                        onLibrary = { library = true },
+                        onRecent = { recentClosed = true },
+                        onClearData = { clearData = true },
+                        onDownloads = {
+                            runCatching { startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+                        },
+                        onFind = { finding = true },
+                        onShare = { shareMenu = true },
+                        onSavePdf = {
+                            val name = (tab.title.ifBlank { Urls.displayHost(tab.url) }).replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").take(60) + ".pdf"
+                            app.pool.sessionOf(tab.id)?.saveAsPdf()?.accept({ input ->
+                                if (input != null) Thread { runCatching { app.downloads.write(input, name, "application/pdf") } }.start()
+                            }, { ui.show("No se pudo guardar el PDF") })
+                            ui.show("Guardando PDF en Descargas…")
+                        },
+                        onSettings = { settings = true },
+                        onCustomizeHome = { settings = true },
+                        onHelp = { store.newTab("https://github.com/Saerling/kaze/issues"); showTabs = false },
+                        onDefaultBrowser = {
+                            runCatching {
+                                val rm = if (android.os.Build.VERSION.SDK_INT >= 29) getSystemService(android.app.role.RoleManager::class.java) else null
+                                if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER) && !rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) {
+                                    startActivity(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER))
+                                } else {
+                                    startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                                }
+                            }
+                        },
+                    ),
+                )
+            }
+            if (clearData) ClearDataSheet { clearData = false }
+            if (recentClosed) {
+                RecentlyClosedSheet(onDismiss = { recentClosed = false }) { url ->
+                    store.newTab(url); showTabs = false
+                }
             }
             if (shareMenu && tab != null) {
                 ShareSheet(

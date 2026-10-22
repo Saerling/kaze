@@ -1,5 +1,7 @@
 package app.kaze.browser
 
+import app.kaze.browser.data.UiStyle
+import app.kaze.browser.data.AccentColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -152,6 +154,21 @@ class ScreenshotTest {
         }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-navegador.png")
+    }
+
+    @Test fun material_you() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
+        compose.setContent {
+            KazeTheme(true, UiStyle.MATERIAL, AccentColor.PURPLE) {
+                CompositionLocalProvider(LocalApp provides app) {
+                    Box(Modifier.fillMaxSize()) {
+                        Tabs()
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-material-you.png")
     }
 
     @Test fun navegador_barra_reducida() {

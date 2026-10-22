@@ -54,7 +54,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBackIos
 import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
@@ -219,7 +219,7 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onClick = a.onBack)
             ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante", enabled = tab.canGoForward, onClick = a.onForward)
             HomeButton(tab.isStart, a.onHome, a.onSpaces)
-            ToolbarIcon(Icons.Outlined.IosShare, "Compartir y más", enabled = !tab.isStart, onClick = a.onShare)
+            ToolbarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
             TabsButton(tabCount, a.onTabs, a.onTabsLong)
         }

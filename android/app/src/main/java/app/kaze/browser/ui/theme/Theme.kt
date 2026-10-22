@@ -4,6 +4,13 @@
 
 package app.kaze.browser.ui.theme
 
+import app.kaze.browser.data.AccentColor
+import app.kaze.browser.data.UiStyle
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import android.graphics.Color as AColor
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -80,19 +87,59 @@ fun kazeColors(dark: Boolean) = if (dark) {
     )
 }
 
+/**
+ * Colores según el estilo elegido en Ajustes → Diseño.
+ * Material You toma los colores del fondo de pantalla (Android 12+) o los arma desde el color elegido.
+ */
+fun styledColors(context: android.content.Context, dark: Boolean, style: UiStyle, accent: AccentColor): KazeColors {
+    val base = kazeColors(dark)
+    val pick = if (accent == AccentColor.AUTO) null else Color(accent.argb)
+    if (style == UiStyle.SAFARI) return if (pick == null) base else base.copy(accent = pick)
+    val scheme = when {
+        pick == null && android.os.Build.VERSION.SDK_INT >= 31 ->
+            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        else -> {
+            val c = pick ?: Color(0xFF6750A4)
+            val bg = if (dark) Color(0xFF141218) else Color(0xFFFEF7FF)
+            val tone = { f: Float -> lerp(bg, c, f) }
+            if (dark) darkColorScheme(
+                primary = lerp(c, Color.White, 0.35f), surface = tone(0.05f), onSurface = Color(0xFFE6E0E9),
+                surfaceContainerLow = tone(0.08f), surfaceContainer = tone(0.11f), surfaceContainerHigh = tone(0.15f),
+                surfaceContainerHighest = tone(0.20f), outlineVariant = tone(0.30f),
+            ) else lightColorScheme(
+                primary = c, surface = tone(0.03f), onSurface = Color(0xFF1D1B20),
+                surfaceContainerLow = tone(0.05f), surfaceContainer = tone(0.08f), surfaceContainerHigh = tone(0.11f),
+                surfaceContainerHighest = tone(0.15f), outlineVariant = tone(0.28f),
+            )
+        }
+    }
+    return KazeColors(
+        paper = scheme.surface, ink = scheme.onSurface, lift = scheme.surfaceContainerHighest,
+        accent = scheme.primary, isDark = dark, card = scheme.surfaceContainerLow,
+        glass = scheme.surfaceContainer.copy(alpha = 0.97f), separator = scheme.outlineVariant,
+    )
+}
+
 val LocalKaze = staticCompositionLocalOf { kazeColors(false) }
 
 @Composable
-fun KazeTheme(dark: Boolean, content: @Composable () -> Unit) {
-    val target = kazeColors(dark)
+fun KazeTheme(
+    dark: Boolean,
+    style: UiStyle = UiStyle.SAFARI,
+    accent: AccentColor = AccentColor.AUTO,
+    content: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val target = remember(dark, style, accent) { styledColors(context, dark, style, accent) }
     val spec = tween<Color>(250, easing = FastOutSlowInEasing)
     val paper by animateColorAsState(target.paper, spec, label = "paper")
     val ink by animateColorAsState(target.ink, spec, label = "ink")
-    val colors = target.copy(paper = paper, ink = ink)
+    val accentC by animateColorAsState(target.accent, spec, label = "accent")
+    val colors = target.copy(paper = paper, ink = ink, accent = accentC)
 
     val scheme = if (dark) {
         darkColorScheme(
-            primary = SystemBlueDark, onPrimary = Color.White, background = paper, onBackground = ink,
+            primary = accentC, onPrimary = Color.White, background = paper, onBackground = ink,
             surface = target.card, onSurface = ink, surfaceVariant = Color(0xFF2C2C2E), onSurfaceVariant = ink.copy(alpha = 0.6f),
             surfaceContainer = Color(0xFF1C1C1E), surfaceContainerHigh = Color(0xFF2C2C2E),
             surfaceContainerHighest = Color(0xFF3A3A3C), surfaceContainerLow = Color(0xFF1C1C1E),
@@ -100,7 +147,7 @@ fun KazeTheme(dark: Boolean, content: @Composable () -> Unit) {
         )
     } else {
         lightColorScheme(
-            primary = SystemBlue, onPrimary = Color.White, background = paper, onBackground = ink,
+            primary = accentC, onPrimary = Color.White, background = paper, onBackground = ink,
             surface = target.card, onSurface = ink, surfaceVariant = Color(0xFFE5E5EA), onSurfaceVariant = ink.copy(alpha = 0.6f),
             surfaceContainer = Color(0xFFFFFFFF), surfaceContainerHigh = Color(0xFFF2F2F7),
             surfaceContainerHighest = Color(0xFFE5E5EA), surfaceContainerLow = Color(0xFFFFFFFF),

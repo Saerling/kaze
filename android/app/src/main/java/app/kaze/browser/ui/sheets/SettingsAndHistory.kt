@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.sheets
 
+import app.kaze.browser.engine.Engine
+import app.kaze.browser.data.AccentColor
+import app.kaze.browser.data.UiStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -205,6 +208,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
     val k = LocalKaze.current
     var needsRestart by remember { mutableStateOf(false) }
     var autoUpdates by remember { mutableStateOf(app.updater.autoCheck) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     KazeSheet(onDismiss, full = true) {
         SheetTitle("Ajustes", "OK", onDismiss)
@@ -223,10 +227,47 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             }
             Note("Con las sugerencias activas, lo que escribes se envía al buscador.")
 
-            IosSectionHeader("Apariencia")
+            IosSectionHeader("Diseño")
             IosGroup {
-                Choice("Tema", ThemeMode.entries, s.theme, { it.label }, divider = false) { s.theme = it; needsRestart = true }
+                Choice("Estilo", UiStyle.entries, s.uiStyle, { it.label }) { s.uiStyle = it }
+                Choice("Color", AccentColor.entries, s.accent, { it.label }) { s.accent = it }
+                Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
+                Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {
+                    s.textSize = it; Engine.applyTextSize(app.runtime, it)
+                }
+                Choice(
+                    "Vista de pestañas", listOf("grid", "compact", "list"), s.tabsView,
+                    { when (it) { "compact" -> "Compacta"; "list" -> "Lista"; else -> "Tarjetas" } }, divider = false,
+                ) { s.tabsView = it }
             }
+            Note("Material You usa los colores de tu fondo de pantalla (Android 12 o más nuevo) con el color en Automático.")
+
+            IosSectionHeader("Página de inicio")
+            IosGroup {
+                Toggle("Favoritos", s.startFavorites) { s.startFavorites = it }
+                Toggle("Visitados con frecuencia", s.startFrequent) { s.startFrequent = it }
+                Toggle("Reporte de privacidad", s.startPrivacy) { s.startPrivacy = it }
+                Toggle("Lista de lectura", s.startReading, divider = false) { s.startReading = it }
+            }
+
+            IosSectionHeader("Navegador")
+            IosGroup {
+                IosRow("Navegador predeterminado", titleColor = k.accent) {
+                    runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+                }
+                IosRow("Autocompletar y contraseñas (Android)", titleColor = k.accent) {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE)
+                                .setData(android.net.Uri.parse("package:${context.packageName}")),
+                        )
+                    }
+                }
+                IosRow("Descargas", titleColor = k.accent, divider = false) {
+                    runCatching { context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+                }
+            }
+            Note("Kaze usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
 
             IosSectionHeader("Memoria")
             IosGroup {
@@ -273,7 +314,10 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             IosSectionHeader("Acerca de")
             IosGroup {
                 IosRow("Versión", trailing = { Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = KazeType.body, color = k.ink55) })
-                IosRow("Motor", trailing = { Text("Gecko (Firefox)", style = KazeType.body, color = k.ink55) }, divider = false)
+                IosRow("Motor", trailing = { Text("Gecko (Firefox)", style = KazeType.body, color = k.ink55) })
+                IosRow("Ayuda y comentarios", titleColor = k.accent, divider = false) {
+                    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze/issues"))) }
+                }
             }
             Note("Kaze es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
             Spacer(Modifier.height(24.dp))

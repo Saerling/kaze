@@ -37,7 +37,7 @@ class Downloads(private val context: Context, private val ui: BrowserUi) {
         }
     }
 
-    private fun write(input: InputStream, name: String, mime: String?) {
+    fun write(input: InputStream, name: String, mime: String?) {
         val type = mime ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
         input.use { src ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

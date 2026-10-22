@@ -214,7 +214,15 @@ class Store(private val db: Db, private val settings: Settings) {
         selectedTabId = null
     }
 
+    /** Pestañas cerradas hace poco (solo en memoria; las privadas no se guardan). */
+    val recentlyClosed = androidx.compose.runtime.mutableStateListOf<Pair<String, String>>()
+
     fun close(t: Tab) {
+        if (!t.isPrivate && !t.isStart && t.url.isNotBlank()) {
+            recentlyClosed.removeAll { it.first == t.url }
+            recentlyClosed.add(0, t.url to t.displayTitle)
+            if (recentlyClosed.size > 12) recentlyClosed.removeAt(recentlyClosed.lastIndex)
+        }
         tabs.remove(t)
         db.deleteTab(t.id)
         if (selectedTabId == t.id) selectedTabId = null

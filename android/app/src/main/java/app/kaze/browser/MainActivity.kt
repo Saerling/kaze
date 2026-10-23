@@ -509,7 +509,13 @@ class MainActivity : ComponentActivity() {
         val tabletNow = when (app.settings.tabletMode) {
             "on" -> true
             "off" -> false
-            else -> config.smallestScreenWidthDp >= 600
+            // Tableta de verdad: 600 dp o más Y pantalla física de 7" o más (un teléfono grande con
+            // "tamaño de pantalla" pequeño puede pasar de 600 dp sin ser tableta).
+            else -> config.smallestScreenWidthDp >= 600 && resources.displayMetrics.let { dm ->
+                val w = dm.widthPixels / dm.xdpi
+                val h = dm.heightPixels / dm.ydpi
+                kotlin.math.sqrt(w * w + h * h) >= 6.9f
+            }
         }
         SideEffect { ui.tablet = tabletNow }
         val layout = app.settings.barLayout

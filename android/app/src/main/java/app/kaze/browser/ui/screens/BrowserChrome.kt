@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -267,8 +269,8 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack)
-            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward)
+            AnimatedVisibility(tab.canGoBack, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack) }
+            AnimatedVisibility(tab.canGoForward, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward) }
             HomeButton(tab.isStart, a.onHome, a.onSpaces)
             ToolbarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
@@ -726,10 +728,11 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
             },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
+            // Atrás y adelante solo aparecen cuando sirven (como Safari).
+            AnimatedVisibility(!collapsed && tab.canGoBack, enter = enter, exit = exit) {
                 Bubble(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", tab.canGoBack, { a.onHistoryMenu(-1) }, a.onBack, Modifier.padding(end = 8.dp))
             }
-            AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
+            AnimatedVisibility(!collapsed && tab.canGoForward, enter = enter, exit = exit) {
                 Bubble(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", tab.canGoForward, { a.onHistoryMenu(1) }, a.onForward, Modifier.padding(end = 8.dp))
             }
             val pillSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
@@ -882,8 +885,8 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ToolbarIcon(Icons.Outlined.GridView, "Espacios y Essentials", onClick = a.onSpaces)
-        ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack)
-        ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward)
+        AnimatedVisibility(tab.canGoBack, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack) }
+        AnimatedVisibility(tab.canGoForward, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward) }
         androidx.compose.foundation.lazy.LazyRow(
             state = state,
             modifier = Modifier.weight(1f).padding(horizontal = 6.dp),

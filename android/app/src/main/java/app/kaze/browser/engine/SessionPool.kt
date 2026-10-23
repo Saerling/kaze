@@ -190,7 +190,8 @@ class SessionPool(
             .allowJavascript(settings.javascript)
         space?.contextId(store.profileById(space.profileId))?.let(b::contextId)
         // En tableta, las páginas se piden en versión de escritorio (se puede cambiar por pestaña).
-        if (ui.tablet && settings.tabletDesktop && !tab.desktopTouched) tab.desktopMode = true
+        // En teléfono, siempre móvil (aunque la pestaña venga de antes con escritorio); solo cambia si el usuario lo elige.
+        if (!tab.desktopTouched) tab.desktopMode = ui.tablet && settings.tabletDesktop
         if (tab.desktopMode) {
             b.userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
             b.viewportMode(GeckoSessionSettings.VIEWPORT_MODE_DESKTOP)

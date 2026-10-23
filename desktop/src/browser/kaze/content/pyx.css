@@ -1,0 +1,129 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/*
+ * Pyx sobre Zen: el diseño y las funciones de Zen, con el acabado de Safari.
+ * Barra superior limpia con la dirección centrada, tarjetas suaves, acento azul
+ * y animaciones con resorte. Las pestañas siguen en la barra lateral de Zen.
+ */
+
+:root {
+  --pyx-accent: #0A84FF;
+  --pyx-ease: cubic-bezier(.2, .8, .2, 1);
+  --pyx-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --pyx-field: color-mix(in srgb, currentColor 7%, transparent);
+  --pyx-field-hover: color-mix(in srgb, currentColor 11%, transparent);
+  --pyx-card: color-mix(in srgb, white 82%, transparent);
+  --pyx-rim: rgb(0 0 0 / 0.08);
+  @media (prefers-color-scheme: dark) {
+    --pyx-accent: #0A84FF;
+    --pyx-card: color-mix(in srgb, white 11%, transparent);
+    --pyx-rim: rgb(255 255 255 / 0.08);
+  }
+  font-family: system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+
+/* ── Barra superior: dirección centrada, como Safari ─────────────────── */
+
+#urlbar-container {
+  flex: 0 1 680px !important;
+  max-width: 680px !important;
+  margin-inline: auto !important;
+}
+#urlbar:not([breakout-extend]) #urlbar-background {
+  border-radius: 10px !important;
+  background: var(--pyx-field) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  transition: background-color 180ms var(--pyx-ease), box-shadow 220ms var(--pyx-ease);
+}
+#urlbar:not([breakout-extend]):hover #urlbar-background {
+  background: var(--pyx-field-hover) !important;
+}
+#urlbar:not([focused]) .urlbar-input {
+  text-align: center;
+}
+#urlbar[focused] #urlbar-background,
+#urlbar[breakout-extend] #urlbar-background {
+  outline: 3px solid color-mix(in srgb, var(--pyx-accent) 45%, transparent) !important;
+  outline-offset: 0 !important;
+  box-shadow: 0 14px 44px rgb(0 0 0 / 0.28) !important;
+}
+#urlbar[breakout-extend] {
+  animation: pyx-pop 220ms var(--pyx-spring);
+}
+@keyframes pyx-pop {
+  from { transform: scale(0.98); opacity: 0.6; }
+}
+
+/* Botones de la barra: píldora al pasar el ratón y pequeña respuesta al clic. */
+:is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) toolbarbutton > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  border-radius: 8px !important;
+  transition: background-color 150ms var(--pyx-ease), transform 120ms var(--pyx-ease);
+}
+:is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) toolbarbutton:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  transform: scale(0.9);
+}
+
+/* ── Pestañas en la barra lateral: filas suaves, la elegida como tarjeta ── */
+
+.tabbrowser-tab .tab-background {
+  border-radius: 10px !important;
+  transition: background-color 160ms var(--pyx-ease), box-shadow 200ms var(--pyx-ease), transform 160ms var(--pyx-ease) !important;
+}
+.tabbrowser-tab:not([selected]):hover .tab-background {
+  background: var(--pyx-field) !important;
+}
+.tabbrowser-tab[selected] .tab-background {
+  background: var(--pyx-card) !important;
+  box-shadow: 0 0 0 0.5px var(--pyx-rim), 0 2px 10px rgb(0 0 0 / 0.14) !important;
+}
+.tabbrowser-tab:active .tab-background {
+  transform: scale(0.98);
+}
+.tabbrowser-tab[selected] .tab-label {
+  font-weight: 600;
+}
+.tabbrowser-tab:not([pinned])[fadein] {
+  animation: pyx-tab-in 260ms var(--pyx-ease);
+}
+@keyframes pyx-tab-in {
+  from { opacity: 0; transform: translateX(-12px); }
+}
+/* Pestañas dormidas (sin RAM) un poco más tenues. */
+.tabbrowser-tab:is([pending], [discarded]) .tab-label,
+.tabbrowser-tab:is([pending], [discarded]) .tab-icon-image {
+  opacity: 0.55;
+}
+
+/* Essentials: mosaicos que se elevan al pasar el ratón. */
+.tabbrowser-tab[zen-essential] .tab-background {
+  border-radius: 12px !important;
+}
+.tabbrowser-tab[zen-essential]:hover .tab-background {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.16) !important;
+}
+
+/* ── Página: tarjeta flotante con esquinas y sombra suaves ────────────── */
+
+#tabbrowser-tabbox {
+  box-shadow: 0 0 0 0.5px var(--pyx-rim), 0 8px 30px rgb(0 0 0 / 0.18) !important;
+}
+
+/* ── Menús y paneles: más redondos, con animación de entrada ──────────── */
+
+menupopup, panel {
+  --panel-border-radius: 12px;
+}
+panel[type="arrow"][animate="open"] {
+  animation: pyx-panel 180ms var(--pyx-ease);
+}
+@keyframes pyx-panel {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

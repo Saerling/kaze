@@ -31,7 +31,7 @@ from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI))
-from kaze_comun import DESKTOP, KAZE, cargador, preferencias_cfg  # noqa: E402
+from kaze_comun import DESKTOP, KAZE, cargador, preferencias_cfg, prefs_planas  # noqa: E402
 from mozjar import JarReader, JarWriter  # noqa: E402
 
 MARCA = DESKTOP / "configs" / "branding" / "release"
@@ -142,6 +142,14 @@ def remarcar_omni(omni: Path) -> None:
     print(f"  marca cambiada en {len([n for n in reemplazos if n in nombres])} archivos de omni.ja")
 
 
+def prefs_pyx(build: int, version: str, windows: bool = True) -> str:
+    """pyx-prefs.js como defaultPref(...) (el usuario puede cambiarlas en about:config) + la versión."""
+    texto = prefs_planas((KAZE / "pyx-prefs.js").read_text(encoding="utf-8"), windows=windows)
+    lineas = [re.sub(r"^pref\(", "  defaultPref(", l) for l in texto.splitlines() if l.startswith("pref(")]
+    lineas += [f'  defaultPref("kaze.build", {build});', f'  defaultPref("kaze.version", "{version}");']
+    return "\n".join(lineas) + "\n"
+
+
 def copiar_kaze(app: Path, build: int, version: str) -> None:
     destino = app / "kaze"
     if destino.exists():
@@ -150,16 +158,11 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
     shutil.copy2(KAZE / "kaze.manifest", destino / "kaze.manifest")
     shutil.copy2(KAZE / "content" / "actualizador.js", destino / "content" / "actualizador.js")
 
-    # Solo lo de Pyx: número de versión, de dónde salen las actualizaciones y español por defecto.
-    prefs = (
-        f'  defaultPref("kaze.build", {build});\n'
-        f'  defaultPref("kaze.version", "{version}");\n'
-        '  defaultPref("kaze.update.repo", "Saerling/kaze");\n'
-        '  defaultPref("intl.locale.requested", "es-ES");\n'
-        '  defaultPref("app.update.auto", false);\n'
-    )
+    prefs = prefs_pyx(build, version)
     cfg = (KAZE / "cargador-zen.cfg").read_text(encoding="utf-8")
     cfg += '\nif (Services.appinfo.name == "Pyx") {\n' + prefs + "}\n"
+    for nombre in ("memoria.js", "pyx.css"):
+        shutil.copy2(KAZE / "content" / nombre, destino / "content" / nombre)
     (app / "kaze.cfg").write_text(cfg, encoding="utf-8")
     (app / "defaults" / "pref" / "kaze-loader.js").write_text(
         'pref("general.config.filename", "kaze.cfg");\n'

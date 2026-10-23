@@ -155,6 +155,18 @@ class SessionPool(
     }
 
     /** Cambia entre versión móvil y de escritorio de la página. */
+    private fun offHosts() = settings.trackingOff.split(',').filter { it.isNotBlank() }.toSet()
+
+    /** ¿El bloqueo de rastreadores está activo en el sitio de esta pestaña? */
+    fun trackingOn(tab: Tab, result: (Boolean) -> Unit) = result(Urls.host(tab.url) !in offHosts())
+
+    /** Apaga (o vuelve a encender) el bloqueo de rastreadores solo en este sitio y recarga. */
+    fun setTracking(tab: Tab, on: Boolean) {
+        val host = Urls.host(tab.url) ?: return
+        settings.trackingOff = (if (on) offHosts() - host else offHosts() + host).joinToString(",")
+        sessions[tab.id]?.let { it.settings.useTrackingProtection = on; it.reload() }
+    }
+
     fun setDesktopMode(tab: Tab, desktop: Boolean) {
         tab.desktopMode = desktop
         tab.desktopTouched = true
@@ -173,7 +185,7 @@ class SessionPool(
         val space = store.spaceById(tab.spaceId)
         val b = GeckoSessionSettings.Builder()
             .usePrivateMode(tab.isPrivate)
-            .useTrackingProtection(true)
+            .useTrackingProtection(Urls.host(tab.url) !in offHosts())
             .suspendMediaWhenInactive(true)
             .allowJavascript(settings.javascript)
         space?.contextId(store.profileById(space.profileId))?.let(b::contextId)

@@ -45,7 +45,7 @@ class Settings(context: Context) {
     var searchEngine by pref("engine", SearchEngine.DUCKDUCKGO) { SearchEngine.valueOf(it) }
     var searchSuggestions by pref("suggest", true)
     var theme by pref("theme", ThemeMode.SYSTEM) { ThemeMode.valueOf(it) }
-    var tracking by pref("tracking", TrackingLevel.STRICT) { TrackingLevel.valueOf(it) }
+    var tracking by pref("tracking", TrackingLevel.STANDARD) { TrackingLevel.valueOf(it) }
     var dns by pref("dns", DnsMode.OFF) { DnsMode.valueOf(it) }
     var javascript by pref("js", true)
     /** Máximo de pestañas con la página cargada en memoria a la vez. */
@@ -62,6 +62,8 @@ class Settings(context: Context) {
     var tabsView by pref("tabs_view", "grid")
     /** Modo tableta: "auto" (pantallas de 600 dp o más), "on" u "off". */
     var tabletMode by pref("tablet_mode", "auto")
+    /** Sitios (dominios) donde el usuario apagó el bloqueo de rastreadores, separados por coma. */
+    var trackingOff by pref("tracking_off", "")
     /** En tableta, pedir la versión de escritorio de las páginas. */
     var tabletDesktop by pref("tablet_desktop", true)
     var uiStyle by pref("ui_style", UiStyle.SAFARI) { UiStyle.valueOf(it) }

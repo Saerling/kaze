@@ -457,7 +457,8 @@ private fun TabCard(
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(if (compact) 0.68f else 0.74f)
+                // En tableta la pantalla es apaisada: la vista previa también (se ve completa y nítida).
+                .aspectRatio(if (LocalApp.current.ui.tablet) 1.3f else if (compact) 0.68f else 0.74f)
                 .card(RoundedCornerShape(k.corner.dp))
                 .then(if (selected) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier.border(0.5.dp, k.rim, RoundedCornerShape(k.corner.dp)))
                 .then(if (highlight) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier)

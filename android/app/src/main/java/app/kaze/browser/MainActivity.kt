@@ -568,7 +568,6 @@ class MainActivity : ComponentActivity() {
                             collapsed = collapsed,
                             a = actions,
                             modifier = Modifier.align(Alignment.BottomCenter)
-                                .then(if (tabletNow) Modifier.widthIn(max = 720.dp) else Modifier)
                                 .onSizeChanged { onBarHeight(it.height) },
                         )
                     }

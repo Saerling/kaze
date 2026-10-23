@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.sheets
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -245,6 +246,14 @@ fun PageMenuSheet(
                 enabled = tab.translated || other,
             ) { if (tab.translated) pool.showOriginal(tab) else pool.translate(tab); onDismiss() }
             IosRow("Ocultar barra de herramientas", Icons.Outlined.UnfoldLess) { onHideBar(); onDismiss() }
+            // Si una página no carga bien, a veces es el bloqueo de rastreadores: se puede apagar solo aquí.
+            var tracking by remember(tab.id) { mutableStateOf(true) }
+            LaunchedEffect(tab.id, tab.url) { pool.trackingOn(tab) { tracking = it } }
+            IosRow(
+                "Bloquear rastreadores en este sitio", Icons.Outlined.Shield,
+                subtitle = if (tracking) null else "Desactivado aquí: prueba si la página no cargaba bien",
+                trailing = { KazeSwitch(tracking) { tracking = it; pool.setTracking(tab, it) } },
+            ) { tracking = !tracking; pool.setTracking(tab, tracking) }
             IosRow(
                 "Versión de escritorio", Icons.Outlined.DesktopWindows,
                 trailing = { KazeSwitch(tab.desktopMode) { pool.setDesktopMode(tab, it) } },

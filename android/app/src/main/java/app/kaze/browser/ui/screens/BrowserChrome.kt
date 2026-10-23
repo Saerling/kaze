@@ -215,6 +215,7 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             .navigationBarsPadding()
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
+        Column(Modifier.widthIn(max = 760.dp).align(Alignment.CenterHorizontally)) {
         AddressPill(tab, a)
         Row(
             Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -227,6 +228,7 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             ToolbarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
             TabsButton(tabCount, a.onTabs, a.onTabsLong)
+        }
         }
     }
 }

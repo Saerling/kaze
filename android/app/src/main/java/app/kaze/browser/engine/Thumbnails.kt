@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 class Thumbnails(context: Context) {
     private val dir = File(context.cacheDir, "thumbs").apply { mkdirs() }
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "kaze-thumbs").apply { priority = Thread.MIN_PRIORITY } }
-    private val memory = object : LruCache<String, Bitmap>(6 * 1024 * 1024) {
+    private val memory = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
@@ -29,11 +29,11 @@ class Thumbnails(context: Context) {
     fun save(tabId: String, full: Bitmap) {
         io.execute {
             runCatching {
-                val w = 360
+                val w = 720
                 val h = (full.height * w / full.width.coerceAtLeast(1)).coerceAtMost(w * 2)
                 val small = Bitmap.createScaledBitmap(full, w, h.coerceAtLeast(1), true)
                 if (small !== full) full.recycle()
-                File(dir, "$tabId.jpg").outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 72, it) }
+                File(dir, "$tabId.jpg").outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 86, it) }
                 memory.put(tabId, small)
                 version.intValue++
             }

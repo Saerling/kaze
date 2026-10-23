@@ -136,6 +136,49 @@
 
   };
 
+  /**
+   * En Ajustes → Acerca de Pyx, el bloque de actualizaciones de Zen se cambia por el de Pyx:
+   * versión instalada y "Buscar actualizaciones" (que descarga e instala desde GitHub).
+   */
+  PyxUpdater.injectAbout = function (doc) {
+    if (!doc || doc.getElementById("pyx-update-box")) return;
+    const group = doc.getElementById("setting-control-updateApp") || doc.getElementById("updateApp");
+    if (!group) return;
+    for (const id of ["setting-control-updateState", "setting-control-showUpdateHistory", "setting-control-updateRadioGroup",
+      "setting-control-backgroundUpdate", "setting-control-showUpdatePromptsHeader", "setting-control-updatesManagedByOS"]) {
+      doc.getElementById(id)?.setAttribute("hidden", "true");
+    }
+    const NS = "http://www.w3.org/1999/xhtml";
+    const el = (t, css, txt) => { const e = doc.createElementNS(NS, t); if (css) e.style.cssText = css; if (txt) e.textContent = txt; return e; };
+    const version = Services.prefs.getStringPref("kaze.version", "");
+    const box = el("div", "display:flex;align-items:center;gap:12px;padding:12px 16px;");
+    box.id = "pyx-update-box";
+    const text = el("div", "flex:1;display:flex;flex-direction:column;gap:2px;");
+    text.append(el("span", "font-weight:600;", `Pyx ${version}`), el("span", "opacity:.7;font-size:.9em;", "Basado en Zen. Pyx busca versiones nuevas solo y se actualiza encima."));
+    const status = el("span", "opacity:.8;font-size:.9em;");
+    const btn = el("button", "padding:6px 14px;border-radius:8px;border:0;background:#0A84FF;color:white;font-weight:600;cursor:pointer;", "Buscar actualizaciones");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      status.textContent = "Buscando…";
+      const n = await PyxUpdater.checkForUpdate({ manual: true });
+      status.textContent = n ? "¡Hay una versión nueva! Mira el aviso arriba de la ventana." : "Pyx está al día.";
+      btn.disabled = false;
+    });
+    box.append(text, status, btn);
+    group.before(box);
+  };
+  gBrowser.addTabsProgressListener({
+    onLocationChange(browser, webProgress, request, location) {
+      if (!webProgress.isTopLevel || !location.spec.startsWith("about:preferences")) return;
+      let tries = 0;
+      const t = setInterval(() => {
+        const doc = browser.contentDocument;
+        if (doc?.getElementById("pyx-update-box") || ++tries > 40) return clearInterval(t);
+        PyxUpdater.injectAbout(doc);
+      }, 250);
+    },
+  });
+
   window.PyxUpdater = PyxUpdater;
   // Revisa al abrir (tras 15 s) y luego cada 6 horas.
   setTimeout(() => PyxUpdater.checkForUpdate(), 15_000);

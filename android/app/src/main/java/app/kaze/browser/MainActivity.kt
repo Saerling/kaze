@@ -513,7 +513,8 @@ class MainActivity : ComponentActivity() {
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
         val density = LocalDensity.current
-        val collapsedPx = with(density) { 32.dp.roundToPx() } + WindowInsets.navigationBars.getBottom(density)
+        val barTop = app.settings.barTop
+        val collapsedPx = with(density) { 32.dp.roundToPx() } + if (barTop) 0 else WindowInsets.navigationBars.getBottom(density)
         fun onBarHeight(h: Int) {
             if (!collapsed && h > barExpandedPx) barExpandedPx = h
         }
@@ -534,7 +535,13 @@ class MainActivity : ComponentActivity() {
                 AndroidView(
                     factory = { geckoView },
                     modifier = Modifier.fillMaxSize()
-                        .padding(bottom = with(density) { (if (showBar) pageBottomPx.coerceAtLeast(collapsedPx) else 0).toDp() })
+                        .then(
+                            with(density) {
+                                val inset = (if (showBar) pageBottomPx.coerceAtLeast(collapsedPx) else 0).toDp()
+                                // Barra arriba: la página empieza debajo de ella (y deja libres los botones de Android).
+                                if (barTop) Modifier.padding(top = inset).navigationBarsPadding() else Modifier.padding(bottom = inset)
+                            },
+                        )
                         .then(if (showBar || ui.fullscreen) Modifier else Modifier.navigationBarsPadding()),
                 )
 
@@ -567,8 +574,11 @@ class MainActivity : ComponentActivity() {
                             tabCount = store.tabs.count { it.spaceId == tab.spaceId && it.kind != TabKind.ESSENTIAL },
                             collapsed = collapsed,
                             a = actions,
-                            modifier = Modifier.align(Alignment.BottomCenter)
+                            modifier = Modifier.align(if (barTop) Alignment.TopCenter else Alignment.BottomCenter)
                                 .onSizeChanged { onBarHeight(it.height) },
+                            tabs = (store.pinned(tab.spaceId) + store.normal(tab.spaceId)).filter { it.isPrivate == tab.isPrivate },
+                            onSelectTab = { t -> snapshot { open(t) } },
+                            top = barTop,
                         )
                     }
                 }

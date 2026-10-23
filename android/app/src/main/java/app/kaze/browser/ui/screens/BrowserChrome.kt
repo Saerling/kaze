@@ -4,6 +4,8 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.ui.draw.alpha
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -140,6 +142,11 @@ fun SafariBottomBar(
     collapsed: Boolean,
     a: ChromeActions,
     modifier: Modifier = Modifier,
+    /** Pestañas del espacio: se deslizan en la barra y las vecinas asoman a los lados (como Safari). */
+    tabs: List<Tab> = emptyList(),
+    onSelectTab: (Tab) -> Unit = {},
+    /** Barra arriba (uso tipo escritorio) en vez de abajo. */
+    top: Boolean = false,
 ) {
     AnimatedContent(
         targetState = collapsed,
@@ -148,13 +155,18 @@ fun SafariBottomBar(
             (fadeIn(tween(200, delayMillis = 70)) + slideInVertically(spring(0.86f, 420f)) { it / 3 }) togetherWith
                 fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.86f, 420f) }
         },
-        contentAlignment = Alignment.BottomCenter,
+        contentAlignment = if (top) Alignment.TopCenter else Alignment.BottomCenter,
         modifier = modifier,
         label = "bar",
     ) { small ->
-        if (small) CollapsedBar(tab, space, a.onExpand) else ExpandedBar(tab, space, tabCount, a)
+        CompositionLocalProvider(LocalBarTop provides top) {
+            if (small) CollapsedBar(tab, space, a.onExpand) else ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab)
+        }
     }
 }
+
+/** La barra está arriba: esquinas redondeadas abajo y sin el margen de los botones de Android. */
+private val LocalBarTop = androidx.compose.runtime.compositionLocalOf { false }
 
 /** Degradado suave con los colores del espacio, como el fondo de Zen. */
 @Composable
@@ -171,7 +183,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
     // Píldora mínima pegada abajo (de borde a borde): toda la pantalla queda para la página.
     Column(
         Modifier.fillMaxWidth().background(k.glass).background(spaceTint(space)).clickable(onClick = onExpand)
-            .navigationBarsPadding(),
+            .then(if (LocalBarTop.current) Modifier else Modifier.navigationBarsPadding()),
     ) {
         val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "progressMini")
         Box(Modifier.fillMaxWidth().height(2.dp)) {
@@ -202,21 +214,24 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
 }
 
 @Composable
-private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions) {
+private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit) {
     val k = LocalKaze.current
+    val top = LocalBarTop.current
+    val r = if (k.material) 28.dp else 22.dp
+    val shape = if (top) RoundedCornerShape(bottomStart = r, bottomEnd = r) else RoundedCornerShape(topStart = r, topEnd = r)
     // Barra pegada abajo (de borde a borde, sin huecos), con las esquinas de arriba redondeadas.
     Column(
         Modifier
             .fillMaxWidth()
-            .shadow(if (k.material) 0.dp else 14.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), ambientColor = Color.Black.copy(alpha = 0.2f))
-            .clip(RoundedCornerShape(topStart = if (k.material) 28.dp else 22.dp, topEnd = if (k.material) 28.dp else 22.dp))
+            .shadow(if (k.material) 0.dp else 14.dp, shape, ambientColor = Color.Black.copy(alpha = 0.2f))
+            .clip(shape)
             .background(k.glass)
             .then(if (k.material) Modifier else Modifier.background(spaceTint(space)))
-            .navigationBarsPadding()
+            .then(if (top) Modifier.padding(bottom = 6.dp) else Modifier.navigationBarsPadding())
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
         Column(Modifier.widthIn(max = 760.dp).align(Alignment.CenterHorizontally)) {
-        AddressPill(tab, a)
+        TabPager(tab, tabs, a, onSelectTab)
         Row(
             Modifier.fillMaxWidth().padding(top = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -374,8 +389,58 @@ private fun addressLabel(tab: Tab): String {
     }
 }
 
+/**
+ * Las pestañas del espacio en la barra, como en Safari: la actual en el centro y las vecinas
+ * asomando a los lados. Deslizar cambia de pestaña con la animación de página del carrusel.
+ */
 @Composable
-private fun AddressPill(tab: Tab, a: ChromeActions) {
+private fun TabPager(tab: Tab, tabs: List<Tab>, a: ChromeActions, onSelectTab: (Tab) -> Unit) {
+    val index = tabs.indexOfFirst { it.id == tab.id }
+    if (tabs.size < 2 || index < 0) {
+        AddressPill(tab, a)
+        return
+    }
+    val pager = androidx.compose.foundation.pager.rememberPagerState(initialPage = index) { tabs.size }
+    LaunchedEffect(tab.id, tabs.size) {
+        val i = tabs.indexOfFirst { it.id == tab.id }
+        if (i >= 0 && i != pager.currentPage) pager.animateScrollToPage(i)
+    }
+    LaunchedEffect(pager.settledPage) {
+        tabs.getOrNull(pager.settledPage)?.let { if (it.id != tab.id) onSelectTab(it) }
+    }
+    androidx.compose.foundation.pager.HorizontalPager(
+        state = pager,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp),
+        pageSpacing = 8.dp,
+        key = { tabs.getOrNull(it)?.id ?: it },
+        modifier = Modifier.fillMaxWidth(),
+    ) { page ->
+        val t = tabs[page]
+        if (t.id == tab.id) AddressPill(tab, a, swipe = false) else MiniPill(t)
+    }
+}
+
+/** Pastilla de una pestaña vecina en la barra (solo su sitio, atenuada). */
+@Composable
+private fun MiniPill(t: Tab) {
+    val k = LocalKaze.current
+    Row(
+        Modifier.fillMaxWidth().height(46.dp)
+            .then(if (k.material) Modifier.clip(RoundedCornerShape(50)).background(k.tonal.copy(alpha = 0.6f)) else Modifier.liftCard(RoundedCornerShape(14.dp)))
+            .alpha(0.75f),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (!t.isStart) { FaviconTile(t.url, 22.dp, 14.dp); Spacer(Modifier.width(8.dp)) }
+        Text(
+            if (t.isStart) "Página de inicio" else Urls.displayHost(t.url).ifBlank { t.displayTitle },
+            style = KazeType.body.copy(fontWeight = FontWeight.Medium), color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun AddressPill(tab: Tab, a: ChromeActions, swipe: Boolean = true) {
     val k = LocalKaze.current
     val scope = rememberCoroutineScope()
     val drag = remember { Animatable(0f) }
@@ -388,7 +453,8 @@ private fun AddressPill(tab: Tab, a: ChromeActions) {
             .offset { IntOffset(drag.value.roundToInt(), 0) }
             .then(if (k.material) Modifier.clip(RoundedCornerShape(50)).background(k.tonal) else Modifier.liftCard(RoundedCornerShape(14.dp)))
             // Deslizar a los lados cambia de pestaña (como Safari).
-            .pointerInput(tab.id) {
+            .pointerInput(tab.id, swipe) {
+                if (!swipe) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         val d = drag.value

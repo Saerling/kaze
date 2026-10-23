@@ -162,7 +162,7 @@ class ScreenshotTest {
             Themed(false) {
                 Box(Modifier.fillMaxSize().background(Color.White)) {
                     FakePage()
-                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter))
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter), tabs = app.store.normal(app.store.currentSpaceId))
                 }
             }
         }

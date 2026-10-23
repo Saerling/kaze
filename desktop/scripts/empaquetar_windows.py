@@ -161,7 +161,8 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
     prefs = prefs_pyx(build, version)
     cfg = (KAZE / "cargador-zen.cfg").read_text(encoding="utf-8")
     cfg += '\nif (Services.appinfo.name == "Pyx") {\n' + prefs + "}\n"
-    for nombre in ("memoria.js", "pyx.css"):
+    for nombre in ("memoria.js", "pyx.css", "pestanas.js", "iconos/pestanas-pyx.svg"):
+        (destino / "content" / nombre).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(KAZE / "content" / nombre, destino / "content" / nombre)
     (app / "kaze.cfg").write_text(cfg, encoding="utf-8")
     (app / "defaults" / "pref" / "kaze-loader.js").write_text(
@@ -170,9 +171,9 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
         'pref("general.config.sandbox_enabled", false);\n',
         encoding="utf-8",
     )
-    dist = app / "distribution"
-    dist.mkdir(exist_ok=True)
-    (dist / "policies.json").write_text(json.dumps(POLITICAS, indent=2), encoding="utf-8")
+    # Sin políticas: Firefox mostraría "administrado por su organización". Las actualizaciones de Zen
+    # quedan apagadas porque browser/application.ini no tiene servidor de actualizaciones.
+    (app / "distribution" / "policies.json").unlink(missing_ok=True)
 
     # Ícono de la ventana y de la barra de tareas (Firefox busca chrome/icons/default/<id de ventana>.ico).
     iconos = app / "browser" / "chrome" / "icons" / "default"

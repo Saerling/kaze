@@ -62,6 +62,8 @@ class Settings(context: Context) {
     var tabsView by pref("tabs_view", "grid")
     /** Modo tableta: "auto" (pantallas de 600 dp o más), "on" u "off". */
     var tabletMode by pref("tablet_mode", "auto")
+    /** Barra de direcciones arriba (uso tipo escritorio) en vez de abajo. */
+    var barTop by pref("bar_top", false)
     /** Sitios (dominios) donde el usuario apagó el bloqueo de rastreadores, separados por coma. */
     var trackingOff by pref("tracking_off", "")
     /** En tableta, pedir la versión de escritorio de las páginas. */

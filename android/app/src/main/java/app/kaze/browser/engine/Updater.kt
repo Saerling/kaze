@@ -43,13 +43,13 @@ class Updater(private val context: Context) {
     enum class Phase { IDLE, CHECKING, AVAILABLE, DOWNLOADING, INSTALLING, UP_TO_DATE, ERROR }
 
     var phase by mutableStateOf(Phase.IDLE)
-        private set
+        internal set
     var available by mutableStateOf<UpdateInfo?>(null)
-        private set
+        internal set
     var progress by mutableFloatStateOf(0f)
-        private set
+        internal set
     var error by mutableStateOf<String?>(null)
-        private set
+        internal set
     /** La hoja de actualización se muestra mientras esto sea true. */
     var showSheet by mutableStateOf(false)
 

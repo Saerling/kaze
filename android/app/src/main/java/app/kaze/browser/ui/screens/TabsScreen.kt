@@ -8,6 +8,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.automirrored.outlined.ViewList
@@ -105,6 +106,7 @@ fun TabsScreen(
     onGroups: () -> Unit,
     onTabMenu: (Tab) -> Unit,
     onClose: (Tab) -> Unit,
+    onHistory: () -> Unit = {},
 ) {
     val app = LocalApp.current
     val k = LocalKaze.current
@@ -244,6 +246,7 @@ fun TabsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolbarIcon(Icons.Outlined.Add, "Nueva pestaña", onClick = onNewTab)
+            ToolbarIcon(Icons.Outlined.History, "Historial", onClick = onHistory)
             Row(
                 Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onGroups)
                     .semantics { contentDescription = "Grupos de pestañas" },
@@ -326,15 +329,15 @@ private fun TabCard(compact: Boolean = false, tab: Tab, selected: Boolean, onOpe
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(if (compact) 0.68f else 0.74f)
-                .card(RoundedCornerShape(14.dp))
-                .then(if (selected) Modifier.border(3.dp, k.accent, RoundedCornerShape(14.dp)) else Modifier.border(0.5.dp, k.rim, RoundedCornerShape(14.dp)))
+                .card(RoundedCornerShape(k.corner.dp))
+                .then(if (selected) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier.border(0.5.dp, k.rim, RoundedCornerShape(k.corner.dp)))
                 .tap(onOpen, onMenu),
         ) {
             val b = thumb
             when {
                 b != null && !tab.isStart -> Image(
                     b.asImageBitmap(), null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(k.corner.dp)),
                 )
                 else -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     if (tab.isStart) {

@@ -56,6 +56,8 @@ class BrowserUi {
     var contextMenu by mutableStateOf<ContextMenuRequest?>(null)
     var fullscreen by mutableStateOf(false)
     var toast by mutableStateOf<String?>(null)
+    /** Acción del aviso (p. ej. "Deshacer"). */
+    var toastAction by mutableStateOf<Pair<String, () -> Unit>?>(null)
     /** Pide abrir Ajustes desde cualquier hoja. */
     var openSettings by mutableStateOf(false)
 
@@ -66,7 +68,8 @@ class BrowserUi {
     var findCurrent by mutableIntStateOf(0)
     var findTotal by mutableIntStateOf(0)
 
-    fun show(message: String) {
+    fun show(message: String, action: String? = null, onAction: (() -> Unit)? = null) {
+        toastAction = if (action != null && onAction != null) action to onAction else null
         toast = message
     }
 }

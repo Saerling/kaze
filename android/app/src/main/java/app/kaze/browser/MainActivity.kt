@@ -4,6 +4,11 @@
 
 package app.kaze.browser
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
 import app.kaze.browser.ui.sheets.RecentlyClosedSheet
 import app.kaze.browser.ui.sheets.ClearDataSheet
 import app.kaze.browser.ui.sheets.MenuActions
@@ -316,6 +321,10 @@ class MainActivity : ComponentActivity() {
         var editSpace by remember { mutableStateOf<Space?>(null) }
         var newSpace by remember { mutableStateOf(false) }
         var library by remember { mutableStateOf(false) }
+        var librarySection by remember { mutableIntStateOf(0) }
+        // Alto que la página deja libre abajo (la barra nunca tapa la página).
+        var pageBottomPx by remember { mutableIntStateOf(0) }
+        var barExpandedPx by remember { mutableIntStateOf(0) }
         var settings by remember { mutableStateOf(false) }
         var privacy by remember { mutableStateOf(false) }
         var finding by remember { mutableStateOf(false) }
@@ -362,11 +371,23 @@ class MainActivity : ComponentActivity() {
         }
 
         fun closeTab(t: Tab) {
-            val next = if (t.id == store.selectedTabId) store.nextAfterClose(t) else null
+            val wasSelected = t.id == store.selectedTabId
+            val url = t.url
+            val sid = t.spaceId
+            val kind = t.kind
+            val priv = t.isPrivate
+            val next = if (wasSelected) store.nextAfterClose(t) else null
             app.pool.close(t)
             app.thumbnails.delete(t.id)
             store.close(t)
             if (next != null) open(next) else if (store.selectedTab == null) showTabs = true
+            // Píldora para deshacer el cierre.
+            ui.show("Pestaña cerrada", "Deshacer") {
+                store.recentlyClosed.removeAll { it.first == url }
+                val back = store.newTab(url, spaceId = sid, private = priv, select = wasSelected)
+                if (kind != TabKind.NORMAL) store.setKind(back, kind)
+                if (wasSelected) open(back)
+            }
         }
 
         fun showTabsGrid() = snapshot { showTabs = true }
@@ -479,11 +500,19 @@ class MainActivity : ComponentActivity() {
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
         val density = LocalDensity.current
-        // La página siempre deja libre el alto de la barra encogida (nunca cambia de tamaño: nada salta
-        // ni se traba); la barra completa se superpone un poco al subir, como en Safari.
         val collapsedPx = with(density) { 32.dp.roundToPx() } + WindowInsets.navigationBars.getBottom(density)
-        // Sin "barra dinámica" de Gecko: desalineaba los toques en menús fijos de las páginas.
-        fun onBarHeight(@Suppress("UNUSED_PARAMETER") h: Int) = Unit
+        fun onBarHeight(h: Int) {
+            if (!collapsed && h > barExpandedPx) barExpandedPx = h
+        }
+        // Al encogerse, la página crece al momento (queda debajo de la barra que baja: sin huecos negros).
+        // Al abrirse, la barra crece encima y la página se ajusta al terminar: nada queda tapado.
+        LaunchedEffect(showBar, collapsed, barExpandedPx, collapsedPx) {
+            pageBottomPx = when {
+                !showBar -> 0
+                collapsed -> collapsedPx
+                else -> { delay(280); barExpandedPx.coerceAtLeast(collapsedPx) }
+            }
+        }
         LaunchedEffect(Unit) { geckoView.setVerticalClipping(0); geckoView.setDynamicToolbarMaxHeight(0) }
 
         Box(Modifier.fillMaxSize().background(k.paper)) {
@@ -492,7 +521,7 @@ class MainActivity : ComponentActivity() {
                 AndroidView(
                     factory = { geckoView },
                     modifier = Modifier.fillMaxSize()
-                        .padding(bottom = with(density) { (if (showBar) collapsedPx else 0).toDp() })
+                        .padding(bottom = with(density) { (if (showBar) pageBottomPx.coerceAtLeast(collapsedPx) else 0).toDp() })
                         .then(if (showBar || ui.fullscreen) Modifier else Modifier.navigationBarsPadding()),
                 )
 
@@ -543,6 +572,7 @@ class MainActivity : ComponentActivity() {
                     onGroups = { groups = true },
                     onTabMenu = { tabMenu = it },
                     onClose = ::closeTab,
+                    onHistory = { librarySection = 2; library = true },
                 )
             }
 
@@ -697,7 +727,8 @@ class MainActivity : ComponentActivity() {
             if (newSpace) SpaceEditorSheet(null) { newSpace = false }
             if (library) {
                 LibrarySheet(
-                    onDismiss = { library = false },
+                    initialSection = librarySection,
+                    onDismiss = { library = false; librarySection = 0 },
                     onOpenUrl = { url ->
                         library = false
                         val t = store.selectedTab
@@ -746,7 +777,7 @@ class MainActivity : ComponentActivity() {
             ui.prompt?.let { p -> PromptHost(p, onDone = { ui.prompt = null }, onFile = ::openFilePicker) }
             ui.permission?.let { p -> PermissionHost(p) { ui.permission = null } }
 
-            Toast(ui.toast) { ui.toast = null }
+            Toast(ui.toast, ui.toastAction) { ui.toast = null; ui.toastAction = null }
         }
 
         // Ajustes se abre desde la Biblioteca y desde la vista de pestañas.
@@ -772,22 +803,35 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Toast(message: String?, onGone: () -> Unit) {
+private fun Toast(message: String?, action: Pair<String, () -> Unit>?, onGone: () -> Unit) {
     val k = LocalKaze.current
-    LaunchedEffect(message) {
+    LaunchedEffect(message, action) {
         if (message != null) {
-            delay(2200)
+            delay(if (action != null) 4500 else 2200)
             onGone()
         }
     }
-    Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 84.dp), contentAlignment = Alignment.BottomCenter) {
-        AnimatedVisibility(message != null, enter = fadeIn(), exit = fadeOut()) {
-            Text(
-                message.orEmpty(),
-                style = KazeType.small,
-                color = k.paper,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.9f)).padding(horizontal = 18.dp, vertical = 10.dp),
-            )
+    Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 128.dp), contentAlignment = Alignment.BottomCenter) {
+        AnimatedVisibility(
+            message != null,
+            enter = fadeIn(tween(160)) + slideInVertically(spring(0.8f, 500f)) { it },
+            exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { it / 2 },
+        ) {
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.92f))
+                    .padding(start = 18.dp, end = if (action != null) 6.dp else 18.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(message.orEmpty(), style = KazeType.small, color = k.paper, modifier = Modifier.padding(vertical = 4.dp))
+                if (action != null) {
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        action.first, style = KazeType.small.copy(fontWeight = FontWeight.SemiBold), color = k.paper,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent)
+                            .clickable { action.second(); onGone() }.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
+            }
         }
     }
 }

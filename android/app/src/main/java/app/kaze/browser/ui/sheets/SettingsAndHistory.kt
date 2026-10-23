@@ -73,10 +73,10 @@ import java.util.Date
 // ── Marcadores: Favoritos · Lista de lectura · Historial ──────────────
 
 @Composable
-fun LibrarySheet(onDismiss: () -> Unit, onOpenUrl: (String) -> Unit, onOpenTab: (Tab) -> Unit) {
+fun LibrarySheet(onDismiss: () -> Unit, onOpenUrl: (String) -> Unit, onOpenTab: (Tab) -> Unit, initialSection: Int = 0) {
     val app = LocalApp.current
     val k = LocalKaze.current
-    var section by remember { mutableIntStateOf(0) }
+    var section by remember { mutableIntStateOf(initialSection) }
     var query by remember { mutableStateOf("") }
     var history by remember { mutableStateOf(emptyList<HistoryEntry>()) }
     var reading by remember { mutableStateOf(emptyList<ReadingItem>()) }

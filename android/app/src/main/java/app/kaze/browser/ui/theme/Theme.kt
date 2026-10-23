@@ -67,7 +67,14 @@ data class KazeColors(
     /** Barras flotantes de vidrio. */
     val glass: Color,
     val separator: Color,
+    /** Estilo Material You: formas más redondas y contenedores tonales. */
+    val material: Boolean = false,
+    /** Contenedor tonal (secondaryContainer en Material You). */
+    val tonal: Color = lift,
+    val onTonal: Color = ink,
 ) {
+    /** Radio de las tarjetas: más redondo en Material You (Material 3 Expressive). */
+    val corner get() = if (material) 24 else 14
     val ink70 get() = ink.copy(alpha = 0.7f)
     val ink55 get() = ink.copy(alpha = 0.6f)
     val ink35 get() = ink.copy(alpha = 0.3f)
@@ -116,7 +123,8 @@ fun styledColors(context: android.content.Context, dark: Boolean, style: UiStyle
     return KazeColors(
         paper = scheme.surface, ink = scheme.onSurface, lift = scheme.surfaceContainerHighest,
         accent = scheme.primary, isDark = dark, card = scheme.surfaceContainerLow,
-        glass = scheme.surfaceContainer.copy(alpha = 0.97f), separator = scheme.outlineVariant,
+        glass = scheme.surfaceContainer, separator = scheme.outlineVariant,
+        material = true, tonal = scheme.secondaryContainer, onTonal = scheme.onSecondaryContainer,
     )
 }
 

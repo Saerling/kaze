@@ -1,5 +1,7 @@
 package app.kaze.browser
 
+import app.kaze.browser.engine.UpdateInfo
+import app.kaze.browser.ui.sheets.UpdateSheet
 import app.kaze.browser.data.UiStyle
 import app.kaze.browser.data.AccentColor
 import androidx.compose.foundation.background
@@ -169,6 +171,16 @@ class ScreenshotTest {
         }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-material-you.png")
+    }
+
+    @Test fun actualizacion() {
+        app.updater.available = UpdateInfo(
+            versionCode = 999, versionName = "Kaze Android 0.3.114", apkUrl = "", sizeBytes = 92_000_000,
+            notes = "Cambios:\nAndroid: píldora para deshacer y aviso de versión nuevo\n\n- Al cerrar una pestaña sale una píldora\n  para deshacer.\n- Botón de historial en la vista de pestañas.\n- La barra ya no tapa la página.",
+        )
+        compose.setContent { Themed(true) { Box(Modifier.fillMaxSize()) { UpdateSheet {} } } }
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage("../../docs/capturas/android-actualizacion.png")
     }
 
     @Test fun navegador_barra_reducida() {

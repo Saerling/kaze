@@ -106,7 +106,7 @@ fun KazeSheet(onDismiss: () -> Unit, full: Boolean = false, content: @Composable
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = full),
         containerColor = k.paper,
         contentColor = k.ink,
-        shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
+        shape = RoundedCornerShape(topStart = if (k.material) 28.dp else 14.dp, topEnd = if (k.material) 28.dp else 14.dp),
         dragHandle = {
             Box(Modifier.padding(top = 8.dp, bottom = 6.dp).size(36.dp, 5.dp).clip(CircleShape).background(k.ink.copy(alpha = 0.22f)))
         },

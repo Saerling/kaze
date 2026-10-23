@@ -30,4 +30,11 @@ class UpdaterTest {
     @Test fun sinVersionesAndroid() {
         assertNull(Updater.parseReleases("[" + rel("desktop-1", "a.zip") + "]", "arm64-v8a"))
     }
+
+    @org.junit.Test fun notasEnLista() {
+        val notes = "Cambios:\nAndroid: arreglar toques en menús fijos\n\n- Se quita la barra dinámica: desalineaba\n  los toques.\n- Cada espacio tiene su propio\n  desplazamiento"
+        val (title, items) = app.kaze.browser.ui.sheets.parseNotes(notes)
+        org.junit.Assert.assertEquals("Arreglar toques en menús fijos", title)
+        org.junit.Assert.assertEquals(listOf("Se quita la barra dinámica: desalineaba los toques.", "Cada espacio tiene su propio desplazamiento."), items)
+    }
 }

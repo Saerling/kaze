@@ -203,10 +203,10 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
     Column(
         Modifier
             .fillMaxWidth()
-            .shadow(14.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), ambientColor = Color.Black.copy(alpha = 0.2f))
-            .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+            .shadow(if (k.material) 0.dp else 14.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), ambientColor = Color.Black.copy(alpha = 0.2f))
+            .clip(RoundedCornerShape(topStart = if (k.material) 28.dp else 22.dp, topEnd = if (k.material) 28.dp else 22.dp))
             .background(k.glass)
-            .background(spaceTint(space))
+            .then(if (k.material) Modifier else Modifier.background(spaceTint(space)))
             .navigationBarsPadding()
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
@@ -230,11 +230,14 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
 @Composable
 private fun HomeButton(atHome: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
     val k = LocalKaze.current
+    // En Material You, la casa activa va dentro de una píldora tonal (como la barra de navegación de M3).
+    val pill by animateFloatAsState(if (atHome && k.material) 1f else 0f, spring(0.7f, 500f), label = "homePill")
     Box(
-        Modifier.size(48.dp).clip(CircleShape).tap(onClick, onLong)
+        Modifier.size(width = 56.dp, height = 48.dp).clip(RoundedCornerShape(50)).tap(onClick, onLong)
             .semantics { contentDescription = "Página de inicio (mantén presionado: Essentials y espacios)" },
         contentAlignment = Alignment.Center,
     ) {
+        Box(Modifier.size(width = 56.dp * pill.coerceAtLeast(0.01f), height = 32.dp).clip(RoundedCornerShape(50)).background(k.tonal.copy(alpha = pill)))
         Icon(
             if (atHome) Icons.Filled.Home else Icons.Outlined.Home, null,
             tint = k.accent, modifier = Modifier.size(25.dp),
@@ -376,7 +379,7 @@ private fun AddressPill(tab: Tab, a: ChromeActions) {
             .fillMaxWidth()
             .height(46.dp)
             .offset { IntOffset(drag.value.roundToInt(), 0) }
-            .liftCard(RoundedCornerShape(14.dp))
+            .then(if (k.material) Modifier.clip(RoundedCornerShape(50)).background(k.tonal) else Modifier.liftCard(RoundedCornerShape(14.dp)))
             // Deslizar a los lados cambia de pestaña (como Safari).
             .pointerInput(tab.id) {
                 detectHorizontalDragGestures(

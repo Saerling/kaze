@@ -131,6 +131,10 @@ fun TabsScreen(
     onHistory: () -> Unit = {},
 ) {
     val app = LocalApp.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // Al abrir la vista, las tarjetas entran escalonadas (35 ms entre cada una); después, sin retrasos al desplazar.
+    var opening by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(500); opening = false }
     val k = LocalKaze.current
     val store = app.store
     val space = store.currentSpace ?: store.profileSpaces.first()
@@ -258,7 +262,9 @@ fun TabsScreen(
                     )
                     // Organizar pestañas (como Safari en iPadOS 27): agrupa en carpetas las del mismo sitio.
                     Box(
-                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable { store.organize(space.id) }
+                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable {
+                            if (store.organize(space.id) > 0) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                        }
                             .semantics { contentDescription = "Organizar pestañas por sitio" },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Outlined.AutoAwesome, null, tint = k.accent, modifier = Modifier.size(19.dp)) }
@@ -301,6 +307,7 @@ fun TabsScreen(
                 val key = if (e is Tab) e.id else "f:$e"
                 Box(
                     Modifier.animateItem(fadeInSpec = tween(220), placementSpec = spring(0.82f, 360f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(160))
+                        .staggerIn(entries.indexOf(e), opening)
                         .dragVisual(key),
                 ) {
                     if (e is Tab) {
@@ -655,5 +662,26 @@ private fun FolderView(
                 }
             }
         }
+    }
+}
+
+
+/**
+ * Entrada escalonada: sube 16 dp y aparece con una curva que frena al final (ease-out fuerte).
+ * Solo mientras la vista se está abriendo; las tarjetas que aparecen al desplazar no esperan.
+ * Con "Quitar animaciones" de Android la duración es 0 y se muestran al instante.
+ */
+@Composable
+private fun Modifier.staggerIn(index: Int, active: Boolean): Modifier {
+    val p = remember { androidx.compose.animation.core.Animatable(if (active) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (p.value < 1f) {
+            kotlinx.coroutines.delay(35L * index.coerceIn(0, 8))
+            p.animateTo(1f, tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+        }
+    }
+    return graphicsLayer {
+        alpha = p.value
+        translationY = (1f - p.value) * 16.dp.toPx()
     }
 }

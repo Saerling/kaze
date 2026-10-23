@@ -375,7 +375,10 @@ class MainActivity : ComponentActivity() {
             open(t)
         }
 
+        val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
         fun closeTab(t: Tab) {
+            // Un toque corto confirma el cierre (y deshacer queda a mano en la píldora).
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick)
             val wasSelected = t.id == store.selectedTabId
             val url = t.url
             val sid = t.spaceId
@@ -552,7 +555,7 @@ class MainActivity : ComponentActivity() {
         // Cada diseño tiene su altura de barra: al cambiar de diseño se vuelve a medir.
         LaunchedEffect(layout, tabletBar) { barExpandedPx = 0 }
         val navPx = WindowInsets.navigationBars.getBottom(density)
-        val smallPx = with(density) { 44.dp.roundToPx() }
+        val smallPx = with(density) { 54.dp.roundToPx() }
         val clip = remember { androidx.compose.animation.core.Animatable(0f) }
         LaunchedEffect(barCompact, showBar, collapsed, barExpandedPx, navPx) {
             val max = (barExpandedPx - navPx).coerceAtLeast(0)

@@ -435,8 +435,15 @@ private fun TabPager(tab: Tab, tabs: List<Tab>, a: ChromeActions, onSelectTab: (
         val i = tabs.indexOfFirst { it.id == tab.id }
         if (i >= 0 && i != pager.currentPage) pager.animateScrollToPage(i)
     }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     LaunchedEffect(pager.settledPage) {
-        tabs.getOrNull(pager.settledPage)?.let { if (it.id != tab.id) onSelectTab(it) }
+        tabs.getOrNull(pager.settledPage)?.let {
+            if (it.id != tab.id) {
+                // Cada cambio de pestaña al deslizar se siente como un "clic" suave, como los selectores de iOS.
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
+                onSelectTab(it)
+            }
+        }
     }
     androidx.compose.foundation.pager.HorizontalPager(
         state = pager,
@@ -710,7 +717,10 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
     Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
         // Como Safari en iOS: burbujas de vidrio a los lados (atrás, adelante, ⋯) y la píldora grande del sitio.
         Row(
-            Modifier.fillMaxWidth().pointerInput(Unit) {
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                // Minimizada, toda la franja abre la barra: el área táctil llega a 48 dp aunque la píldora se vea pequeña.
+                .then(if (collapsed) Modifier.clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, null, onClick = a.onExpand) else Modifier)
+                .pointerInput(Unit) {
                 var total = 0f
                 detectVerticalDragGestures(onDragStart = { total = 0f }, onDragEnd = { if (total < -50) a.onTabs() }) { c, dy -> c.consume(); total += dy }
             },

@@ -13,6 +13,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.slideInVertically
 import androidx.compose.material.icons.filled.Home
@@ -154,7 +157,17 @@ fun SafariBottomBar(
     compact: Boolean = false,
     /** Tableta con la barra arriba: una fila como Safari en iPad (pestañas en línea). */
     tablet: Boolean = false,
+    /** Diseño "Arriba": aquí solo van los botones (la dirección va en SafariTopAddress). */
+    split: Boolean = false,
 ) {
+    if (split) {
+        AnimatedVisibility(
+            !collapsed, modifier = modifier,
+            enter = slideInVertically(spring(0.86f, 420f)) { it } + fadeIn(tween(180)),
+            exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(150)),
+        ) { ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab, showAddress = false) }
+        return
+    }
     if (tablet) {
         TabletBar(tab, space, tabCount, a, tabs, onSelectTab, modifier)
         return
@@ -229,7 +242,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
 }
 
 @Composable
-private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit) {
+private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, showAddress: Boolean = true) {
     val k = LocalKaze.current
     val top = LocalBarTop.current
     val r = if (k.material) 28.dp else 22.dp
@@ -246,7 +259,7 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
         Column(Modifier.widthIn(max = 760.dp).align(Alignment.CenterHorizontally)) {
-        TabPager(tab, tabs, a, onSelectTab)
+        if (showAddress) TabPager(tab, tabs, a, onSelectTab)
         Row(
             Modifier.fillMaxWidth().padding(top = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -688,46 +701,102 @@ fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () ->
 private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolean, a: ChromeActions, modifier: Modifier) {
     val k = LocalKaze.current
     var menu by remember { mutableStateOf(false) }
-    val height by animateDpAsState(if (collapsed) 38.dp else 52.dp, spring(0.8f, 420f), label = "compactH")
-    val side by animateDpAsState(if (collapsed) 70.dp else 14.dp, spring(0.8f, 420f), label = "compactW")
+    val height by animateDpAsState(if (collapsed) 36.dp else 50.dp, spring(0.8f, 420f), label = "compactH")
+    val side by animateDpAsState(if (collapsed) 64.dp else 12.dp, spring(0.8f, 420f), label = "compactW")
+    val enter = fadeIn(tween(160)) + scaleIn(spring(0.55f, 520f), initialScale = 0.3f)
+    val exit = fadeOut(tween(110)) + scaleOut(tween(140), targetScale = 0.3f)
     Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
+        // Como Safari en iOS: burbujas de vidrio a los lados (atrás, adelante, ⋯) y la píldora grande del sitio.
         Row(
-            Modifier.fillMaxWidth().height(height).glass(RoundedCornerShape(50), 16f)
-                .pointerInput(Unit) {
-                    var total = 0f
-                    detectVerticalDragGestures(onDragStart = { total = 0f }, onDragEnd = { if (total < -50) a.onTabs() }) { c, dy -> c.consume(); total += dy }
-                },
+            Modifier.fillMaxWidth().pointerInput(Unit) {
+                var total = 0f
+                detectVerticalDragGestures(onDragStart = { total = 0f }, onDragEnd = { if (total < -50) a.onTabs() }) { c, dy -> c.consume(); total += dy }
+            },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (!collapsed) {
-                ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack)
+            AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
+                Bubble(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", tab.canGoBack, { a.onHistoryMenu(-1) }, a.onBack, Modifier.padding(end = 8.dp))
+            }
+            AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
+                Bubble(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", tab.canGoForward, { a.onHistoryMenu(1) }, a.onForward, Modifier.padding(end = 8.dp))
             }
             Row(
-                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(50))
-                    .clickable { if (collapsed) a.onExpand() else a.onAddress() },
+                Modifier.weight(1f).height(height).glass(RoundedCornerShape(50), 16f).clip(RoundedCornerShape(50))
+                    .clickable { if (collapsed) a.onExpand() else a.onAddress() }.padding(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (tab.isSecure && !tab.isStart) {
-                    Icon(Icons.Outlined.Lock, null, tint = k.ink55, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(5.dp))
+                AnimatedVisibility(tab.isSecure && !tab.isStart, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
+                    Icon(Icons.Outlined.Lock, null, tint = k.ink55, modifier = Modifier.padding(end = 5.dp).size(12.dp))
                 }
-                Text(
-                    addressLabel(tab).ifBlank { "Buscar o escribir dirección" },
-                    style = (if (collapsed) KazeType.footnote else KazeType.body).copy(fontWeight = FontWeight.Medium),
-                    color = if (tab.isStart) k.ink55 else k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+                // El sitio cambia con un deslizamiento suave al navegar o cambiar de pestaña.
+                AnimatedContent(
+                    targetState = addressLabel(tab).ifBlank { "Buscar o escribir dirección" },
+                    transitionSpec = {
+                        (fadeIn(tween(200)) + slideInVertically(spring(0.8f, 500f)) { it / 2 }) togetherWith
+                            (fadeOut(tween(120)) + slideOutVertically(tween(160)) { -it / 2 })
+                    },
+                    label = "compactLabel",
+                ) { text ->
+                    Text(
+                        text,
+                        style = (if (collapsed) KazeType.footnote else KazeType.body).copy(fontWeight = FontWeight.Medium),
+                        color = if (tab.isStart) k.ink55 else k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            if (!collapsed) {
-                ToolbarIcon(Icons.Outlined.MoreHoriz, "Más", onLong = a.onShare, onClick = { menu = true })
+            AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
+                Bubble(Icons.Outlined.MoreHoriz, "Más", true, a.onShare, { menu = true }, Modifier.padding(start = 8.dp))
             }
         }
         if (tab.loading) {
             val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "cp")
-            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 24.dp).fillMaxWidth(progress.coerceIn(0.05f, 1f)).height(2.dp).clip(RoundedCornerShape(50)).background(k.accent))
+            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 80.dp).fillMaxWidth(progress.coerceIn(0.05f, 1f)).height(2.dp).clip(RoundedCornerShape(50)).background(k.accent))
         }
     }
     if (menu) CompactMenu(tab, tabCount, a) { menu = false }
+}
+
+/** Burbuja de vidrio redonda de la barra compacta. */
+@Composable
+private fun Bubble(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, onLong: () -> Unit, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.size(50.dp).glass(CircleShape, 16f), contentAlignment = Alignment.Center) {
+        ToolbarIcon(icon, label, enabled = enabled, onLong = onLong, onClick = onClick)
+    }
+}
+
+/**
+ * Diseño "Arriba" de Safari: la dirección arriba y los botones abajo.
+ * Al bajar por la página los botones se esconden y la dirección se encoge.
+ */
+@Composable
+fun SafariTopAddress(tab: Tab, space: Space?, collapsed: Boolean, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, modifier: Modifier = Modifier) {
+    val k = LocalKaze.current
+    val r = if (k.material) 28.dp else 22.dp
+    AnimatedContent(
+        targetState = collapsed,
+        transitionSpec = { fadeIn(tween(200, delayMillis = 60)) togetherWith fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.86f, 420f) } },
+        contentAlignment = Alignment.TopCenter,
+        modifier = modifier.fillMaxWidth(),
+        label = "topAddress",
+    ) { small ->
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = r, bottomEnd = r)).background(k.glass)
+                .then(if (k.material) Modifier else Modifier.background(spaceTint(space))),
+        ) {
+            if (small) {
+                Text(
+                    addressLabel(tab).ifBlank { "Fyx" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium), color = k.ink, maxLines = 1,
+                    modifier = Modifier.fillMaxWidth().height(32.dp).clickable(onClick = a.onExpand).wrapContentHeight(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            } else {
+                Box(Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 8.dp).widthIn(max = 760.dp).align(Alignment.Center)) {
+                    TabPager(tab, tabs, a, onSelectTab)
+                }
+            }
+        }
+    }
 }
 
 /** Menú vertical de la barra compacta (como el "⋯" de Safari en iOS). */

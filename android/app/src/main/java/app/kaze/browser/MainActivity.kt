@@ -86,6 +86,7 @@ import app.kaze.browser.ui.components.LocalApp
 import app.kaze.browser.ui.screens.ChromeActions
 import app.kaze.browser.ui.screens.FindBar
 import app.kaze.browser.ui.screens.SafariBottomBar
+import app.kaze.browser.ui.screens.SafariTopAddress
 import app.kaze.browser.ui.screens.StartPage
 import app.kaze.browser.ui.screens.TabsScreen
 import app.kaze.browser.ui.sheets.GroupsSheet
@@ -508,10 +509,12 @@ class MainActivity : ComponentActivity() {
             else -> config.smallestScreenWidthDp >= 600
         }
         SideEffect { ui.tablet = tabletNow }
-        val layout = app.settings.barLayout.let { if (it == "bottom" && app.settings.barTop) "top" else it }
+        val layout = app.settings.barLayout
         // En tableta, Compacta y Arriba son la fila de Safari en iPad (pestañas en línea, arriba).
         val tabletBar = tabletNow && layout != "bottom"
-        val barTop = layout == "top" || tabletBar
+        val barTop = tabletBar
+        // Arriba (teléfono): la dirección arriba y los botones abajo, como Safari.
+        val barSplit = layout == "top" && !tabletBar
         val barCompact = layout == "compact" && !tabletBar
         val collapsed = tab != null && !tab.isStart && !tabletBar && (ui.scrollDirection > 0 || barHidden || pillAfterSearch)
 
@@ -545,6 +548,8 @@ class MainActivity : ComponentActivity() {
                                 // Barra arriba: la página empieza debajo de ella (y deja libres los botones de Android).
                                 when {
                                     barTop -> Modifier.padding(top = inset).navigationBarsPadding()
+                                    barSplit -> Modifier.padding(top = if (collapsed) 32.dp else 60.dp)
+                                        .then(if (collapsed) Modifier.navigationBarsPadding() else Modifier.padding(bottom = inset))
                                     // Compacta: la página pasa por debajo de la píldora flotante, como en Safari.
                                     barCompact -> Modifier.navigationBarsPadding()
                                     else -> Modifier.padding(bottom = inset)
@@ -590,6 +595,12 @@ class MainActivity : ComponentActivity() {
                             top = barTop,
                             compact = barCompact,
                             tablet = tabletBar,
+                            split = barSplit,
+                        )
+                        if (barSplit) SafariTopAddress(
+                            tab, store.spaceById(tab.spaceId), collapsed, actions,
+                            (store.pinned(tab.spaceId) + store.normal(tab.spaceId)).filter { it.isPrivate == tab.isPrivate },
+                            { t -> snapshot { open(t) } }, Modifier.align(Alignment.TopCenter),
                         )
                     }
                 }

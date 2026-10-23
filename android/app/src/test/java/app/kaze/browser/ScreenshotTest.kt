@@ -26,6 +26,7 @@ import app.kaze.browser.data.Urls
 import app.kaze.browser.ui.components.LocalApp
 import app.kaze.browser.ui.screens.ChromeActions
 import app.kaze.browser.ui.screens.SafariBottomBar
+import app.kaze.browser.ui.screens.SafariTopAddress
 import app.kaze.browser.ui.screens.StartPage
 import app.kaze.browser.ui.screens.ZenPanel
 import app.kaze.browser.ui.screens.TabsScreen
@@ -208,6 +209,23 @@ class ScreenshotTest {
         }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-barra-compacta.png")
+    }
+
+    @Test fun barra_arriba() {
+        val space = app.store.currentSpaceId
+        val tabs = app.store.normal(space)
+        val tab = tabs.first { it.url.contains("wikipedia") }
+        compose.setContent {
+            Themed(false) {
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    FakePage()
+                    SafariTopAddress(tab, app.store.spaceById(tab.spaceId), false, actions(), tabs, {}, Modifier.align(Alignment.TopCenter))
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), tabs.size, false, actions(), Modifier.align(Alignment.BottomCenter), tabs = tabs, split = true)
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-barra-arriba.png")
     }
 
     @Config(qualifiers = "w1100dp-h800dp-xhdpi")

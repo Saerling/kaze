@@ -65,7 +65,7 @@ class Settings(context: Context) {
     /** Barra de direcciones arriba (uso tipo escritorio) en vez de abajo. */
     var barTop by pref("bar_top", false)
     /** Diseño de la barra, como en Safari: "compact" (una píldora flotante), "bottom" o "top". */
-    var barLayout by pref("bar_layout", "bottom")
+    var barLayout by pref("bar_layout2", "compact")
     /** Sitios (dominios) donde el usuario apagó el bloqueo de rastreadores, separados por coma. */
     var trackingOff by pref("tracking_off", "")
     /** En tableta, pedir la versión de escritorio de las páginas. */

@@ -4,6 +4,10 @@
 
 package app.kaze.browser.ui.sheets
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.data.AccentColor
 import app.kaze.browser.data.UiStyle
@@ -230,10 +234,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             IosSectionHeader("Diseño")
             IosGroup {
                 Choice("Estilo", UiStyle.entries, s.uiStyle, { it.label }) { s.uiStyle = it }
-                Choice(
-                    "Diseño de la barra", listOf("compact", "bottom", "top"), if (s.barTop && s.barLayout == "bottom") "top" else s.barLayout,
-                    { when (it) { "compact" -> "Compacta"; "top" -> "Arriba"; else -> "Abajo" } },
-                ) { s.barLayout = it; s.barTop = it == "top" }
+                BarLayoutPicker(s.barLayout) { s.barLayout = it; s.barTop = false }
                 Choice("Color", AccentColor.entries, s.accent, { it.label }) { s.accent = it }
                 Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
                 Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {
@@ -352,6 +353,51 @@ private fun Toggle(title: String, value: Boolean, divider: Boolean = true, onCha
 }
 
 /** Opción con valor a la derecha; al tocarla se despliega la lista con ✓ (como iOS). */
+/** Diseño de la barra, como en Ajustes de Safari: tres teléfonos con la barra dibujada y un círculo para elegir. */
+@Composable
+private fun BarLayoutPicker(value: String, onChange: (String) -> Unit) {
+    val k = LocalKaze.current
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 14.dp)) {
+        Text("Diseño de la barra", style = KazeType.body, color = k.ink, modifier = Modifier.padding(horizontal = 16.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            listOf("compact" to "Compacta", "bottom" to "Abajo", "top" to "Arriba").forEach { (id, label) ->
+                val sel = id == value
+                val scale by androidx.compose.animation.core.animateFloatAsState(if (sel) 1.08f else 1f, androidx.compose.animation.core.spring(0.5f, 500f), label = "pick")
+                val line by androidx.compose.animation.animateColorAsState(if (sel) k.accent else k.ink55.copy(alpha = 0.35f), label = "pickC")
+                Column(
+                    Modifier.clip(RoundedCornerShape(14.dp)).clickable { onChange(id) }.padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier.graphicsLayer { scaleX = scale; scaleY = scale }.size(56.dp, 100.dp)
+                            .border(2.dp, line, RoundedCornerShape(13.dp)).padding(6.dp),
+                    ) {
+                        val bar = line.copy(alpha = if (sel) 0.85f else 0.6f)
+                        val pill = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(bar)
+                        val tools = Modifier.fillMaxWidth().padding(horizontal = 4.dp).height(3.dp).clip(RoundedCornerShape(50)).background(bar.copy(alpha = 0.5f))
+                        when (id) {
+                            "compact" -> Box(pill.align(Alignment.BottomCenter))
+                            "bottom" -> Column(Modifier.align(Alignment.BottomCenter)) { Box(pill); Spacer(Modifier.height(4.dp)); Box(tools) }
+                            else -> { Box(pill.align(Alignment.TopCenter)); Box(tools.align(Alignment.BottomCenter)) }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(label, style = KazeType.footnote, color = if (sel) k.ink else k.ink55)
+                    Spacer(Modifier.height(6.dp))
+                    Box(
+                        Modifier.size(20.dp).clip(CircleShape).border(1.5.dp, line, CircleShape).background(if (sel) k.accent else Color.Transparent),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.animation.AnimatedVisibility(sel, enter = androidx.compose.animation.scaleIn(androidx.compose.animation.core.spring(0.5f, 600f)), exit = androidx.compose.animation.scaleOut()) {
+                            Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun <T> Choice(title: String, options: List<T>, value: T, label: (T) -> String, divider: Boolean = true, onChange: (T) -> Unit) {
     val k = LocalKaze.current

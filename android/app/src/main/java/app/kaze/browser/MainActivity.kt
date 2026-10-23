@@ -546,7 +546,29 @@ class MainActivity : ComponentActivity() {
                 else -> { delay(280); barExpandedPx.coerceAtLeast(collapsedPx) }
             }
         }
-        LaunchedEffect(Unit) { geckoView.setVerticalClipping(0); geckoView.setDynamicToolbarMaxHeight(0) }
+        // Barra dinámica de GeckoView (lo que hace Safari con su barra flotante): la página ocupa toda la pantalla,
+        // y lo que está fijo abajo en la página (como el cuadro de escribir de un chat) queda justo encima de la
+        // barra. Al minimizarse, ese contenido baja con un resorte hasta quedar encima de la píldora pequeña.
+        // Cada diseño tiene su altura de barra: al cambiar de diseño se vuelve a medir.
+        LaunchedEffect(layout, tabletBar) { barExpandedPx = 0 }
+        val navPx = WindowInsets.navigationBars.getBottom(density)
+        val smallPx = with(density) { 44.dp.roundToPx() }
+        val clip = remember { androidx.compose.animation.core.Animatable(0f) }
+        LaunchedEffect(barCompact, showBar, collapsed, barExpandedPx, navPx) {
+            val max = (barExpandedPx - navPx).coerceAtLeast(0)
+            if (!barCompact || !showBar || max == 0) {
+                clip.snapTo(0f)
+                geckoView.setDynamicToolbarMaxHeight(0)
+                geckoView.setVerticalClipping(0)
+                return@LaunchedEffect
+            }
+            geckoView.setDynamicToolbarMaxHeight(max)
+            // 0 = barra entera a la vista; negativo = cuánto de la barra está escondido.
+            val target = if (collapsed) -(max - smallPx).coerceAtLeast(0).toFloat() else 0f
+            clip.animateTo(target, androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 420f)) {
+                geckoView.setVerticalClipping(value.toInt())
+            }
+        }
 
         Box(Modifier.fillMaxSize().background(k.paper)) {
             Box(Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.statusBarsPadding().imePadding())) {
@@ -564,8 +586,9 @@ class MainActivity : ComponentActivity() {
                                         .then(if (collapsed) Modifier.navigationBarsPadding() else Modifier.padding(bottom = inset))
                                     // Compacta: abierta flota encima de la página (como Safari); minimizada, la página termina
                                     // justo encima de la píldora pequeña y nada fijo abajo queda tapado.
-                                    barCompact -> if (collapsed) Modifier.padding(bottom = 44.dp + WindowInsets.navigationBars.getBottom(density).toDp())
-                                        else Modifier.navigationBarsPadding()
+                                    // Compacta (como Safari): la página llega hasta abajo y pasa por detrás de la barra;
+                                    // lo fijo abajo lo sube el motor por encima de ella (barra dinámica, ver más abajo).
+                                    barCompact -> Modifier.navigationBarsPadding()
                                     else -> Modifier.padding(bottom = inset)
                                 }
                             },

@@ -766,3 +766,91 @@
     margin: var(--kaze-gap) !important;
   }
 }
+
+
+/* ══ Pulido estilo Zen / Arc: más color en oscuro, movimiento y profundidad ══ */
+
+:root[kaze] {
+  --kaze-ease: cubic-bezier(.2, .8, .2, 1);
+  @media (prefers-color-scheme: dark) {
+    /* En oscuro, el degradado del espacio se nota (como los temas de Zen), sin deslumbrar. */
+    --kaze-tint1: color-mix(in srgb, var(--kaze-c1, #DCE8D4) 22%, transparent);
+    --kaze-tint2: color-mix(in srgb, var(--kaze-c2, #B9D3B0) 18%, transparent);
+    --kaze-background:
+      radial-gradient(ellipse 70% 90% at 0% 100%, var(--kaze-tint2), transparent 70%),
+      radial-gradient(ellipse 60% 70% at 10% 0%, var(--kaze-tint1), transparent 70%),
+      radial-gradient(ellipse 80% 60% at 100% 0%, color-mix(in srgb, var(--kaze-c3, #B9D3B0) 10%, transparent), transparent 70%),
+      var(--kaze-window);
+  }
+}
+
+/* Botones de la barra: píldora al pasar el ratón, con transición suave. */
+:root[kaze] #nav-bar toolbarbutton > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  transition: background-color 160ms var(--kaze-ease), transform 120ms var(--kaze-ease);
+}
+:root[kaze] #nav-bar toolbarbutton:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  transform: scale(0.92);
+}
+
+/* Barra de dirección flotante con sombra suave; al enfocarla crece un poco. */
+:root[kaze] #urlbar-background {
+  transition: background-color 180ms var(--kaze-ease), box-shadow 220ms var(--kaze-ease), outline-color 180ms;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06) !important;
+}
+:root[kaze] #urlbar[focused] #urlbar-background {
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.22) !important;
+}
+
+/* Pestañas: entran deslizándose, el fondo cambia suave y la elegida flota (como Arc). */
+:root[kaze] #tabbrowser-tabs[orient="vertical"] {
+  & .tabbrowser-tab:not([pinned])[fadein] {
+    animation: kaze-tab-in 240ms var(--kaze-ease);
+  }
+  & .tab-background {
+    transition: background-color 160ms var(--kaze-ease), box-shadow 200ms var(--kaze-ease), transform 160ms var(--kaze-ease);
+  }
+  & .tabbrowser-tab:active .tab-background {
+    transform: scale(0.98);
+  }
+  & .tabbrowser-tab[selected] .tab-background {
+    box-shadow: 0 0 0 0.5px var(--kaze-rim), 0 2px 8px rgb(0 0 0 / 0.10) !important;
+  }
+}
+@keyframes kaze-tab-in {
+  from { opacity: 0; transform: translateX(-10px); }
+}
+
+/* Cambiar de espacio: las pestañas entran desde el lado hacia el que vas (como Zen). */
+:root[kaze] #tabbrowser-tabs[kaze-anim="next"] #tabbrowser-arrowscrollbox {
+  animation: kaze-space-next 300ms var(--kaze-ease);
+}
+:root[kaze] #tabbrowser-tabs[kaze-anim="prev"] #tabbrowser-arrowscrollbox {
+  animation: kaze-space-prev 300ms var(--kaze-ease);
+}
+@keyframes kaze-space-next { from { opacity: 0; transform: translateX(24px); } }
+@keyframes kaze-space-prev { from { opacity: 0; transform: translateX(-24px); } }
+
+/* Essentials: se elevan un poco al pasar el ratón. */
+:root[kaze] #pinned-tabs-container .tabbrowser-tab[kaze-essential] .tab-background {
+  transition: transform 160ms var(--kaze-ease), box-shadow 200ms var(--kaze-ease), background-color 160ms;
+}
+:root[kaze] #pinned-tabs-container .tabbrowser-tab[kaze-essential]:hover .tab-background {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.12) !important;
+}
+
+/* Selector de espacios: el activo lleva el degradado de su espacio. */
+#kaze-space-bar .kaze-space-btn[selected] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--kaze-c1) 70%, var(--kaze-card)), color-mix(in srgb, var(--kaze-c2) 60%, var(--kaze-card))) !important;
+}
+
+/* Página flotante: más profundidad en oscuro. */
+@media (prefers-color-scheme: dark) {
+  :root[kaze][kaze-floating]:not([inDOMFullscreen], [sizemode="fullscreen"]) #tabbrowser-tabbox {
+    box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08), 0 10px 40px rgb(0 0 0 / 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[kaze] * { animation: none !important; transition: none !important; }
+}

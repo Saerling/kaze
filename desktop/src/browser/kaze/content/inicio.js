@@ -164,6 +164,17 @@ async function render() {
   $("#vacio").hidden = !!(fav.length || freq.length || reading.length);
 }
 
+function greet() {
+  const now = new Date();
+  const h = now.getHours();
+  $("#hola").textContent = h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+  const d = now.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" });
+  $("#fecha").textContent = d.charAt(0).toUpperCase() + d.slice(1) +
+    " · " + now.toLocaleTimeString("es", { hour: "numeric", minute: "2-digit" });
+}
+greet();
+setInterval(greet, 30_000);
+
 $("#buscar").addEventListener("click", () => win.gURLBar?.focus());
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState == "visible") render();

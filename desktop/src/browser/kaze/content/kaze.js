@@ -410,6 +410,7 @@
     switchTo(sid, { force = false } = {}) {
       const target = this.space(sid);
       if (!target || (!force && sid == this.activeId)) return;
+      if (!force) this.animateSwitch(this.spaces.indexOf(target) - this.spaces.findIndex(s => s.id == this.activeId));
       this.activeId = sid;
       SessionStore.setCustomWindowValue(window, "kaze-space", sid);
       SessionStore.setCustomWindowValue(window, "kaze-space-" + (target.profileId || DEFAULT_PROFILE), sid);
@@ -524,6 +525,7 @@
 
     buildUI() {
       this.buildToolbar();
+      this.setupLayout();
       this.buildMenus();
       const vt = document.getElementById("vertical-tabs");
       if (!vt) {
@@ -590,6 +592,38 @@
           // Ya existe (otra ventana lo creó).
         }
       }
+    },
+
+    /** Orden de la barra (una sola vez): panel, atrás, adelante, recargar, dirección, pestañas, descargas, extensiones. */
+    setupLayout() {
+      const CUI = window.CustomizableUI;
+      if (!CUI || Services.prefs.getBoolPref("kaze.layout.v2", false)) return;
+      try {
+        for (const id of CUI.getWidgetIdsInArea(CUI.AREA_NAVBAR)) {
+          if (id.startsWith("customizableui-special-") || ["alltabs-button", "smartwindow-group-tabs-button", "ai-window-toggle"].includes(id)) {
+            CUI.removeWidgetFromArea(id);
+          }
+        }
+        ["sidebar-button", "back-button", "forward-button", "stop-reload-button", "urlbar-container",
+          "kaze-overview-button", "downloads-button", "unified-extensions-button"]
+          .forEach((id, i) => {
+            if (CUI.getWidget(id)?.provider) CUI.addWidgetToArea(id, CUI.AREA_NAVBAR, i);
+          });
+        Services.prefs.setBoolPref("kaze.layout.v2", true);
+      } catch (e) {
+        console.warn("[Kaze] no se pudo ordenar la barra", e);
+      }
+    },
+
+    /** Animación al cambiar de espacio: la lista de pestañas entra desde el lado hacia el que vas. */
+    animateSwitch(dir) {
+      const box = document.getElementById("tabbrowser-tabs");
+      if (!box) return;
+      box.removeAttribute("kaze-anim");
+      void box.offsetWidth;
+      box.setAttribute("kaze-anim", dir > 0 ? "next" : "prev");
+      clearTimeout(this._animTimer);
+      this._animTimer = setTimeout(() => box.removeAttribute("kaze-anim"), 400);
     },
 
     paint() {

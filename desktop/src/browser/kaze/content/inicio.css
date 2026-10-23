@@ -236,3 +236,56 @@ a {
   color: var(--suave);
   text-align: center;
 }
+
+#saludo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  align-self: center;
+  width: min(560px, 100%);
+  animation: entrar 420ms cubic-bezier(.2, .8, .2, 1);
+  & img {
+    border-radius: 12px;
+    box-shadow: 0 6px 20px color-mix(in srgb, #8B5CF6 35%, transparent);
+  }
+  & h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 750;
+    letter-spacing: -0.6px;
+  }
+  & p {
+    margin: 2px 0 0;
+    color: var(--suave);
+  }
+}
+
+#buscar {
+  transition: box-shadow 200ms ease, transform 160ms ease;
+  &:hover {
+    box-shadow: 0 8px 30px rgb(0 0 0 / 0.12);
+    transform: translateY(-1px);
+  }
+}
+
+section:not([hidden]) {
+  animation: entrar 420ms cubic-bezier(.2, .8, .2, 1) both;
+}
+section:nth-of-type(2) { animation-delay: 60ms; }
+section:nth-of-type(3) { animation-delay: 120ms; }
+section:nth-of-type(4) { animation-delay: 180ms; }
+
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+:root {
+  @media (prefers-color-scheme: dark) {
+    --tinte: color-mix(in srgb, var(--kaze-c1, #DCE8D4) 22%, transparent);
+    --tinte2: color-mix(in srgb, var(--kaze-c2, #B9D3B0) 18%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

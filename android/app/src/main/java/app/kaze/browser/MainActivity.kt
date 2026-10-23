@@ -323,8 +323,6 @@ class MainActivity : ComponentActivity() {
         var zenPanel by remember { mutableStateOf(false) }
         // Tras buscar, la barra queda en píldora para dejarle la pantalla a la página.
         var pillAfterSearch by remember { mutableStateOf(false) }
-        // Alto máximo que ha tenido la barra (para la barra dinámica de Gecko).
-        var barMaxPx by remember { mutableIntStateOf(0) }
         val scope = rememberCoroutineScope()
 
         // Buscar una versión nueva en GitHub al abrir (solo en las versiones publicadas).
@@ -482,17 +480,11 @@ class MainActivity : ComponentActivity() {
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
         val density = LocalDensity.current
         // La página siempre deja libre el alto de la barra encogida (nunca cambia de tamaño: nada salta
-        // ni se traba). Lo que la barra completa tapa de más se lo decimos a Gecko ("barra dinámica"):
-        // así coloca encima los botones fijos de las páginas, como en Firefox para Android.
+        // ni se traba); la barra completa se superpone un poco al subir, como en Safari.
         val collapsedPx = with(density) { 32.dp.roundToPx() } + WindowInsets.navigationBars.getBottom(density)
-        fun onBarHeight(h: Int) {
-            geckoView.setVerticalClipping((h - collapsedPx).coerceAtLeast(0))
-            if (h > barMaxPx) {
-                barMaxPx = h
-                geckoView.setDynamicToolbarMaxHeight((h - collapsedPx).coerceAtLeast(0))
-            }
-        }
-        LaunchedEffect(showBar) { if (!showBar) geckoView.setVerticalClipping(0) }
+        // Sin "barra dinámica" de Gecko: desalineaba los toques en menús fijos de las páginas.
+        fun onBarHeight(@Suppress("UNUSED_PARAMETER") h: Int) = Unit
+        LaunchedEffect(Unit) { geckoView.setVerticalClipping(0); geckoView.setDynamicToolbarMaxHeight(0) }
 
         Box(Modifier.fillMaxSize().background(k.paper)) {
             Box(Modifier.fillMaxSize().then(if (ui.fullscreen) Modifier else Modifier.statusBarsPadding().imePadding())) {

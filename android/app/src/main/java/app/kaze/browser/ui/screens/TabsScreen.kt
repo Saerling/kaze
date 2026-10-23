@@ -39,7 +39,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -122,14 +122,16 @@ fun TabsScreen(
     val normal = store.normal(space.id).let { list ->
         if (query.isBlank()) list else list.filter { it.title.contains(query, true) || it.url.contains(query, true) }
     }
-    val grid = rememberLazyGridState()
+    // Cada espacio recuerda su propio desplazamiento: cambiar rápido entre espacios no deja la lista a medias.
+    val grid = remember(space.id) { LazyGridState() }
     // Modos de vista: tarjetas (por defecto), compacta (3 columnas) y lista.
     val mode = app.settings.tabsView
     val cols = when (mode) { "list" -> 1; "compact" -> 3; else -> 2 }
     LaunchedEffect(space.id) {
-        // Mostrar la pestaña actual sin tener que buscarla.
+        // Mostrar la pestaña actual sin tener que buscarla (solo si está más abajo de lo visible).
         val i = normal.indexOfFirst { it.id == store.selectedTabId }
-        if (i >= 0) grid.scrollToItem(i + 2)
+        val header = 1 + (if (essentials.isNotEmpty()) 1 else 0) + (if (pinned.isNotEmpty()) 1 else 0)
+        if (i >= 4) grid.scrollToItem(header + i)
     }
 
     var drag by remember { mutableFloatStateOf(0f) }
@@ -144,6 +146,7 @@ fun TabsScreen(
         },
     ) {
         SpaceBackground(if (space.id == Space.PRIVATE_ID) listOf(0xFF3A3A55.toInt()) else space.colors, strength = 0.35f)
+        androidx.compose.runtime.key(space.id) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(cols),
             state = grid,
@@ -210,6 +213,8 @@ fun TabsScreen(
                     }
                 }
             }
+        }
+
         }
 
         // Selector de espacios (emojis) encima de la barra, como el de Zen.

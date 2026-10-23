@@ -189,7 +189,7 @@ class Updater(private val context: Context) {
         readTimeout = 30_000
         instanceFollowRedirects = true
         setRequestProperty("Accept", "application/vnd.github+json, application/octet-stream")
-        setRequestProperty("User-Agent", "Zev/${BuildConfig.VERSION_NAME}")
+        setRequestProperty("User-Agent", "Pyx/${BuildConfig.VERSION_NAME}")
     }
 
     private fun get(url: String): String {
@@ -203,7 +203,7 @@ class Updater(private val context: Context) {
     }
 
     companion object {
-        private const val TAG = "ZevUpdater"
+        private const val TAG = "PyxUpdater"
         const val ACTION_INSTALL_STATUS = "app.kaze.browser.INSTALL_STATUS"
 
         /** La versión Android más nueva de la respuesta de GitHub, con el APK para el procesador [abi]. */

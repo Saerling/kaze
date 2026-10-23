@@ -157,6 +157,7 @@ class SessionPool(
     /** Cambia entre versión móvil y de escritorio de la página. */
     fun setDesktopMode(tab: Tab, desktop: Boolean) {
         tab.desktopMode = desktop
+        tab.desktopTouched = true
         sessions[tab.id]?.let { s ->
             s.settings.userAgentMode =
                 if (desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
@@ -176,6 +177,8 @@ class SessionPool(
             .suspendMediaWhenInactive(true)
             .allowJavascript(settings.javascript)
         space?.contextId(store.profileById(space.profileId))?.let(b::contextId)
+        // En tableta, las páginas se piden en versión de escritorio (se puede cambiar por pestaña).
+        if (ui.tablet && settings.tabletDesktop && !tab.desktopTouched) tab.desktopMode = true
         if (tab.desktopMode) {
             b.userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
             b.viewportMode(GeckoSessionSettings.VIEWPORT_MODE_DESKTOP)
@@ -402,6 +405,11 @@ class SessionPool(
     }
 
     private inner class History(private val tab: Tab) : HistoryDelegate {
+        override fun onHistoryStateChange(session: GeckoSession, history: HistoryDelegate.HistoryList) {
+            tab.historyItems = history.map { (it.title.orEmpty()) to it.uri }
+            tab.historyIndex = history.currentIndex
+        }
+
         override fun onVisited(session: GeckoSession, url: String, lastVisitedURL: String?, flags: Int): GeckoResult<Boolean>? {
             if (tab.isPrivate) return GeckoResult.fromValue(false)
             val skip = HistoryDelegate.VISIT_REDIRECT_SOURCE or HistoryDelegate.VISIT_REDIRECT_SOURCE_PERMANENT or
@@ -485,7 +493,7 @@ class SessionPool(
     }
 
     companion object {
-        private const val TAG = "ZevSessions"
+        private const val TAG = "PyxSessions"
         private val WEB_SCHEMES = setOf(
             "http", "https", "about", "data", "blob", "file", "javascript", "moz-extension", "resource", "view-source",
         )

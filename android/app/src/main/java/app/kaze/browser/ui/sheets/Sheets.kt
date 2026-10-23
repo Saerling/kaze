@@ -634,8 +634,8 @@ fun PrivacyReportSheet(tab: Tab?, onDismiss: () -> Unit) {
                 Icon(Icons.Outlined.Shield, null, tint = k.ink, modifier = Modifier.size(34.dp))
                 Spacer(Modifier.width(14.dp))
                 Text(
-                    if (days > 0) "En ${if (days == 1L) "el último día" else "los últimos $days días"}, Zev evitó que $total rastreadores te siguieran."
-                    else "Zev bloquea los rastreadores que te siguen entre sitios.",
+                    if (days > 0) "En ${if (days == 1L) "el último día" else "los últimos $days días"}, Pyx evitó que $total rastreadores te siguieran."
+                    else "Pyx bloquea los rastreadores que te siguen entre sitios.",
                     style = KazeType.subhead, color = k.ink, modifier = Modifier.weight(1f),
                 )
             }

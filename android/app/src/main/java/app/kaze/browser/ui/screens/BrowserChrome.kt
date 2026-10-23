@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.slideInVertically
@@ -119,6 +122,8 @@ class ChromeActions(
     val onSpaces: () -> Unit,
     /** Casa: volver a la página de inicio de Kaze en esta pestaña. */
     val onHome: () -> Unit,
+    /** Mantener atrás (-1) o adelante (+1): lista de páginas anteriores o siguientes. */
+    val onHistoryMenu: (Int) -> Unit = {},
     val onNewTab: () -> Unit,
 )
 
@@ -189,7 +194,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
                 Spacer(Modifier.width(4.dp))
             }
             Text(
-                addressLabel(tab).ifBlank { "Zev" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
+                addressLabel(tab).ifBlank { "Pyx" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
                 color = k.ink, maxLines = 1,
             )
         }
@@ -216,8 +221,8 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onClick = a.onBack)
-            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante", enabled = tab.canGoForward, onClick = a.onForward)
+            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack)
+            ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward)
             HomeButton(tab.isStart, a.onHome, a.onSpaces)
             ToolbarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
@@ -288,7 +293,7 @@ fun ZenPanel(
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
-            Modifier.navigationBarsPadding().padding(10.dp).fillMaxWidth()
+            Modifier.navigationBarsPadding().padding(10.dp).widthIn(max = 560.dp).fillMaxWidth()
                 .glass(RoundedCornerShape(26.dp))
                 .background(spaceTint(spaces.firstOrNull { it.id == currentSpaceId }))
                 .clickable(enabled = false) {}
@@ -535,5 +540,59 @@ private fun ZenAction(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
         Icon(icon, null, tint = k.accent, modifier = Modifier.size(20.dp))
         Spacer(Modifier.height(4.dp))
         Text(label, style = KazeType.caption, color = k.ink)
+    }
+}
+
+/**
+ * Mini menú del historial de la pestaña (mantener atrás o adelante): fichas que se despliegan desde
+ * la barra, la más cercana abajo. Toca una para ir directo a esa página.
+ */
+@Composable
+fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () -> Unit) {
+    val k = LocalKaze.current
+    val items = tab.historyItems
+    val cur = tab.historyIndex
+    val indices = if (direction < 0) (cur - 1 downTo 0).toList() else (cur + 1..items.lastIndex).toList()
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        contentAlignment = if (direction < 0) Alignment.BottomStart else Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier.navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 120.dp)
+                .widthIn(max = 420.dp).heightIn(max = 420.dp)
+                .clip(RoundedCornerShape(24.dp)).background(k.glass).padding(8.dp)
+                .verticalScroll(rememberScrollState(), reverseScrolling = true),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                if (direction < 0) "Páginas anteriores" else "Páginas siguientes",
+                style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink55,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            // De arriba a abajo: la más lejana arriba y la más cercana junto a la barra.
+            indices.reversed().forEachIndexed { pos, i ->
+                val (title, url) = items[i]
+                androidx.compose.animation.AnimatedVisibility(
+                    shown,
+                    enter = fadeIn(tween(160, delayMillis = (indices.size - pos) * 25)) +
+                        slideInVertically(spring(0.8f, 500f)) { it / 2 },
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(k.card)
+                            .clickable { onGo(i); onDismiss() }.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        FaviconTile(url, 30.dp, 18.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(title.ifBlank { Urls.displayHost(url) }, style = KazeType.subhead.copy(fontWeight = FontWeight.Medium), color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(Urls.displayHost(url), style = KazeType.caption, color = k.ink55, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
     }
 }

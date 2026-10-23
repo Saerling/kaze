@@ -20,7 +20,7 @@ internal object Http {
         c.connectTimeout = timeoutMs
         c.readTimeout = timeoutMs
         c.instanceFollowRedirects = true
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile) Zev")
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile) Pyx")
         try {
             if (c.responseCode !in 200..299) null
             else c.inputStream.use { ins ->

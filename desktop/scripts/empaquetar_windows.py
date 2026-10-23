@@ -3,9 +3,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """
-Arma Kaze para Windows sobre el Firefox oficial (sin compilar Firefox).
+Arma Pyx para Windows sobre Zen Browser (sin compilar nada): Zen tal cual, con la marca,
+la identidad y el actualizador de Pyx.
 
-    python desktop/scripts/empaquetar_windows.py --setup "Firefox Setup 158.0.1.exe" --build 12
+    python desktop/scripts/empaquetar_windows.py --setup zen.installer.exe --build 12
 
 Deja la carpeta lista en desktop/dist/Kaze y, si está makensis, el instalador
 desktop/dist/Kaze-<versión>-setup.exe.
@@ -36,7 +37,9 @@ from mozjar import JarReader, JarWriter  # noqa: E402
 MARCA = DESKTOP / "configs" / "branding" / "release"
 LOGO_SVG = DESKTOP.parent / "branding" / "kaze-logo.svg"
 
-# Archivos de Firefox que Kaze no usa (actualizador de Mozilla, telemetría, ventana privada suelta).
+EXE = "zen.exe"
+
+# Archivos que Pyx no usa (actualizador de Mozilla, telemetría, ventana privada suelta).
 QUITAR = [
     "updater.exe", "updater.ini", "update-settings.ini", "maintenanceservice.exe",
     "maintenanceservice_installer.exe", "default-browser-agent.exe", "pingsender.exe",
@@ -56,19 +59,19 @@ POLITICAS = {
     }
 }
 
-MARCA_FTL = """-brand-shorter-name = Zev
--brand-short-name = Zev
--brand-shortcut-name = Zev
--brand-full-name = Zev
--brand-product-name = Zev
+MARCA_FTL = """-brand-shorter-name = Pyx
+-brand-short-name = Pyx
+-brand-shortcut-name = Pyx
+-brand-full-name = Pyx
+-brand-product-name = Pyx
 -vendor-short-name = Mozilla
-trademarkInfo = Zev es un navegador basado en Firefox. Firefox es una marca registrada de la Fundación Mozilla.
+trademarkInfo = Pyx está basado en Zen Browser y Firefox. Firefox es una marca registrada de la Fundación Mozilla.
 """
-MARCA_PROPERTIES = "brandShorterName = Zev\nbrandShortName = Zev\nbrandFullName = Zev\n"
+MARCA_PROPERTIES = "brandShorterName = Pyx\nbrandShortName = Pyx\nbrandFullName = Pyx\n"
 WORDMARK = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 42">'
     '<text x="0" y="33" font-family="Segoe UI, system-ui, sans-serif" font-size="36" '
-    'font-weight="700" fill="context-fill" letter-spacing="-1">Zev</text></svg>\n'
+    'font-weight="700" fill="context-fill" letter-spacing="-1">Pyx</text></svg>\n'
 )
 
 
@@ -76,8 +79,8 @@ def extraer(setup: Path, destino: Path) -> Path:
     print(f"Extrayendo {setup.name}…")
     subprocess.run(["7z", "x", "-y", f"-o{destino}", str(setup)], check=True, stdout=subprocess.DEVNULL)
     core = destino / "core"
-    if not (core / "firefox.exe").exists():
-        sys.exit("El instalador no tiene core/firefox.exe: ¿es el instalador completo de Firefox?")
+    if not (core / EXE).exists():
+        sys.exit(f"El instalador no tiene core/{EXE}: ¿es zen.installer.exe?")
     return core
 
 
@@ -86,9 +89,10 @@ def identidad(app: Path, build_id: str) -> None:
     texto = (app / "application.ini").read_text(encoding="utf-8")
     lineas = [l for l in texto.splitlines() if not l.startswith(";")]
     texto = "\n".join(lineas) + "\n"
-    texto = re.sub(r"^Vendor=.*$", "Vendor=Kaze", texto, flags=re.M)
-    texto = re.sub(r"^Name=.*$", "Name=Kaze", texto, flags=re.M)
-    texto = re.sub(r"^RemotingName=.*$", "RemotingName=kaze", texto, flags=re.M)
+    texto = re.sub(r"^Vendor=.*$", "Vendor=Pyx", texto, flags=re.M)
+    texto = re.sub(r"^Name=.*$", "Name=Pyx", texto, flags=re.M)
+    texto = re.sub(r"^RemotingName=.*$", "RemotingName=pyx", texto, flags=re.M)
+    texto = re.sub(r"^Profile=.*$", "Profile=pyx", texto, flags=re.M)
     # Un BuildID propio por versión de Kaze: Firefox limpia su caché de arranque al cambiar.
     texto = re.sub(r"^BuildID=.*$", f"BuildID={build_id}", texto, flags=re.M)
     texto = re.sub(r"^EnableProfileMigrator=.*$", "EnableProfileMigrator=0", texto, flags=re.M)
@@ -142,13 +146,20 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
     destino = app / "kaze"
     if destino.exists():
         shutil.rmtree(destino)
-    destino.mkdir()
+    (destino / "content").mkdir(parents=True)
     shutil.copy2(KAZE / "kaze.manifest", destino / "kaze.manifest")
-    shutil.copytree(KAZE / "content", destino / "content")
+    shutil.copy2(KAZE / "content" / "actualizador.js", destino / "content" / "actualizador.js")
 
-    prefs = preferencias_cfg(windows=True, extra={"kaze.build": build, "kaze.version": version})
-    # Las preferencias de Kaze solo se aplican al abrir Kaze (no al abrir firefox.exe a secas).
-    cfg = cargador("") + '\nif (Services.appinfo.name == "Kaze") {\n' + prefs + "}\n"
+    # Solo lo de Pyx: número de versión, de dónde salen las actualizaciones y español por defecto.
+    prefs = (
+        f'  defaultPref("kaze.build", {build});\n'
+        f'  defaultPref("kaze.version", "{version}");\n'
+        '  defaultPref("kaze.update.repo", "Saerling/kaze");\n'
+        '  defaultPref("intl.locale.requested", "es-ES");\n'
+        '  defaultPref("app.update.auto", false);\n'
+    )
+    cfg = (KAZE / "cargador-zen.cfg").read_text(encoding="utf-8")
+    cfg += '\nif (Services.appinfo.name == "Pyx") {\n' + prefs + "}\n"
     (app / "kaze.cfg").write_text(cfg, encoding="utf-8")
     (app / "defaults" / "pref" / "kaze-loader.js").write_text(
         'pref("general.config.filename", "kaze.cfg");\n'
@@ -172,14 +183,14 @@ def poner_icono_exe(exe: Path, ico: Path) -> None:
     script = AQUI / "icono_exe.mjs"
     try:
         subprocess.run(["node", str(script), str(exe), str(ico)], check=True, cwd=AQUI)
-        print("  ícono de firefox.exe cambiado por el de Zev")
+        print("  ícono de firefox.exe cambiado por el de Pyx")
     except (OSError, subprocess.CalledProcessError) as e:
         print(f"  (no se pudo cambiar el ícono del .exe: {e})")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--setup", required=True, type=Path, help='instalador oficial "Firefox Setup X.exe" (win64)')
+    ap.add_argument("--setup", required=True, type=Path, help="instalador de Zen (zen.installer.exe)")
     ap.add_argument("--build", required=True, type=int, help="número de esta versión de Kaze (sube con cada una)")
     ap.add_argument("--salida", type=Path, default=DESKTOP / "dist")
     ap.add_argument("--sin-instalador", action="store_true", help="solo la carpeta, sin llamar a makensis")
@@ -194,7 +205,7 @@ def main() -> None:
     build_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
 
     a.salida.mkdir(parents=True, exist_ok=True)
-    app = a.salida / "Kaze"
+    app = a.salida / "Pyx"
     if app.exists():
         shutil.rmtree(app)
     with tempfile.TemporaryDirectory() as tmp:
@@ -210,8 +221,9 @@ def main() -> None:
     identidad(app, build_id)
     remarcar_omni(app / "browser" / "omni.ja")
     copiar_kaze(app, a.build, version)
-    poner_icono_exe(app / "firefox.exe", MARCA / "firefox.ico")
-    (app / "kaze-version.txt").write_text(f"Kaze {version} (Firefox {firefox}, build {build_id})\n", encoding="utf-8")
+    poner_icono_exe(app / EXE, MARCA / "firefox.ico")
+    zen = re.search(r"^Version=(.*)$", (app / "application.ini").read_text(encoding="utf-8"), re.M)
+    (app / "kaze-version.txt").write_text(f"Pyx {version} (Zen {zen.group(1) if zen else '?'}, build {build_id})\n", encoding="utf-8")
     print(f"Carpeta lista: {app}")
 
     if a.sin_instalador:
@@ -219,11 +231,11 @@ def main() -> None:
     makensis = shutil.which("makensis")
     if not makensis:
         sys.exit("Falta makensis (NSIS) para crear el instalador; usa --sin-instalador para solo la carpeta.")
-    exe = a.salida / f"Zev-{version}-setup.exe"
+    exe = a.salida / f"Pyx-{version}-setup.exe"
     subprocess.run([
         makensis, "-V2", "-INPUTCHARSET", "UTF8",
         f"-DVERSION={version}", f"-DFIREFOX={firefox}", f"-DBUILD={a.build}",
-        f"-DORIGEN={app}", f"-DSALIDA={exe}", f"-DICONO={MARCA / 'firefox.ico'}",
+        f"-DORIGEN={app}", f"-DSALIDA={exe}", f"-DICONO={MARCA / 'firefox.ico'}", f"-DEXE={EXE}",
         str(DESKTOP / "windows" / "kaze.nsi"),
     ], check=True)
     print(f"Instalador: {exe} ({exe.stat().st_size / 1048576:.0f} MB)")

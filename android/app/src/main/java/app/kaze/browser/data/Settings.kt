@@ -60,6 +60,10 @@ class Settings(context: Context) {
     var textSize by pref("text_size", 100)
     /** Vista de pestañas: "grid" (tarjetas, por defecto), "compact" (3 columnas) o "list". */
     var tabsView by pref("tabs_view", "grid")
+    /** Modo tableta: "auto" (pantallas de 600 dp o más), "on" u "off". */
+    var tabletMode by pref("tablet_mode", "auto")
+    /** En tableta, pedir la versión de escritorio de las páginas. */
+    var tabletDesktop by pref("tablet_desktop", true)
     var uiStyle by pref("ui_style", UiStyle.SAFARI) { UiStyle.valueOf(it) }
     var accent by pref("accent", AccentColor.AUTO) { AccentColor.valueOf(it) }
     // Secciones de la página de inicio.

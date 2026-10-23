@@ -179,7 +179,7 @@
       if (!ContextualIdentityService) return 0;
       Services.prefs.setBoolPref("privacy.userContext.enabled", true);
       const color = CONTAINER_COLORS[this.profiles.length % CONTAINER_COLORS.length];
-      return ContextualIdentityService.create(`Zev · ${name}`, "fingerprint", color).userContextId;
+      return ContextualIdentityService.create(`Pyx · ${name}`, "fingerprint", color).userContextId;
     },
 
     addProfile() {
@@ -205,7 +205,7 @@
       const name = this.ask("Renombrar perfil", "Nombre:", p.name);
       if (!name?.trim()) return;
       p.name = name.trim();
-      if (p.container) ContextualIdentityService?.update(p.container, `Zev · ${p.name}`, "fingerprint",
+      if (p.container) ContextualIdentityService?.update(p.container, `Pyx · ${p.name}`, "fingerprint",
         ContextualIdentityService.getPublicIdentityFromId(p.container)?.color || "blue");
       this.saveProfiles();
       this.paint();
@@ -1105,7 +1105,7 @@
 
     /**
      * Las versiones de Windows se publican como "windows-<número>" con un instalador
-     * "Zev-…-setup.exe". El número de esta copia está en kaze.build (0 en desarrollo).
+     * "Pyx-…-setup.exe". El número de esta copia está en kaze.build (0 en desarrollo).
      */
     async checkForUpdate({ manual = false } = {}) {
       const build = Services.prefs.getIntPref(PREF_BUILD, 0);
@@ -1193,7 +1193,7 @@
         const info = await IOUtils.stat(target);
         if (asset.size && info.size != asset.size) throw new Error("la descarga quedó incompleta");
 
-        await show("Actualización lista. Zev se cerrará un momento para instalarla y se abrirá de nuevo.", [
+        await show("Actualización lista. Pyx se cerrará un momento para instalarla y se abrirá de nuevo.", [
           {
             label: "Reiniciar y actualizar",
             accessKey: "R",

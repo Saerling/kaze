@@ -148,7 +148,9 @@ fun TabsScreen(
     val grid = remember(space.id) { LazyGridState() }
     // Modos de vista: tarjetas (por defecto), compacta (3 columnas) y lista.
     val mode = app.settings.tabsView
-    val cols = when (mode) { "list" -> 1; "compact" -> 3; else -> 2 }
+    // En tableta caben más columnas.
+    val tablet = app.ui.tablet
+    val cols = when (mode) { "list" -> if (tablet) 2 else 1; "compact" -> if (tablet) 6 else 3; else -> if (tablet) 4 else 2 }
     LaunchedEffect(space.id) {
         // Mostrar la pestaña actual sin tener que buscarla (solo si está más abajo de lo visible).
         val i = normal.indexOfFirst { it.id == store.selectedTabId }

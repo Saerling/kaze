@@ -113,6 +113,11 @@ class Tab(
     var loading by mutableStateOf(false)
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
+    /** Historial atrás/adelante de la pestaña (título, dirección) y la posición actual. */
+    var historyItems by mutableStateOf<List<Pair<String, String>>>(emptyList())
+    var historyIndex by mutableIntStateOf(0)
+    /** El usuario cambió a mano la versión de escritorio (no se vuelve a aplicar la de tableta). */
+    var desktopTouched = false
     var isSecure by mutableStateOf(true)
     /** true mientras Gecko tiene la página cargada en memoria. */
     var isLive by mutableStateOf(false)

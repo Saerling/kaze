@@ -53,8 +53,9 @@ Preferencias en `about:config`: `kaze.unloader.minutes` (dormir pestañas, por d
 
 ## Cómo se arma el instalador
 
-Compilar Firefox entero tarda horas y pide un PC potente, así que el instalador se arma sobre el
-**Firefox oficial de Mozilla** (en español) y le pone Kaze encima, en unos minutos
+Pyx para Windows se arma sobre **Zen Browser** (su instalador oficial): es Zen tal cual —estética,
+espacios, Essentials, vista dividida, modo compacto, animaciones— con la marca, la identidad y el
+actualizador de Pyx encima, en unos minutos
 ([`scripts/empaquetar_windows.py`](scripts/empaquetar_windows.py)):
 
 - **Identidad propia**: `browser/application.ini` con `Name=Kaze`; los accesos directos abren

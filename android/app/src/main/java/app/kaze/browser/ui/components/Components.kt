@@ -71,7 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-val LocalApp = staticCompositionLocalOf<Kaze> { error("Zev no inicializado") }
+val LocalApp = staticCompositionLocalOf<Kaze> { error("Pyx no inicializado") }
 
 // ── Fondo suave del grupo (página de inicio y vista de pestañas) ──────
 
@@ -262,14 +262,20 @@ fun GlassCircle(icon: ImageVector, label: String, modifier: Modifier = Modifier,
 
 /** Ícono de barra de herramientas: azul, plano, como en Safari. */
 @Composable
-fun ToolbarIcon(icon: ImageVector, label: String, enabled: Boolean = true, tint: Color? = null, onClick: () -> Unit) {
+fun ToolbarIcon(icon: ImageVector, label: String, enabled: Boolean = true, tint: Color? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
     val k = LocalKaze.current
     val source = remember { MutableInteractionSource() }
     // Como en Safari: sin onda; el ícono se encoge un poco al tocarlo y el color cambia suave.
     val color by animateColorAsState(if (enabled) (tint ?: k.accent) else k.ink35, tween(180), label = "iconTint")
     Box(
         Modifier.size(48.dp).clip(CircleShape)
-            .then(if (enabled) Modifier.clickable(source, indication = null, onClick = onClick) else Modifier)
+            .then(
+                when {
+                    !enabled -> Modifier
+                    onLong != null -> Modifier.combinedClickable(source, indication = null, onLongClick = onLong, onClick = onClick)
+                    else -> Modifier.clickable(source, indication = null, onClick = onClick)
+                },
+            )
             .pressFeedback(source, 0.86f)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,

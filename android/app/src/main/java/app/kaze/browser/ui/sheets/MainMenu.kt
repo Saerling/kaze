@@ -137,7 +137,7 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
                 IosRow("Ajustes", Icons.Outlined.Settings, onClick = go(a.onSettings))
                 IosRow("Personalizar página de inicio", Icons.Outlined.Home, onClick = go(a.onCustomizeHome))
                 IosRow("Ayuda y comentarios", Icons.AutoMirrored.Outlined.HelpOutline, onClick = go(a.onHelp))
-                IosRow("Establecer Zev como predeterminado", Icons.Outlined.TaskAlt, divider = false, onClick = go(a.onDefaultBrowser))
+                IosRow("Establecer Pyx como predeterminado", Icons.Outlined.TaskAlt, divider = false, onClick = go(a.onDefaultBrowser))
             }
             Spacer(Modifier.height(24.dp))
         }

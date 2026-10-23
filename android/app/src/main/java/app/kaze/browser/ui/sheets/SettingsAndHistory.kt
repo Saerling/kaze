@@ -216,7 +216,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             if (needsRestart) {
                 Spacer(Modifier.height(8.dp))
                 IosGroup {
-                    IosRow("Reiniciar Zev para aplicar los cambios", titleColor = k.accent, divider = false, onClick = onRestart)
+                    IosRow("Reiniciar Pyx para aplicar los cambios", titleColor = k.accent, divider = false, onClick = onRestart)
                 }
             }
 
@@ -241,6 +241,17 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                 ) { s.tabsView = it }
             }
             Note("Material You usa los colores de tu fondo de pantalla (Android 12 o más nuevo) con el color en Automático.")
+
+            IosSectionHeader("Tableta")
+            IosGroup {
+                Choice(
+                    "Modo tableta", listOf("auto", "on", "off"), s.tabletMode,
+                    { when (it) { "on" -> "Activado"; "off" -> "Desactivado"; else -> "Automático" } },
+                ) { s.tabletMode = it }
+                Toggle("Versión de escritorio de las páginas", s.tabletDesktop, divider = false) { s.tabletDesktop = it }
+            }
+            Note("En tableta, Pyx usa más columnas en las pestañas, centra la barra y pide las páginas de escritorio.")
+
 
             IosSectionHeader("Página de inicio")
             IosGroup {
@@ -267,7 +278,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
                 }
             }
-            Note("Zev usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
+            Note("Pyx usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
 
             IosSectionHeader("Memoria")
             IosGroup {
@@ -319,7 +330,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze/issues"))) }
                 }
             }
-            Note("Zev es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
+            Note("Pyx es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
             Spacer(Modifier.height(24.dp))
         }
     }

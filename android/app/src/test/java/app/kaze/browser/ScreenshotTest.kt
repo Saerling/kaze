@@ -138,7 +138,7 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-inicio.png")
     }
 
-    private fun actions() = ChromeActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+    private fun actions() = ChromeActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
     @Test fun panelZen() {
         app.store.pinned(app.store.currentSpaceId).take(3).forEach { app.store.setKind(it, TabKind.ESSENTIAL) }

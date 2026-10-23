@@ -4,6 +4,9 @@
 
 package app.kaze.browser
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.SideEffect
+import app.kaze.browser.ui.screens.HistoryPopup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -169,9 +172,9 @@ class MainActivity : ComponentActivity() {
                     CrashSheet(
                         text = text,
                         onCopy = {
-                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Zev", text))
+                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Pyx", text))
                         },
-                        onShare = { share(text, "Error de Zev") },
+                        onShare = { share(text, "Error de Pyx") },
                         onDismiss = { startBrowser(null) },
                     )
                 }
@@ -194,7 +197,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         ClipboardBridge.copy = { text ->
-            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Zev", text))
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Pyx", text))
             app.ui.show("Copiado")
         }
 
@@ -330,6 +333,7 @@ class MainActivity : ComponentActivity() {
         var finding by remember { mutableStateOf(false) }
         var barHidden by remember { mutableStateOf(false) }
         var zenPanel by remember { mutableStateOf(false) }
+        var historyMenu by remember { mutableIntStateOf(0) }
         // Tras buscar, la barra queda en píldora para dejarle la pantalla a la página.
         var pillAfterSearch by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
@@ -487,6 +491,7 @@ class MainActivity : ComponentActivity() {
                 onSwipeTab = ::swipeTab,
                 onExpand = { barHidden = false; pillAfterSearch = false; ui.scrollDirection = -1 },
                 onSpaces = { zenPanel = true },
+                onHistoryMenu = { dir -> historyMenu = dir },
                 onHome = {
                     // Volver a la página de inicio de Kaze en esta pestaña.
                     store.onUrl(t, Urls.START)
@@ -497,6 +502,14 @@ class MainActivity : ComponentActivity() {
         }
         val collapsed = tab != null && !tab.isStart && (ui.scrollDirection > 0 || barHidden || pillAfterSearch)
 
+        // Modo tableta: automático (pantalla de 600 dp o más) o forzado desde Ajustes.
+        val config = androidx.compose.ui.platform.LocalConfiguration.current
+        val tabletNow = when (app.settings.tabletMode) {
+            "on" -> true
+            "off" -> false
+            else -> config.smallestScreenWidthDp >= 600
+        }
+        SideEffect { ui.tablet = tabletNow }
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
         val density = LocalDensity.current
@@ -554,7 +567,9 @@ class MainActivity : ComponentActivity() {
                             tabCount = store.tabs.count { it.spaceId == tab.spaceId && it.kind != TabKind.ESSENTIAL },
                             collapsed = collapsed,
                             a = actions,
-                            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { onBarHeight(it.height) },
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                                .then(if (tabletNow) Modifier.widthIn(max = 720.dp) else Modifier)
+                                .onSizeChanged { onBarHeight(it.height) },
                         )
                     }
                 }
@@ -696,6 +711,14 @@ class MainActivity : ComponentActivity() {
                         showTabs = true
                     },
                 )
+            }
+            if (historyMenu != 0 && tab != null) {
+                HistoryPopup(
+                    tab = tab, direction = historyMenu,
+                    onGo = { i -> app.pool.sessionOf(tab.id)?.gotoHistoryIndex(i) },
+                    onDismiss = { historyMenu = 0 },
+                )
+                BackHandler { historyMenu = 0 }
             }
             AnimatedVisibility(
                 visible = zenPanel,

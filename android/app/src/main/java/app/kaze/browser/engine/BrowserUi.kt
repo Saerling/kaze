@@ -60,6 +60,8 @@ class BrowserUi {
     var toastAction by mutableStateOf<Pair<String, () -> Unit>?>(null)
     /** Pide abrir Ajustes desde cualquier hoja. */
     var openSettings by mutableStateOf(false)
+    /** Interfaz de tableta activa (la decide MainActivity según la pantalla y Ajustes). */
+    var tablet by mutableStateOf(false)
 
     /** Dirección del último scroll de la página: >0 bajando, <0 subiendo. */
     var scrollDirection by mutableIntStateOf(0)

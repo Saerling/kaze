@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.verticalScroll
@@ -147,7 +150,13 @@ fun SafariBottomBar(
     onSelectTab: (Tab) -> Unit = {},
     /** Barra arriba (uso tipo escritorio) en vez de abajo. */
     top: Boolean = false,
+    /** Diseño compacto de Safari: una sola píldora flotante (atrás · sitio · ⋯). */
+    compact: Boolean = false,
 ) {
+    if (compact) {
+        CompactBar(tab, space, tabCount, collapsed, a, modifier)
+        return
+    }
     AnimatedContent(
         targetState = collapsed,
         // Se funde y crece desde abajo con un resorte suave (sin escalar: no hay saltos ni temblores).
@@ -660,6 +669,98 @@ fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () ->
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Barra compacta de Safari: una píldora flotante con atrás, el sitio y "⋯". Al bajar por la página
+ * se encoge; "⋯" abre un menú vertical con el resto de acciones. Deslizar hacia arriba abre las pestañas.
+ */
+@Composable
+private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolean, a: ChromeActions, modifier: Modifier) {
+    val k = LocalKaze.current
+    var menu by remember { mutableStateOf(false) }
+    val height by animateDpAsState(if (collapsed) 38.dp else 52.dp, spring(0.8f, 420f), label = "compactH")
+    val side by animateDpAsState(if (collapsed) 70.dp else 14.dp, spring(0.8f, 420f), label = "compactW")
+    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().height(height).glass(RoundedCornerShape(50), 16f)
+                .pointerInput(Unit) {
+                    var total = 0f
+                    detectVerticalDragGestures(onDragStart = { total = 0f }, onDragEnd = { if (total < -50) a.onTabs() }) { c, dy -> c.consume(); total += dy }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (!collapsed) {
+                ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack)
+            }
+            Row(
+                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(50))
+                    .clickable { if (collapsed) a.onExpand() else a.onAddress() },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (tab.isSecure && !tab.isStart) {
+                    Icon(Icons.Outlined.Lock, null, tint = k.ink55, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(5.dp))
+                }
+                Text(
+                    addressLabel(tab).ifBlank { "Buscar o escribir dirección" },
+                    style = (if (collapsed) KazeType.footnote else KazeType.body).copy(fontWeight = FontWeight.Medium),
+                    color = if (tab.isStart) k.ink55 else k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (!collapsed) {
+                ToolbarIcon(Icons.Outlined.MoreHoriz, "Más", onLong = a.onShare, onClick = { menu = true })
+            }
+        }
+        if (tab.loading) {
+            val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "cp")
+            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 24.dp).fillMaxWidth(progress.coerceIn(0.05f, 1f)).height(2.dp).clip(RoundedCornerShape(50)).background(k.accent))
+        }
+    }
+    if (menu) CompactMenu(tab, tabCount, a) { menu = false }
+}
+
+/** Menú vertical de la barra compacta (como el "⋯" de Safari en iOS). */
+@Composable
+private fun CompactMenu(tab: Tab, tabCount: Int, a: ChromeActions, onDismiss: () -> Unit) {
+    val k = LocalKaze.current
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    Box(
+        Modifier.fillMaxSize().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.BottomEnd,
+    ) {
+        androidx.compose.animation.AnimatedVisibility(
+            shown,
+            enter = fadeIn(tween(140)) + scaleIn(spring(0.75f, 520f), initialScale = 0.6f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
+        ) {
+            Column(
+                Modifier.navigationBarsPadding().padding(end = 16.dp, bottom = 70.dp).width(250.dp)
+                    .glass(RoundedCornerShape(22.dp), 20f).padding(vertical = 6.dp),
+            ) {
+                @Composable
+                fun item(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean = true, action: () -> Unit) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable(enabled = enabled) { onDismiss(); action() }.padding(horizontal = 16.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, style = KazeType.body, color = if (enabled) k.ink else k.ink35, modifier = Modifier.weight(1f))
+                        Icon(icon, null, tint = if (enabled) k.ink else k.ink35, modifier = Modifier.size(20.dp))
+                    }
+                }
+                item(Icons.Outlined.Translate, "Opciones de la página (AA)", enabled = !tab.isStart, action = a.onAa)
+                item(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante", enabled = tab.canGoForward, action = a.onForward)
+                item(Icons.Outlined.Refresh, "Recargar", enabled = !tab.isStart, action = a.onReload)
+                item(Icons.Outlined.Home, "Página de inicio", action = a.onHome)
+                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(0.5.dp).background(k.separator))
+                item(Icons.Outlined.Add, "Nueva pestaña", action = a.onNewTab)
+                item(Icons.Outlined.GridView, "Pestañas ($tabCount)", action = a.onTabs)
+                item(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos e historial", action = a.onLibrary)
+                item(Icons.Outlined.MoreHoriz, "Más opciones", action = a.onShare)
             }
         }
     }

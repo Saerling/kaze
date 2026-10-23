@@ -230,7 +230,10 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             IosSectionHeader("Diseño")
             IosGroup {
                 Choice("Estilo", UiStyle.entries, s.uiStyle, { it.label }) { s.uiStyle = it }
-                Choice("Barra de direcciones", listOf(false, true), s.barTop, { if (it) "Arriba" else "Abajo" }) { s.barTop = it }
+                Choice(
+                    "Diseño de la barra", listOf("compact", "bottom", "top"), if (s.barTop && s.barLayout == "bottom") "top" else s.barLayout,
+                    { when (it) { "compact" -> "Compacta"; "top" -> "Arriba"; else -> "Abajo" } },
+                ) { s.barLayout = it; s.barTop = it == "top" }
                 Choice("Color", AccentColor.entries, s.accent, { it.label }) { s.accent = it }
                 Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
                 Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {

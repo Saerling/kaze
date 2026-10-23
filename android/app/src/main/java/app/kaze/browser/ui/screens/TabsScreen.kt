@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
@@ -345,17 +346,22 @@ fun TabsScreen(
         }
 
         // Barra inferior: + · grupo · Listo
+        // Como Safari: botones redondos flotantes (+ e historial), la píldora del grupo al centro y ✓ para volver.
         Row(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp).glass(RoundedCornerShape(26.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ToolbarIcon(Icons.Outlined.Add, "Nueva pestaña", onClick = onNewTab)
-            ToolbarIcon(Icons.Outlined.History, "Historial", onClick = onHistory)
+            Box(Modifier.size(50.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+                ToolbarIcon(Icons.Outlined.Add, "Nueva pestaña", onClick = onNewTab)
+            }
+            Box(Modifier.size(50.dp).glass(CircleShape), contentAlignment = Alignment.Center) {
+                ToolbarIcon(Icons.Outlined.History, "Historial", onClick = onHistory)
+            }
             Row(
-                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onGroups)
-                    .semantics { contentDescription = "Grupos de pestañas" },
+                Modifier.weight(1f).height(50.dp).glass(RoundedCornerShape(50)).clickable(onClick = onGroups)
+                    .semantics { contentDescription = "Grupos de pestañas" }.padding(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -363,14 +369,16 @@ fun TabsScreen(
                 Text(
                     if (space.id == Space.PRIVATE_ID) "Privada" else space.name,
                     style = KazeType.headline, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
-                Text("  ${pinned.size + store.normal(space.id).size}", style = KazeType.subhead, color = k.ink55)
+                Text("  ${pinned.size + store.normal(space.id).size}", style = KazeType.subhead, color = k.ink55, maxLines = 1)
                 Icon(Icons.Outlined.KeyboardArrowDown, null, tint = k.ink55, modifier = Modifier.size(18.dp))
             }
-            Text(
-                "Listo", style = KazeType.headline, color = k.accent,
-                modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onDone).padding(horizontal = 14.dp, vertical = 12.dp),
-            )
+            Box(
+                Modifier.size(50.dp).clip(CircleShape).background(k.accent).clickable(onClick = onDone)
+                    .semantics { contentDescription = "Listo" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
         }
 
         // Carpeta abierta: se abre desde el centro con sus pestañas.

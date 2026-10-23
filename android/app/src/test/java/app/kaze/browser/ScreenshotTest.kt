@@ -195,6 +195,21 @@ class ScreenshotTest {
         com.github.takahirom.roborazzi.captureScreenRoboImage("../../docs/capturas/android-actualizacion.png")
     }
 
+    @Test fun barra_compacta() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
+        tab.canGoBack = true
+        compose.setContent {
+            Themed(false) {
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    FakePage()
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter), compact = true)
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-barra-compacta.png")
+    }
+
     @Test fun navegador_barra_reducida() {
         val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
         compose.setContent {

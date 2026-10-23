@@ -513,7 +513,9 @@ class MainActivity : ComponentActivity() {
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
         val density = LocalDensity.current
-        val barTop = app.settings.barTop
+        val layout = app.settings.barLayout.let { if (it == "bottom" && app.settings.barTop) "top" else it }
+        val barTop = layout == "top"
+        val barCompact = layout == "compact"
         val collapsedPx = with(density) { 32.dp.roundToPx() } + if (barTop) 0 else WindowInsets.navigationBars.getBottom(density)
         fun onBarHeight(h: Int) {
             if (!collapsed && h > barExpandedPx) barExpandedPx = h
@@ -539,7 +541,12 @@ class MainActivity : ComponentActivity() {
                             with(density) {
                                 val inset = (if (showBar) pageBottomPx.coerceAtLeast(collapsedPx) else 0).toDp()
                                 // Barra arriba: la página empieza debajo de ella (y deja libres los botones de Android).
-                                if (barTop) Modifier.padding(top = inset).navigationBarsPadding() else Modifier.padding(bottom = inset)
+                                when {
+                                    barTop -> Modifier.padding(top = inset).navigationBarsPadding()
+                                    // Compacta: la página pasa por debajo de la píldora flotante, como en Safari.
+                                    barCompact -> Modifier.navigationBarsPadding()
+                                    else -> Modifier.padding(bottom = inset)
+                                }
                             },
                         )
                         .then(if (showBar || ui.fullscreen) Modifier else Modifier.navigationBarsPadding()),
@@ -579,6 +586,7 @@ class MainActivity : ComponentActivity() {
                             tabs = (store.pinned(tab.spaceId) + store.normal(tab.spaceId)).filter { it.isPrivate == tab.isPrivate },
                             onSelectTab = { t -> snapshot { open(t) } },
                             top = barTop,
+                            compact = barCompact,
                         )
                     }
                 }

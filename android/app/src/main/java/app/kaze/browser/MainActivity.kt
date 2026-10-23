@@ -517,6 +517,18 @@ class MainActivity : ComponentActivity() {
         val barSplit = layout == "top" && !tabletBar
         val barCompact = layout == "compact" && !tabletBar
         val collapsed = tab != null && !tab.isStart && !tabletBar && (ui.scrollDirection > 0 || barHidden || pillAfterSearch)
+        // Subir por la página vuelve a abrir la barra minimizada.
+        LaunchedEffect(ui.scrollDirection) { if (ui.scrollDirection < 0) pillAfterSearch = false }
+        // Como Safari: al terminar de cargar la página, la barra se minimiza sola (tocarla o subir la vuelve a abrir).
+        var wasLoading by remember { mutableStateOf(false) }
+        LaunchedEffect(tab?.id, tab?.loading) {
+            val t = tab ?: return@LaunchedEffect
+            if (t.loading) wasLoading = true
+            else if (wasLoading) {
+                wasLoading = false
+                if (!t.isStart) { delay(350); pillAfterSearch = true }
+            }
+        }
 
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
@@ -550,11 +562,10 @@ class MainActivity : ComponentActivity() {
                                     barTop -> Modifier.padding(top = inset).navigationBarsPadding()
                                     barSplit -> Modifier.padding(top = if (collapsed) 32.dp else 60.dp)
                                         .then(if (collapsed) Modifier.navigationBarsPadding() else Modifier.padding(bottom = inset))
-                                    // Compacta: la página termina encima de la píldora, para que nada fijo abajo (como el cuadro de
-                                    // escribir de un chat) quede tapado. El espacio se ajusta según el tamaño de la píldora.
-                                    barCompact -> Modifier.padding(
-                                        bottom = if (collapsed) 44.dp + WindowInsets.navigationBars.getBottom(density).toDp() else inset,
-                                    )
+                                    // Compacta: abierta flota encima de la página (como Safari); minimizada, la página termina
+                                    // justo encima de la píldora pequeña y nada fijo abajo queda tapado.
+                                    barCompact -> if (collapsed) Modifier.padding(bottom = 44.dp + WindowInsets.navigationBars.getBottom(density).toDp())
+                                        else Modifier.navigationBarsPadding()
                                     else -> Modifier.padding(bottom = inset)
                                 }
                             },

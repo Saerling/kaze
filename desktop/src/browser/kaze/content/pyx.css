@@ -269,3 +269,77 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
   from { opacity: 0; transform: translateY(12px) scale(0.97); }
 }
 .pyx-empty { margin: auto; opacity: 0.6; }
+
+/* ══ Liquid Glass, como Safari en macOS 26/27 ═══════════════════════════
+ * - La barra lateral es un panel de vidrio flotante, separado del borde, con esquinas grandes.
+ * - Los botones van en cápsulas de vidrio (atrás/adelante juntos, como en Safari).
+ * - La dirección es una cápsula centrada; la página, una tarjeta con esquinas suaves.
+ * El vidrio es un color translúcido + brillo en el borde (sin desenfoque en áreas grandes: rinde mejor). */
+:root {
+  --pyx-glass: color-mix(in srgb, white 62%, transparent);
+  --pyx-glass-strong: color-mix(in srgb, white 78%, transparent);
+  --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.55), 0 0 0 0.5px rgb(0 0 0 / 0.08);
+  --pyx-radius-panel: 18px;
+  @media (prefers-color-scheme: dark) {
+    --pyx-glass: color-mix(in srgb, white 7%, transparent);
+    --pyx-glass-strong: color-mix(in srgb, white 12%, transparent);
+    --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.10), 0 0 0 0.5px rgb(0 0 0 / 0.35);
+  }
+}
+
+/* Barra lateral flotante */
+#navigator-toolbox {
+  margin: 8px 0 8px 8px !important;
+  border-radius: var(--pyx-radius-panel) !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), var(--pyx-shadow-2) !important;
+  overflow: clip;
+}
+
+/* Página: tarjeta con las mismas esquinas que el panel */
+#tabbrowser-tabbox, .browserStack > browser {
+  border-radius: 14px !important;
+}
+
+/* Barra superior: transparente, los controles flotan en cápsulas */
+#nav-bar {
+  background: transparent !important;
+  border: 0 !important;
+  padding-block: 6px !important;
+}
+#nav-bar toolbarbutton:not(#urlbar-container *) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  width: 34px !important;
+  height: 34px !important;
+  padding: 9px !important;
+  border-radius: 999px !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), 0 1px 3px rgb(0 0 0 / 0.08);
+}
+#nav-bar toolbarbutton:not([disabled]):hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  background: var(--pyx-glass-strong) !important;
+}
+/* Atrás y adelante: una sola cápsula (dos mitades unidas) */
+#back-button:not([disabled]) + #forward-button:not([disabled]) > .toolbarbutton-icon { border-start-start-radius: 0 !important; border-end-start-radius: 0 !important; }
+#back-button:not([disabled]):has(+ #forward-button:not([disabled])) > .toolbarbutton-icon { border-start-end-radius: 0 !important; border-end-end-radius: 0 !important; }
+#back-button + #forward-button { margin-inline-start: -2px !important; }
+
+/* Dirección: cápsula de vidrio centrada */
+#urlbar-container { flex: 0 1 620px !important; max-width: 620px !important; }
+#urlbar:not([breakout-extend]) #urlbar-background {
+  border-radius: 999px !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), 0 1px 3px rgb(0 0 0 / 0.08) !important;
+}
+#urlbar:not([breakout-extend]):hover #urlbar-background { background: var(--pyx-glass-strong) !important; }
+#urlbar[breakout-extend] #urlbar-background { border-radius: 16px !important; }
+#urlbar { --urlbar-min-height: 34px !important; }
+
+/* Pestañas de la barra lateral: cápsulas; la elegida es vidrio claro */
+.tabbrowser-tab .tab-background { border-radius: 12px !important; }
+.tabbrowser-tab[selected] .tab-background {
+  background: var(--pyx-glass-strong) !important;
+  box-shadow: var(--pyx-glass-rim), 0 2px 8px rgb(0 0 0 / 0.10) !important;
+}
+
+/* Menús y paneles: vidrio con esquinas grandes */
+menupopup, panel { --panel-border-radius: 14px; --panel-padding: 6px; }

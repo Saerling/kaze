@@ -107,6 +107,7 @@ import app.kaze.browser.ui.components.tap
 import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
 import app.kaze.browser.ui.theme.glass
+import app.kaze.browser.ui.theme.pressFeedback
 import app.kaze.browser.ui.theme.liftCard
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -704,8 +705,8 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
     var menu by remember { mutableStateOf(false) }
     val height by animateDpAsState(if (collapsed) 36.dp else 50.dp, spring(0.8f, 420f), label = "compactH")
     val side by animateDpAsState(if (collapsed) 64.dp else 12.dp, spring(0.8f, 420f), label = "compactW")
-    val enter = fadeIn(tween(160)) + scaleIn(spring(0.55f, 520f), initialScale = 0.3f)
-    val exit = fadeOut(tween(110)) + scaleOut(tween(140), targetScale = 0.3f)
+    val enter = fadeIn(tween(160)) + scaleIn(spring(0.6f, 520f), initialScale = 0.8f)
+    val exit = fadeOut(tween(110)) + scaleOut(tween(140), targetScale = 0.85f)
     Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
         // Como Safari en iOS: burbujas de vidrio a los lados (atrás, adelante, ⋯) y la píldora grande del sitio.
         Row(
@@ -721,10 +722,11 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
             AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
                 Bubble(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", tab.canGoForward, { a.onHistoryMenu(1) }, a.onForward, Modifier.padding(end = 8.dp))
             }
+            val pillSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
             val progress by animateFloatAsState(if (tab.loading) tab.progress / 100f else 0f, tween(200), label = "cp")
             val accent = k.accent
             Row(
-                Modifier.weight(1f).height(height).glass(RoundedCornerShape(50), 16f).clip(RoundedCornerShape(50))
+                Modifier.weight(1f).height(height).pressFeedback(pillSource, 0.97f).glass(RoundedCornerShape(50), 16f).clip(RoundedCornerShape(50))
                     // Progreso de carga dentro de la píldora, de izquierda a derecha por su borde de abajo.
                     .drawWithContent {
                         drawContent()
@@ -733,11 +735,13 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
                             drawRect(accent, androidx.compose.ui.geometry.Offset(0f, size.height - h), androidx.compose.ui.geometry.Size(size.width * progress.coerceIn(0.05f, 1f), h))
                         }
                     }
-                    .clickable { if (collapsed) a.onExpand() else a.onAddress() }.padding(horizontal = 14.dp),
+                    .clickable(pillSource, indication = null) { if (collapsed) a.onExpand() else a.onAddress() }
+                    .semantics { contentDescription = if (collapsed) "Mostrar la barra" else "Buscar o escribir dirección" }
+                    .padding(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AnimatedVisibility(tab.isSecure && !tab.isStart, enter = fadeIn() + scaleIn(), exit = fadeOut() + scaleOut()) {
+                AnimatedVisibility(tab.isSecure && !tab.isStart, enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f), exit = fadeOut(tween(110))) {
                     Icon(Icons.Outlined.Lock, null, tint = k.ink55, modifier = Modifier.padding(end = 5.dp).size(12.dp))
                 }
                 // El sitio cambia con un deslizamiento suave al navegar o cambiar de pestaña.
@@ -818,7 +822,7 @@ private fun CompactMenu(tab: Tab, tabCount: Int, a: ChromeActions, onDismiss: ()
     ) {
         androidx.compose.animation.AnimatedVisibility(
             shown,
-            enter = fadeIn(tween(140)) + scaleIn(spring(0.75f, 520f), initialScale = 0.6f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
+            enter = fadeIn(tween(140)) + scaleIn(spring(0.8f, 600f), initialScale = 0.92f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
         ) {
             Column(
                 Modifier.navigationBarsPadding().padding(end = 16.dp, bottom = 70.dp).width(250.dp)

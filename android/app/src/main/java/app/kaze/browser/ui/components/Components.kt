@@ -52,6 +52,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -162,8 +164,11 @@ fun Modifier.tap(onClick: () -> Unit): Modifier {
 @Composable
 fun Modifier.tap(onClick: () -> Unit, onLongClick: () -> Unit): Modifier {
     val source = remember { MutableInteractionSource() }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     return pressFeedback(source).combinedClickable(
-        interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick,
+        interactionSource = source, indication = null, onClick = onClick,
+        // Mantener presionado se siente: una vibración corta, como en iOS y Android.
+        onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); onLongClick() },
     )
 }
 
@@ -267,17 +272,26 @@ fun ToolbarIcon(icon: ImageVector, label: String, enabled: Boolean = true, tint:
     val source = remember { MutableInteractionSource() }
     // Como en Safari: sin onda; el ícono se encoge un poco al tocarlo y el color cambia suave.
     val color by animateColorAsState(if (enabled) (tint ?: k.accent) else k.ink35, tween(180), label = "iconTint")
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Box(
         Modifier.size(48.dp).clip(CircleShape)
             .then(
                 when {
                     !enabled -> Modifier
-                    onLong != null -> Modifier.combinedClickable(source, indication = null, onLongClick = onLong, onClick = onClick)
+                    onLong != null -> Modifier.combinedClickable(
+                        source, indication = null, onClick = onClick,
+                        onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); onLong() },
+                    )
                     else -> Modifier.clickable(source, indication = null, onClick = onClick)
                 },
             )
             .pressFeedback(source, 0.86f)
-            .semantics { contentDescription = label },
+            // Lectores de pantalla: es un botón, y se anuncia cuando está desactivado.
+            .semantics {
+                contentDescription = label
+                androidx.compose.ui.semantics.Role.Button.let { role = it }
+                if (!enabled) disabled()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))

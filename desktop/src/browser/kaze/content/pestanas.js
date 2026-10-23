@@ -105,7 +105,7 @@
           h("button", { class: "pyx-new", title: "Pestaña nueva", text: "+", onclick: () => { this.close(); BrowserCommands.openTab(); } }),
           h("button", { class: "pyx-done", text: "Listo", onclick: () => this.close() })),
         tabs.length ? h("div", { class: "pyx-grid" }, ...tabs.map(card))
-          : h("div", { class: "pyx-empty", text: "Ninguna pestaña coincide." })));
+          : h("div", { class: "pyx-empty", text: q ? "Ninguna pestaña coincide." : "No hay pestañas abiertas. Pulsa + para abrir una." })));
     },
 
     /** Organizar pestañas (como Safari en iPadOS 27): junta las del mismo sitio, en el orden en que aparecen. */

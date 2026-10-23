@@ -21,7 +21,7 @@
       try {
         total = Services.sysinfo.getProperty("memsize") / 1048576;
       } catch {}
-      return Math.round(Math.min(4096, Math.max(1536, total * 0.3)));
+      return Math.round(Math.min(3072, Math.max(1280, total * 0.25)));
     },
 
     async usedMB() {

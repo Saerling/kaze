@@ -702,7 +702,7 @@ class MainActivity : ComponentActivity() {
                         onDefaultBrowser = {
                             runCatching {
                                 val rm = if (android.os.Build.VERSION.SDK_INT >= 29) getSystemService(android.app.role.RoleManager::class.java) else null
-                                if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER) && !rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) {
+                                if (android.os.Build.VERSION.SDK_INT >= 29 && rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER) && !rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) {
                                     startActivity(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER))
                                 } else {
                                     startActivity(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))

@@ -119,6 +119,7 @@ object Engine {
     }
 
     /** Se aplican en la rama "por defecto": no pisan lo que el usuario cambie en about:config. */
+    @androidx.annotation.OptIn(org.mozilla.geckoview.ExperimentalGeckoViewApi::class)
     private fun applyPrefs(settings: Settings) {
         val prefs = LinkedHashMap(PREFS)
         // Con poca RAM, un solo proceso de contenido para todas las pestañas.

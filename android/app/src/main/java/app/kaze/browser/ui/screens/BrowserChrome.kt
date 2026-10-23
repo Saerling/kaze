@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.SizeTransform
@@ -720,8 +721,18 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
             AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
                 Bubble(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", tab.canGoForward, { a.onHistoryMenu(1) }, a.onForward, Modifier.padding(end = 8.dp))
             }
+            val progress by animateFloatAsState(if (tab.loading) tab.progress / 100f else 0f, tween(200), label = "cp")
+            val accent = k.accent
             Row(
                 Modifier.weight(1f).height(height).glass(RoundedCornerShape(50), 16f).clip(RoundedCornerShape(50))
+                    // Progreso de carga dentro de la píldora, de izquierda a derecha por su borde de abajo.
+                    .drawWithContent {
+                        drawContent()
+                        if (tab.loading) {
+                            val h = 2.5.dp.toPx()
+                            drawRect(accent, androidx.compose.ui.geometry.Offset(0f, size.height - h), androidx.compose.ui.geometry.Size(size.width * progress.coerceIn(0.05f, 1f), h))
+                        }
+                    }
                     .clickable { if (collapsed) a.onExpand() else a.onAddress() }.padding(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
@@ -748,10 +759,6 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
             AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
                 Bubble(Icons.Outlined.MoreHoriz, "Más", true, a.onShare, { menu = true }, Modifier.padding(start = 8.dp))
             }
-        }
-        if (tab.loading) {
-            val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "cp")
-            Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 80.dp).fillMaxWidth(progress.coerceIn(0.05f, 1f)).height(2.dp).clip(RoundedCornerShape(50)).background(k.accent))
         }
     }
     if (menu) CompactMenu(tab, tabCount, a) { menu = false }

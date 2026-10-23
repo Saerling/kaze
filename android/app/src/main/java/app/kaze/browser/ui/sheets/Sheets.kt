@@ -240,7 +240,7 @@ fun PageMenuSheet(
                 Icons.Outlined.Translate,
                 subtitle = when {
                     tab.translated -> null
-                    other -> "Página en ${java.util.Locale.forLanguageTag(tab.pageLang!!).getDisplayLanguage(java.util.Locale.getDefault())}"
+                    other -> "Página en ${java.util.Locale.forLanguageTag(tab.pageLang!!).getDisplayLanguage(androidx.compose.ui.platform.LocalConfiguration.current.locales[0])}"
                     else -> "La página ya está en tu idioma"
                 },
                 enabled = tab.translated || other,

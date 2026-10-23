@@ -550,8 +550,11 @@ class MainActivity : ComponentActivity() {
                                     barTop -> Modifier.padding(top = inset).navigationBarsPadding()
                                     barSplit -> Modifier.padding(top = if (collapsed) 32.dp else 60.dp)
                                         .then(if (collapsed) Modifier.navigationBarsPadding() else Modifier.padding(bottom = inset))
-                                    // Compacta: la página pasa por debajo de la píldora flotante, como en Safari.
-                                    barCompact -> Modifier.navigationBarsPadding()
+                                    // Compacta: la página termina encima de la píldora, para que nada fijo abajo (como el cuadro de
+                                    // escribir de un chat) quede tapado. El espacio se ajusta según el tamaño de la píldora.
+                                    barCompact -> Modifier.padding(
+                                        bottom = if (collapsed) 44.dp + WindowInsets.navigationBars.getBottom(density).toDp() else inset,
+                                    )
                                     else -> Modifier.padding(bottom = inset)
                                 }
                             },

@@ -69,6 +69,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
@@ -255,6 +256,12 @@ fun TabsScreen(
                         modifier = Modifier.weight(1f),
                         decorationBox = { inner -> if (query.isEmpty()) Text("Buscar pestañas", style = KazeType.body, color = k.ink55); inner() },
                     )
+                    // Organizar pestañas (como Safari en iPadOS 27): agrupa en carpetas las del mismo sitio.
+                    Box(
+                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable { store.organize(space.id) }
+                            .semantics { contentDescription = "Organizar pestañas por sitio" },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Outlined.AutoAwesome, null, tint = k.accent, modifier = Modifier.size(19.dp)) }
                     // Cambiar la vista: tarjetas → compacta → lista.
                     val (next, icon, label) = when (mode) {
                         "grid" -> Triple("compact", Icons.Outlined.Apps, "Vista compacta")

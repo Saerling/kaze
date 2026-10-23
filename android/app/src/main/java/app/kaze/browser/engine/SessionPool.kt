@@ -505,7 +505,7 @@ class SessionPool(
     }
 
     companion object {
-        private const val TAG = "PyxSessions"
+        private const val TAG = "FyxSessions"
         private val WEB_SCHEMES = setOf(
             "http", "https", "about", "data", "blob", "file", "javascript", "moz-extension", "resource", "view-source",
         )

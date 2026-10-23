@@ -3,8 +3,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """
-Arma Pyx para Windows sobre Zen Browser (sin compilar nada): Zen tal cual, con la marca,
-la identidad y el actualizador de Pyx.
+Arma Fyx para Windows sobre Zen Browser (sin compilar nada): Zen tal cual, con la marca,
+la identidad y el actualizador de Fyx.
 
     python desktop/scripts/empaquetar_windows.py --setup zen.installer.exe --build 12
 
@@ -39,7 +39,7 @@ LOGO_SVG = DESKTOP.parent / "branding" / "kaze-logo.svg"
 
 EXE = "zen.exe"
 
-# Archivos que Pyx no usa (actualizador de Mozilla, telemetría, ventana privada suelta).
+# Archivos que Fyx no usa (actualizador de Mozilla, telemetría, ventana privada suelta).
 QUITAR = [
     "updater.exe", "updater.ini", "update-settings.ini", "maintenanceservice.exe",
     "maintenanceservice_installer.exe", "default-browser-agent.exe", "pingsender.exe",
@@ -59,19 +59,19 @@ POLITICAS = {
     }
 }
 
-MARCA_FTL = """-brand-shorter-name = Pyx
--brand-short-name = Pyx
--brand-shortcut-name = Pyx
--brand-full-name = Pyx
--brand-product-name = Pyx
+MARCA_FTL = """-brand-shorter-name = Fyx
+-brand-short-name = Fyx
+-brand-shortcut-name = Fyx
+-brand-full-name = Fyx
+-brand-product-name = Fyx
 -vendor-short-name = Mozilla
-trademarkInfo = Pyx está basado en Zen Browser y Firefox. Firefox es una marca registrada de la Fundación Mozilla.
+trademarkInfo = Fyx está basado en Zen Browser y Firefox. Firefox es una marca registrada de la Fundación Mozilla.
 """
-MARCA_PROPERTIES = "brandShorterName = Pyx\nbrandShortName = Pyx\nbrandFullName = Pyx\n"
+MARCA_PROPERTIES = "brandShorterName = Fyx\nbrandShortName = Fyx\nbrandFullName = Fyx\n"
 WORDMARK = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 42">'
     '<text x="0" y="33" font-family="Segoe UI, system-ui, sans-serif" font-size="36" '
-    'font-weight="700" fill="context-fill" letter-spacing="-1">Pyx</text></svg>\n'
+    'font-weight="700" fill="context-fill" letter-spacing="-1">Fyx</text></svg>\n'
 )
 
 
@@ -89,8 +89,8 @@ def identidad(app: Path, build_id: str) -> None:
     texto = (app / "application.ini").read_text(encoding="utf-8")
     lineas = [l for l in texto.splitlines() if not l.startswith(";")]
     texto = "\n".join(lineas) + "\n"
-    texto = re.sub(r"^Vendor=.*$", "Vendor=Pyx", texto, flags=re.M)
-    texto = re.sub(r"^Name=.*$", "Name=Pyx", texto, flags=re.M)
+    texto = re.sub(r"^Vendor=.*$", "Vendor=Fyx", texto, flags=re.M)
+    texto = re.sub(r"^Name=.*$", "Name=Fyx", texto, flags=re.M)
     texto = re.sub(r"^RemotingName=.*$", "RemotingName=pyx", texto, flags=re.M)
     texto = re.sub(r"^Profile=.*$", "Profile=pyx", texto, flags=re.M)
     # Un BuildID propio por versión de Kaze: Firefox limpia su caché de arranque al cambiar.
@@ -160,7 +160,7 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
 
     prefs = prefs_pyx(build, version)
     cfg = (KAZE / "cargador-zen.cfg").read_text(encoding="utf-8")
-    cfg += '\nif (Services.appinfo.name == "Pyx") {\n' + prefs + "}\n"
+    cfg += '\nif (Services.appinfo.name == "Fyx") {\n' + prefs + "}\n"
     for nombre in ("memoria.js", "pyx.css", "pestanas.js", "iconos/pestanas-pyx.svg"):
         (destino / "content" / nombre).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(KAZE / "content" / nombre, destino / "content" / nombre)
@@ -187,7 +187,7 @@ def poner_icono_exe(exe: Path, ico: Path) -> None:
     script = AQUI / "icono_exe.mjs"
     try:
         subprocess.run(["node", str(script), str(exe), str(ico)], check=True, cwd=AQUI)
-        print("  ícono de firefox.exe cambiado por el de Pyx")
+        print("  ícono de firefox.exe cambiado por el de Fyx")
     except (OSError, subprocess.CalledProcessError) as e:
         print(f"  (no se pudo cambiar el ícono del .exe: {e})")
 
@@ -209,7 +209,7 @@ def main() -> None:
     build_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
 
     a.salida.mkdir(parents=True, exist_ok=True)
-    app = a.salida / "Pyx"
+    app = a.salida / "Fyx"
     if app.exists():
         shutil.rmtree(app)
     with tempfile.TemporaryDirectory() as tmp:
@@ -227,7 +227,7 @@ def main() -> None:
     copiar_kaze(app, a.build, version)
     poner_icono_exe(app / EXE, MARCA / "firefox.ico")
     zen = re.search(r"^Version=(.*)$", (app / "application.ini").read_text(encoding="utf-8"), re.M)
-    (app / "kaze-version.txt").write_text(f"Pyx {version} (Zen {zen.group(1) if zen else '?'}, build {build_id})\n", encoding="utf-8")
+    (app / "kaze-version.txt").write_text(f"Fyx {version} (Zen {zen.group(1) if zen else '?'}, build {build_id})\n", encoding="utf-8")
     print(f"Carpeta lista: {app}")
 
     if a.sin_instalador:
@@ -235,7 +235,7 @@ def main() -> None:
     makensis = shutil.which("makensis")
     if not makensis:
         sys.exit("Falta makensis (NSIS) para crear el instalador; usa --sin-instalador para solo la carpeta.")
-    exe = a.salida / f"Pyx-{version}-setup.exe"
+    exe = a.salida / f"Fyx-{version}-setup.exe"
     subprocess.run([
         makensis, "-V2", "-INPUTCHARSET", "UTF8",
         f"-DVERSION={version}", f"-DFIREFOX={firefox}", f"-DBUILD={a.build}",

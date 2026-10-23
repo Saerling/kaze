@@ -135,7 +135,7 @@ object Engine {
         }
     }
 
-    private const val TAG = "PyxEngine"
+    private const val TAG = "FyxEngine"
 
     /** Cambia el tamaño del texto de todas las páginas al momento (el "AA" de Safari). */
     fun applyTextSize(runtime: GeckoRuntime, percent: Int) = applyTextSize(runtime.settings, percent)

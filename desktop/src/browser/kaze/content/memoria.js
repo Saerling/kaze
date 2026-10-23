@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * Regulador de memoria de Pyx: cada 30 s mira cuánta RAM usa todo el navegador (todos sus
+ * Regulador de memoria de Fyx: cada 30 s mira cuánta RAM usa todo el navegador (todos sus
  * procesos). Si pasa del límite, duerme las pestañas que llevan más tiempo sin usarse (no la
  * visible, ni las que suenan, ni las de vídeo flotante). Al volver a una, se recarga sola.
  */
@@ -11,9 +11,9 @@
 "use strict";
 
 (() => {
-  if (window.PyxMemory) return;
+  if (window.FyxMemory) return;
 
-  const PyxMemory = {
+  const FyxMemory = {
     limitMB() {
       const set = Services.prefs.getIntPref("pyx.memory.limitMB", 0);
       if (set > 0) return set;
@@ -56,7 +56,7 @@
     },
   };
 
-  window.PyxMemory = PyxMemory;
-  const timer = setInterval(() => PyxMemory.tick(), 30_000);
+  window.FyxMemory = FyxMemory;
+  const timer = setInterval(() => FyxMemory.tick(), 30_000);
   window.addEventListener("unload", () => clearInterval(timer), { once: true });
 })();

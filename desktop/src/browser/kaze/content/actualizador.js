@@ -3,26 +3,26 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * Pyx para Windows (sobre Zen): solo añade el aviso de versión nueva desde GitHub Releases,
+ * Fyx para Windows (sobre Zen): solo añade el aviso de versión nueva desde GitHub Releases,
  * la descarga y la instalación encima. Todo lo demás es Zen tal cual.
  */
 
 "use strict";
 
 (() => {
-  if (window.PyxUpdater) return;
+  if (window.FyxUpdater) return;
   const { Downloads } = ChromeUtils.importESModule("resource://gre/modules/Downloads.sys.mjs");
   const PREF_BUILD = "kaze.build";
   const PREF_UPDATE_REPO = "kaze.update.repo";
   const PREF_UPDATE_LAST = "kaze.update.lastCheck";
   const PREF_UPDATE_SKIP = "kaze.update.skip";
 
-  const PyxUpdater = {
+  const FyxUpdater = {
     // ── Actualizaciones (versión de Windows, desde GitHub Releases) ───
 
     /**
      * Las versiones de Windows se publican como "windows-<número>" con un instalador
-     * "Pyx-…-setup.exe". El número de esta copia está en kaze.build (0 en desarrollo).
+     * "Fyx-…-setup.exe". El número de esta copia está en kaze.build (0 en desarrollo).
      */
     async checkForUpdate({ manual = false } = {}) {
       const build = Services.prefs.getIntPref(PREF_BUILD, 0);
@@ -110,7 +110,7 @@
         const info = await IOUtils.stat(target);
         if (asset.size && info.size != asset.size) throw new Error("la descarga quedó incompleta");
 
-        await show("Actualización lista. Pyx se cerrará un momento para instalarla y se abrirá de nuevo.", [
+        await show("Actualización lista. Fyx se cerrará un momento para instalarla y se abrirá de nuevo.", [
           {
             label: "Reiniciar y actualizar",
             accessKey: "R",
@@ -137,10 +137,10 @@
   };
 
   /**
-   * En Ajustes → Acerca de Pyx, el bloque de actualizaciones de Zen se cambia por el de Pyx:
+   * En Ajustes → Acerca de Fyx, el bloque de actualizaciones de Zen se cambia por el de Fyx:
    * versión instalada y "Buscar actualizaciones" (que descarga e instala desde GitHub).
    */
-  PyxUpdater.injectAbout = function (doc) {
+  FyxUpdater.injectAbout = function (doc) {
     if (!doc || doc.getElementById("pyx-update-box")) return;
     const group = doc.getElementById("setting-control-updateApp") || doc.getElementById("updateApp");
     if (!group) return;
@@ -154,14 +154,14 @@
     const box = el("div", "display:flex;align-items:center;gap:12px;padding:12px 16px;");
     box.id = "pyx-update-box";
     const text = el("div", "flex:1;display:flex;flex-direction:column;gap:2px;");
-    text.append(el("span", "font-weight:600;", `Pyx ${version}`), el("span", "opacity:.7;font-size:.9em;", "Basado en Zen. Pyx busca versiones nuevas solo y se actualiza encima."));
+    text.append(el("span", "font-weight:600;", `Fyx ${version}`), el("span", "opacity:.7;font-size:.9em;", "Basado en Zen. Fyx busca versiones nuevas solo y se actualiza encima."));
     const status = el("span", "opacity:.8;font-size:.9em;");
     const btn = el("button", "padding:6px 14px;border-radius:8px;border:0;background:#0A84FF;color:white;font-weight:600;cursor:pointer;", "Buscar actualizaciones");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       status.textContent = "Buscando…";
-      const n = await PyxUpdater.checkForUpdate({ manual: true });
-      status.textContent = n ? "¡Hay una versión nueva! Mira el aviso arriba de la ventana." : "Pyx está al día.";
+      const n = await FyxUpdater.checkForUpdate({ manual: true });
+      status.textContent = n ? "¡Hay una versión nueva! Mira el aviso arriba de la ventana." : "Fyx está al día.";
       btn.disabled = false;
     });
     box.append(text, status, btn);
@@ -174,13 +174,13 @@
       const t = setInterval(() => {
         const doc = browser.contentDocument;
         if (doc?.getElementById("pyx-update-box") || ++tries > 40) return clearInterval(t);
-        PyxUpdater.injectAbout(doc);
+        FyxUpdater.injectAbout(doc);
       }, 250);
     },
   });
 
-  window.PyxUpdater = PyxUpdater;
+  window.FyxUpdater = FyxUpdater;
   // Revisa al abrir (tras 15 s) y luego cada 6 horas.
-  setTimeout(() => PyxUpdater.checkForUpdate(), 15_000);
-  setInterval(() => PyxUpdater.checkForUpdate(), 6 * 3600_000);
+  setTimeout(() => FyxUpdater.checkForUpdate(), 15_000);
+  setInterval(() => FyxUpdater.checkForUpdate(), 6 * 3600_000);
 })();

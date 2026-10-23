@@ -53,9 +53,9 @@ Preferencias en `about:config`: `kaze.unloader.minutes` (dormir pestañas, por d
 
 ## Cómo se arma el instalador
 
-Pyx para Windows se arma sobre **Zen Browser** (su instalador oficial): es Zen tal cual —estética,
+Fyx para Windows se arma sobre **Zen Browser** (su instalador oficial): es Zen tal cual —estética,
 espacios, Essentials, vista dividida, modo compacto, animaciones— con la marca, la identidad y el
-actualizador de Pyx encima, en unos minutos
+actualizador de Fyx encima, en unos minutos
 ([`scripts/empaquetar_windows.py`](scripts/empaquetar_windows.py)):
 
 - **Identidad propia**: `browser/application.ini` con `Name=Kaze`; los accesos directos abren

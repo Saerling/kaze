@@ -159,8 +159,8 @@ async function render() {
   fill("#lectura", reading, readingCard);
   $("#rastreadores").textContent = blocked.toLocaleString("es");
   $("#rastreadores-texto").textContent = blocked
-    ? `rastreadores bloqueados en los últimos siete días. Pyx evitó que te siguieran de un sitio a otro.`
-    : "En los últimos siete días, Pyx no encontró rastreadores en los sitios que visitaste.";
+    ? `rastreadores bloqueados en los últimos siete días. Fyx evitó que te siguieran de un sitio a otro.`
+    : "En los últimos siete días, Fyx no encontró rastreadores en los sitios que visitaste.";
   $("#vacio").hidden = !!(fav.length || freq.length || reading.length);
 }
 

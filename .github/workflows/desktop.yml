@@ -37,7 +37,7 @@ jobs:
       - name: Herramientas (7-Zip y NSIS)
         run: sudo apt-get update -q && sudo apt-get install -y -q p7zip-full nsis
 
-      - name: Descargar Zen Browser para Windows (la base de Pyx)
+      - name: Descargar Zen Browser para Windows (la base de Fyx)
         run: |
           curl -fsSL --retry 5 -o zen.installer.exe \
             "https://github.com/zen-browser/desktop/releases/latest/download/zen.installer.exe"
@@ -46,30 +46,30 @@ jobs:
       - name: Herramienta para el ícono del .exe
         run: npm ci --prefix desktop/scripts
 
-      - name: Armar Pyx e instalador
+      - name: Armar Fyx e instalador
         run: python3 desktop/scripts/empaquetar_windows.py --setup zen.installer.exe --build "$KAZE_BUILD" --salida dist
 
       - name: Subir instalador
         uses: actions/upload-artifact@v7
         with:
           name: zev-windows
-          path: dist/Pyx-*-setup.exe
+          path: dist/Fyx-*-setup.exe
 
-      - name: Publicar versión (Pyx la detecta y se actualiza)
+      - name: Publicar versión (Fyx la detecta y se actualiza)
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo "Descarga **Pyx-0.4.$KAZE_BUILD-setup.exe**, ábrelo y listo: se instala sin permisos de administrador."
-            echo "Si ya tienes Pyx (antes Kaze), se actualiza encima sin perder nada y te avisa solo de las nuevas versiones."
+            echo "Descarga **Fyx-0.4.$KAZE_BUILD-setup.exe**, ábrelo y listo: se instala sin permisos de administrador."
+            echo "Si ya tienes Fyx (antes Kaze), se actualiza encima sin perder nada y te avisa solo de las nuevas versiones."
             echo
             echo "Basado en Zen Browser (Firefox)."
             echo
             echo "Cambios:"
             git log -1 --pretty=format:'%s%n%n%b' | sed '/^Co-Authored-By/d;/^Claude-Session/d'
           } > notes.md
-          gh release create "windows-$KAZE_BUILD" dist/Pyx-*-setup.exe \
-            --title "Pyx Windows 0.4.$KAZE_BUILD" \
+          gh release create "windows-$KAZE_BUILD" dist/Fyx-*-setup.exe \
+            --title "Fyx Windows 0.4.$KAZE_BUILD" \
             --notes-file notes.md \
             --target "$GITHUB_SHA"

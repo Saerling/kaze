@@ -152,7 +152,13 @@ fun SafariBottomBar(
     top: Boolean = false,
     /** Diseño compacto de Safari: una sola píldora flotante (atrás · sitio · ⋯). */
     compact: Boolean = false,
+    /** Tableta con la barra arriba: una fila como Safari en iPad (pestañas en línea). */
+    tablet: Boolean = false,
 ) {
+    if (tablet) {
+        TabletBar(tab, space, tabCount, a, tabs, onSelectTab, modifier)
+        return
+    }
     if (compact) {
         CompactBar(tab, space, tabCount, collapsed, a, modifier)
         return
@@ -215,7 +221,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
                 Spacer(Modifier.width(4.dp))
             }
             Text(
-                addressLabel(tab).ifBlank { "Pyx" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
+                addressLabel(tab).ifBlank { "Fyx" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
                 color = k.ink, maxLines = 1,
             )
         }
@@ -763,5 +769,48 @@ private fun CompactMenu(tab: Tab, tabCount: Int, a: ChromeActions, onDismiss: ()
                 item(Icons.Outlined.MoreHoriz, "Más opciones", action = a.onShare)
             }
         }
+    }
+}
+
+/**
+ * Tableta: una sola fila arriba, como Safari en iPad y Mac (diseño compacto): los botones,
+ * las pestañas en línea (la activa es la barra de dirección) y a la derecha menú, + y pestañas.
+ */
+@Composable
+private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, modifier: Modifier) {
+    val k = LocalKaze.current
+    val list = if (tabs.any { it.id == tab.id }) tabs else listOf(tab)
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(tab.id, list.size) {
+        val i = list.indexOfFirst { it.id == tab.id }
+        if (i >= 0) state.animateScrollToItem(i)
+    }
+    Row(
+        modifier.fillMaxWidth().background(k.glass)
+            .then(if (k.material) Modifier else Modifier.background(spaceTint(space)))
+            .height(58.dp).padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ToolbarIcon(Icons.Outlined.GridView, "Espacios y Essentials", onClick = a.onSpaces)
+        ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack)
+        ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward)
+        androidx.compose.foundation.lazy.LazyRow(
+            state = state,
+            modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items(list.size, key = { list[it].id }) { i ->
+                val t = list[i]
+                if (t.id == tab.id) {
+                    Box(Modifier.animateItem().fillParentMaxWidth(if (list.size == 1) 1f else 0.55f)) { AddressPill(tab, a, swipe = false) }
+                } else {
+                    Box(Modifier.animateItem().width(150.dp).clip(RoundedCornerShape(14.dp)).clickable { onSelectTab(t) }) { MiniPill(t) }
+                }
+            }
+        }
+        ToolbarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
+        ToolbarIcon(Icons.Outlined.Add, "Pestaña nueva", onClick = a.onNewTab)
+        TabsButton(tabCount, a.onTabs, a.onTabsLong)
     }
 }

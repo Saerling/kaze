@@ -1,4 +1,4 @@
-// Pyx para Windows (sobre Zen): preferencias que se aplican al abrir Pyx.
+// Fyx para Windows (sobre Zen): preferencias que se aplican al abrir Fyx.
 // Pensadas para gastar mucha menos RAM sin que se note, sobre todo con muchas pestañas y ventanas.
 
 // ── Idioma y actualizaciones ──────────────────────────────────────────
@@ -35,7 +35,7 @@ pref("browser.tabs.unloadOnLowMemory", true);
 pref("browser.tabs.min_inactive_duration_before_unload", 300000);
 pref("browser.low_commit_space_threshold_mb", 2048);
 pref("browser.low_commit_space_threshold_percent", 10);
-// Regulador de Pyx: si todo el navegador pasa de este límite, duerme las pestañas más viejas.
+// Regulador de Fyx: si todo el navegador pasa de este límite, duerme las pestañas más viejas.
 pref("pyx.memory.enabled", true);
 pref("pyx.memory.limitMB", 0); // 0 = automático (30 % de la RAM del PC, entre 1,5 y 4 GB)
 

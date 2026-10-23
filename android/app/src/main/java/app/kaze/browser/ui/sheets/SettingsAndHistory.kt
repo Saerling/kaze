@@ -216,7 +216,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             if (needsRestart) {
                 Spacer(Modifier.height(8.dp))
                 IosGroup {
-                    IosRow("Reiniciar Pyx para aplicar los cambios", titleColor = k.accent, divider = false, onClick = onRestart)
+                    IosRow("Reiniciar Fyx para aplicar los cambios", titleColor = k.accent, divider = false, onClick = onRestart)
                 }
             }
 
@@ -254,7 +254,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                 ) { s.tabletMode = it }
                 Toggle("Versión de escritorio de las páginas", s.tabletDesktop, divider = false) { s.tabletDesktop = it }
             }
-            Note("En tableta, Pyx usa más columnas en las pestañas, centra la barra y pide las páginas de escritorio.")
+            Note("En tableta, Fyx usa más columnas en las pestañas, centra la barra y pide las páginas de escritorio.")
 
 
             IosSectionHeader("Página de inicio")
@@ -282,7 +282,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
                 }
             }
-            Note("Pyx usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
+            Note("Fyx usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
 
             IosSectionHeader("Memoria")
             IosGroup {
@@ -334,7 +334,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze/issues"))) }
                 }
             }
-            Note("Pyx es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
+            Note("Fyx es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
             Spacer(Modifier.height(24.dp))
         }
     }

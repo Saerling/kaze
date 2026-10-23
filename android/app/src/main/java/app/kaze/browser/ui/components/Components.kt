@@ -71,7 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-val LocalApp = staticCompositionLocalOf<Kaze> { error("Pyx no inicializado") }
+val LocalApp = staticCompositionLocalOf<Kaze> { error("Fyx no inicializado") }
 
 // ── Fondo suave del grupo (página de inicio y vista de pestañas) ──────
 

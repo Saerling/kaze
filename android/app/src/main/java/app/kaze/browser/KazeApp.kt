@@ -90,7 +90,7 @@ class Kaze private constructor(context: Context) {
     private fun installExtension(pool: SessionPool) {
         runtime.webExtensionController
             .ensureBuiltIn("resource://android/assets/extensions/kaze/", "interno@kaze.app")
-            .accept({ ext -> pool.extension = ext }, { e -> android.util.Log.w("Pyx", "Extensión interna", e) })
+            .accept({ ext -> pool.extension = ext }, { e -> android.util.Log.w("Fyx", "Extensión interna", e) })
     }
 
     private fun setupExtensions(runtime: GeckoRuntime) {

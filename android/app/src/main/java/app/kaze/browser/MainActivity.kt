@@ -172,9 +172,9 @@ class MainActivity : ComponentActivity() {
                     CrashSheet(
                         text = text,
                         onCopy = {
-                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Pyx", text))
+                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fyx", text))
                         },
-                        onShare = { share(text, "Error de Pyx") },
+                        onShare = { share(text, "Error de Fyx") },
                         onDismiss = { startBrowser(null) },
                     )
                 }
@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         ClipboardBridge.copy = { text ->
-            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Pyx", text))
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Fyx", text))
             app.ui.show("Copiado")
         }
 
@@ -500,8 +500,6 @@ class MainActivity : ComponentActivity() {
                 onNewTab = { newTab(private = t.isPrivate) },
             )
         }
-        val collapsed = tab != null && !tab.isStart && (ui.scrollDirection > 0 || barHidden || pillAfterSearch)
-
         // Modo tableta: automático (pantalla de 600 dp o más) o forzado desde Ajustes.
         val config = androidx.compose.ui.platform.LocalConfiguration.current
         val tabletNow = when (app.settings.tabletMode) {
@@ -510,12 +508,16 @@ class MainActivity : ComponentActivity() {
             else -> config.smallestScreenWidthDp >= 600
         }
         SideEffect { ui.tablet = tabletNow }
+        val layout = app.settings.barLayout.let { if (it == "bottom" && app.settings.barTop) "top" else it }
+        // En tableta, Compacta y Arriba son la fila de Safari en iPad (pestañas en línea, arriba).
+        val tabletBar = tabletNow && layout != "bottom"
+        val barTop = layout == "top" || tabletBar
+        val barCompact = layout == "compact" && !tabletBar
+        val collapsed = tab != null && !tab.isStart && !tabletBar && (ui.scrollDirection > 0 || barHidden || pillAfterSearch)
+
         val imeVisible = WindowInsets.isImeVisible
         val showBar = !ui.fullscreen && tab != null && !showTabs && actions != null && (!imeVisible || finding)
         val density = LocalDensity.current
-        val layout = app.settings.barLayout.let { if (it == "bottom" && app.settings.barTop) "top" else it }
-        val barTop = layout == "top"
-        val barCompact = layout == "compact"
         val collapsedPx = with(density) { 32.dp.roundToPx() } + if (barTop) 0 else WindowInsets.navigationBars.getBottom(density)
         fun onBarHeight(h: Int) {
             if (!collapsed && h > barExpandedPx) barExpandedPx = h
@@ -587,6 +589,7 @@ class MainActivity : ComponentActivity() {
                             onSelectTab = { t -> snapshot { open(t) } },
                             top = barTop,
                             compact = barCompact,
+                            tablet = tabletBar,
                         )
                     }
                 }

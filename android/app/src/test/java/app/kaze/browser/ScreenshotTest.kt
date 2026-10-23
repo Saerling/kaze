@@ -210,6 +210,24 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-barra-compacta.png")
     }
 
+    @Config(qualifiers = "w1100dp-h800dp-xhdpi")
+    @Test fun barra_tableta() {
+        val space = app.store.currentSpaceId
+        val tabs = app.store.normal(space)
+        val tab = tabs.first { it.url.contains("wikipedia") }
+        tab.canGoBack = true
+        compose.setContent {
+            Themed(false) {
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    FakePage()
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), tabs.size, false, actions(), Modifier.align(Alignment.TopCenter), tabs = tabs, top = true, tablet = true)
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-tableta-barra.png")
+    }
+
     @Test fun navegador_barra_reducida() {
         val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
         compose.setContent {

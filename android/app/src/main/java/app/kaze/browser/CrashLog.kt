@@ -25,7 +25,7 @@ object CrashLog {
                 val sw = StringWriter()
                 error.printStackTrace(PrintWriter(sw))
                 file(app).writeText(
-                    "Pyx ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n" +
+                    "Fyx ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n" +
                         "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n" +
                         "Hilo: ${thread.name}\n\n$sw",
                 )

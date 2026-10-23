@@ -20,17 +20,17 @@ ManifestDPIAware true
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
-!define NOMBRE "Pyx"
+!define NOMBRE "Fyx"
 !define CLAVE_DESINSTALAR "Software\Microsoft\Windows\CurrentVersion\Uninstall\Kaze"
 !define ARGUMENTOS '-app "$INSTDIR\browser\application.ini"'
 
 Name "${NOMBRE}"
 OutFile "${SALIDA}"
 InstallDir "$LOCALAPPDATA\Programs\Kaze"
-BrandingText "Pyx ${VERSION} · basado en Zen"
+BrandingText "Fyx ${VERSION} · basado en Zen"
 VIProductVersion "0.4.${BUILD}.0"
-VIAddVersionKey /LANG=3082 "ProductName" "Pyx"
-VIAddVersionKey /LANG=3082 "FileDescription" "Instalador de Pyx"
+VIAddVersionKey /LANG=3082 "ProductName" "Fyx"
+VIAddVersionKey /LANG=3082 "FileDescription" "Instalador de Fyx"
 VIAddVersionKey /LANG=3082 "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=3082 "ProductVersion" "${VERSION}"
 VIAddVersionKey /LANG=3082 "LegalCopyright" "MPL 2.0"
@@ -38,10 +38,10 @@ VIAddVersionKey /LANG=3082 "LegalCopyright" "MPL 2.0"
 !define MUI_ICON "${ICONO}"
 !define MUI_UNICON "${ICONO}"
 !define MUI_ABORTWARNING
-!define MUI_WELCOMEPAGE_TITLE "Pyx ${VERSION}"
-!define MUI_WELCOMEPAGE_TEXT "Pyx es un navegador rápido y bonito basado en Zen y Firefox: espacios, Essentials, vista dividida y más.$\r$\n$\r$\nSi ya tienes Pyx, se actualizará sin perder tus pestañas, favoritos ni contraseñas.$\r$\n$\r$\nNo hace falta ser administrador."
+!define MUI_WELCOMEPAGE_TITLE "Fyx ${VERSION}"
+!define MUI_WELCOMEPAGE_TEXT "Fyx es un navegador rápido y bonito basado en Zen y Firefox: espacios, Essentials, vista dividida y más.$\r$\n$\r$\nSi ya tienes Fyx, se actualizará sin perder tus pestañas, favoritos ni contraseñas.$\r$\n$\r$\nNo hace falta ser administrador."
 !define MUI_FINISHPAGE_RUN
-!define MUI_FINISHPAGE_RUN_TEXT "Abrir Pyx"
+!define MUI_FINISHPAGE_RUN_TEXT "Abrir Fyx"
 !define MUI_FINISHPAGE_RUN_FUNCTION AbrirKaze
 
 !insertmacro MUI_PAGE_WELCOME
@@ -75,7 +75,7 @@ FunctionEnd
         ${EndIf}
         Sleep 500
       ${Else}
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Pyx está abierto. Ciérralo para continuar." IDRETRY reintentar
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Fyx está abierto. Ciérralo para continuar." IDRETRY reintentar
         Abort
         reintentar:
       ${EndIf}
@@ -107,20 +107,20 @@ Section "Kaze" SecKaze
   Delete "$DESKTOP\Kaze.lnk"
   SetOutPath "$INSTDIR"
   File /r "${ORIGEN}\*.*"
-  WriteUninstaller "$INSTDIR\Desinstalar Pyx.exe"
+  WriteUninstaller "$INSTDIR\Desinstalar Fyx.exe"
 
-  CreateShortcut "$SMPROGRAMS\Pyx.lnk" "$INSTDIR\${EXE}" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Pyx"
+  CreateShortcut "$SMPROGRAMS\Fyx.lnk" "$INSTDIR\${EXE}" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Fyx"
   ${If} $Actualizar != 1
-  ${AndIfNot} ${FileExists} "$DESKTOP\Pyx.lnk"
-    CreateShortcut "$DESKTOP\Pyx.lnk" "$INSTDIR\${EXE}" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Pyx"
+  ${AndIfNot} ${FileExists} "$DESKTOP\Fyx.lnk"
+    CreateShortcut "$DESKTOP\Fyx.lnk" "$INSTDIR\${EXE}" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Fyx"
   ${EndIf}
 
-  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayName" "Pyx"
+  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayName" "Fyx"
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "Publisher" "Pyx (basado en Zen)"
+  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "Publisher" "Fyx (basado en Zen)"
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayIcon" "$INSTDIR\kaze.ico"
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "UninstallString" '"$INSTDIR\Desinstalar Pyx.exe"'
+  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "UninstallString" '"$INSTDIR\Desinstalar Fyx.exe"'
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "URLInfoAbout" "https://github.com/Saerling/kaze"
   WriteRegDWORD HKCU "${CLAVE_DESINSTALAR}" "NoModify" 1
   WriteRegDWORD HKCU "${CLAVE_DESINSTALAR}" "NoRepair" 1
@@ -137,11 +137,11 @@ SectionEnd
 
 Section "Uninstall"
   !insertmacro EsperarCierre
-  Delete "$SMPROGRAMS\Pyx.lnk"
-  Delete "$DESKTOP\Pyx.lnk"
+  Delete "$SMPROGRAMS\Fyx.lnk"
+  Delete "$DESKTOP\Fyx.lnk"
   ${If} ${FileExists} "$INSTDIR\kaze\kaze.manifest"
     RMDir /r "$INSTDIR"
   ${EndIf}
   DeleteRegKey HKCU "${CLAVE_DESINSTALAR}"
-  MessageBox MB_OK|MB_ICONINFORMATION "Pyx se desinstaló.$\r$\n$\r$\nTus datos (pestañas, favoritos, contraseñas) siguen en %APPDATA%\Kaze por si vuelves a instalarlo. Puedes borrar esa carpeta si ya no los quieres." /SD IDOK
+  MessageBox MB_OK|MB_ICONINFORMATION "Fyx se desinstaló.$\r$\n$\r$\nTus datos (pestañas, favoritos, contraseñas) siguen en %APPDATA%\Kaze por si vuelves a instalarlo. Puedes borrar esa carpeta si ya no los quieres." /SD IDOK
 SectionEnd

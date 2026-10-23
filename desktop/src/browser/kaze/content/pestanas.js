@@ -12,7 +12,7 @@
 "use strict";
 
 (() => {
-  if (window.PyxTabs) return;
+  if (window.FyxTabs) return;
   const HTML = "http://www.w3.org/1999/xhtml";
   const h = (tag, props = {}, ...kids) => {
     const e = document.createElementNS(HTML, tag);
@@ -27,7 +27,7 @@
     return e;
   };
 
-  const PyxTabs = {
+  const FyxTabs = {
     thumbs: new WeakMap(),
 
     async capture(tab) {
@@ -101,10 +101,24 @@
         h("div", { class: "pyx-top" },
           h("span", { class: "pyx-count", text: `${gBrowser.visibleTabs.length} pestañas` }),
           search,
+          h("button", { class: "pyx-new", title: "Organizar pestañas por sitio", text: "✦", onclick: () => { this.organize(); this.render(); } }),
           h("button", { class: "pyx-new", title: "Pestaña nueva", text: "+", onclick: () => { this.close(); BrowserCommands.openTab(); } }),
           h("button", { class: "pyx-done", text: "Listo", onclick: () => this.close() })),
         tabs.length ? h("div", { class: "pyx-grid" }, ...tabs.map(card))
           : h("div", { class: "pyx-empty", text: "Ninguna pestaña coincide." })));
+    },
+
+    /** Organizar pestañas (como Safari en iPadOS 27): junta las del mismo sitio, en el orden en que aparecen. */
+    organize() {
+      const host = t => { try { return new URL(t.linkedBrowser.currentURI.spec).hostname.replace(/^www\./, ""); } catch { return ""; } };
+      const tabs = gBrowser.visibleTabs.filter(t => !t.pinned && !t.hasAttribute("zen-essential"));
+      if (tabs.length < 3) return;
+      const order = [...new Set(tabs.map(host))];
+      const sorted = [...tabs].sort((a, b) => order.indexOf(host(a)) - order.indexOf(host(b)));
+      const start = tabs[0]._tPos;
+      sorted.forEach((t, i) => {
+        try { gBrowser.moveTabTo(t, { tabIndex: start + i }); } catch { gBrowser.moveTabTo(t, start + i); }
+      });
     },
 
     layout() {
@@ -115,7 +129,7 @@
           CUI.createWidget({
             id: "pyx-overview-button", type: "button", label: "Todas las pestañas",
             tooltiptext: "Mostrar todas las pestañas (Ctrl+Mayús+\\)", defaultArea: CUI.AREA_NAVBAR,
-            onCommand: e => e.target.ownerGlobal.PyxTabs?.toggle(),
+            onCommand: e => e.target.ownerGlobal.FyxTabs?.toggle(),
           });
         }
       } catch {}
@@ -127,25 +141,25 @@
         });
         Services.prefs.setBoolPref("pyx.layout.safari", true);
       } catch (e) {
-        console.warn("[Pyx] barra", e);
+        console.warn("[Fyx] barra", e);
       }
     },
   };
 
-  window.PyxTabs = PyxTabs;
-  PyxTabs.layout();
+  window.FyxTabs = FyxTabs;
+  FyxTabs.layout();
   gBrowser.tabContainer.addEventListener("TabSelect", e => {
     const prev = e.detail?.previousTab;
-    if (prev && !prev.closing) PyxTabs.capture(prev);
+    if (prev && !prev.closing) FyxTabs.capture(prev);
   });
   gBrowser.tabContainer.addEventListener("TabClose", e => {
-    const u = PyxTabs.thumbs.get(e.target);
+    const u = FyxTabs.thumbs.get(e.target);
     if (u) URL.revokeObjectURL(u);
   });
   window.addEventListener("keydown", e => {
     if (e.ctrlKey && e.shiftKey && !e.altKey && e.code == "Backslash") {
       e.preventDefault();
-      PyxTabs.toggle();
+      FyxTabs.toggle();
     }
   }, true);
 })();

@@ -304,6 +304,21 @@ class Store(private val db: Db, private val settings: Settings) {
         setFolder(folderTabs(spaceId, old), name)
     }
 
+    /** Organizar pestañas: las sueltas del mismo sitio (2 o más) van a una carpeta con su nombre. */
+    fun organize(spaceId: String): Int {
+        val groups = normal(spaceId).filter { it.folder.isEmpty() && !it.isStart }
+            .groupBy { siteName(it.url) }.filter { it.key.isNotBlank() && it.value.size >= 2 }
+        groups.forEach { (name, list) -> setFolder(list, name) }
+        return groups.size
+    }
+
+    private fun siteName(url: String): String {
+        val host = runCatching { java.net.URI(url).host }.getOrNull()?.removePrefix("www.") ?: return ""
+        val parts = host.split('.')
+        val core = if (parts.size >= 3 && parts[parts.size - 2].length <= 3) parts[parts.size - 3] else parts.getOrElse(parts.size - 2) { parts[0] }
+        return core.replaceFirstChar { it.uppercase() }
+    }
+
     fun ungroup(spaceId: String, name: String) = setFolder(folderTabs(spaceId, name), "")
 
     /** Arrastrar y soltar: pone la pestaña [moved] en el lugar de [target] (las demás se corren). */

@@ -20,17 +20,17 @@ ManifestDPIAware true
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
-!define NOMBRE "Kaze"
+!define NOMBRE "Zev"
 !define CLAVE_DESINSTALAR "Software\Microsoft\Windows\CurrentVersion\Uninstall\Kaze"
 !define ARGUMENTOS '-app "$INSTDIR\browser\application.ini"'
 
 Name "${NOMBRE}"
 OutFile "${SALIDA}"
 InstallDir "$LOCALAPPDATA\Programs\Kaze"
-BrandingText "Kaze ${VERSION} · basado en Firefox ${FIREFOX}"
+BrandingText "Zev ${VERSION} · basado en Firefox ${FIREFOX}"
 VIProductVersion "0.4.${BUILD}.0"
-VIAddVersionKey /LANG=3082 "ProductName" "Kaze"
-VIAddVersionKey /LANG=3082 "FileDescription" "Instalador de Kaze"
+VIAddVersionKey /LANG=3082 "ProductName" "Zev"
+VIAddVersionKey /LANG=3082 "FileDescription" "Instalador de Zev"
 VIAddVersionKey /LANG=3082 "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=3082 "ProductVersion" "${VERSION}"
 VIAddVersionKey /LANG=3082 "LegalCopyright" "MPL 2.0"
@@ -38,10 +38,10 @@ VIAddVersionKey /LANG=3082 "LegalCopyright" "MPL 2.0"
 !define MUI_ICON "${ICONO}"
 !define MUI_UNICON "${ICONO}"
 !define MUI_ABORTWARNING
-!define MUI_WELCOMEPAGE_TITLE "Kaze ${VERSION}"
-!define MUI_WELCOMEPAGE_TEXT "Kaze es un navegador rápido y ligero basado en Firefox, con espacios, Essentials y perfiles.$\r$\n$\r$\nSi ya tienes Kaze, se actualizará sin perder tus pestañas, favoritos ni contraseñas.$\r$\n$\r$\nNo hace falta ser administrador."
+!define MUI_WELCOMEPAGE_TITLE "Zev ${VERSION}"
+!define MUI_WELCOMEPAGE_TEXT "Zev es un navegador rápido y ligero basado en Firefox, con espacios, Essentials y perfiles.$\r$\n$\r$\nSi ya tienes Zev, se actualizará sin perder tus pestañas, favoritos ni contraseñas.$\r$\n$\r$\nNo hace falta ser administrador."
 !define MUI_FINISHPAGE_RUN
-!define MUI_FINISHPAGE_RUN_TEXT "Abrir Kaze"
+!define MUI_FINISHPAGE_RUN_TEXT "Abrir Zev"
 !define MUI_FINISHPAGE_RUN_FUNCTION AbrirKaze
 
 !insertmacro MUI_PAGE_WELCOME
@@ -75,7 +75,7 @@ FunctionEnd
         ${EndIf}
         Sleep 500
       ${Else}
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Kaze está abierto. Ciérralo para continuar." IDRETRY reintentar
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Zev está abierto. Ciérralo para continuar." IDRETRY reintentar
         Abort
         reintentar:
       ${EndIf}
@@ -102,22 +102,25 @@ Section "Kaze" SecKaze
     RMDir /r "$INSTDIR"
   ${EndIf}
 
+  ; Accesos directos con el nombre anterior.
+  Delete "$SMPROGRAMS\Kaze.lnk"
+  Delete "$DESKTOP\Kaze.lnk"
   SetOutPath "$INSTDIR"
   File /r "${ORIGEN}\*.*"
-  WriteUninstaller "$INSTDIR\Desinstalar Kaze.exe"
+  WriteUninstaller "$INSTDIR\Desinstalar Zev.exe"
 
-  CreateShortcut "$SMPROGRAMS\Kaze.lnk" "$INSTDIR\firefox.exe" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Kaze"
+  CreateShortcut "$SMPROGRAMS\Zev.lnk" "$INSTDIR\firefox.exe" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Zev"
   ${If} $Actualizar != 1
-  ${AndIfNot} ${FileExists} "$DESKTOP\Kaze.lnk"
-    CreateShortcut "$DESKTOP\Kaze.lnk" "$INSTDIR\firefox.exe" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Kaze"
+  ${AndIfNot} ${FileExists} "$DESKTOP\Zev.lnk"
+    CreateShortcut "$DESKTOP\Zev.lnk" "$INSTDIR\firefox.exe" '${ARGUMENTOS}' "$INSTDIR\kaze.ico" 0 SW_SHOWNORMAL "" "Navegador Zev"
   ${EndIf}
 
-  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayName" "Kaze"
+  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayName" "Zev"
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "Publisher" "Kaze (basado en Mozilla Firefox ${FIREFOX})"
+  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "Publisher" "Zev (basado en Mozilla Firefox ${FIREFOX})"
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "DisplayIcon" "$INSTDIR\kaze.ico"
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "UninstallString" '"$INSTDIR\Desinstalar Kaze.exe"'
+  WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "UninstallString" '"$INSTDIR\Desinstalar Zev.exe"'
   WriteRegStr HKCU "${CLAVE_DESINSTALAR}" "URLInfoAbout" "https://github.com/Saerling/kaze"
   WriteRegDWORD HKCU "${CLAVE_DESINSTALAR}" "NoModify" 1
   WriteRegDWORD HKCU "${CLAVE_DESINSTALAR}" "NoRepair" 1
@@ -134,11 +137,11 @@ SectionEnd
 
 Section "Uninstall"
   !insertmacro EsperarCierre
-  Delete "$SMPROGRAMS\Kaze.lnk"
-  Delete "$DESKTOP\Kaze.lnk"
+  Delete "$SMPROGRAMS\Zev.lnk"
+  Delete "$DESKTOP\Zev.lnk"
   ${If} ${FileExists} "$INSTDIR\kaze\kaze.manifest"
     RMDir /r "$INSTDIR"
   ${EndIf}
   DeleteRegKey HKCU "${CLAVE_DESINSTALAR}"
-  MessageBox MB_OK|MB_ICONINFORMATION "Kaze se desinstaló.$\r$\n$\r$\nTus datos (pestañas, favoritos, contraseñas) siguen en %APPDATA%\Kaze por si vuelves a instalarlo. Puedes borrar esa carpeta si ya no los quieres." /SD IDOK
+  MessageBox MB_OK|MB_ICONINFORMATION "Zev se desinstaló.$\r$\n$\r$\nTus datos (pestañas, favoritos, contraseñas) siguen en %APPDATA%\Kaze por si vuelves a instalarlo. Puedes borrar esa carpeta si ya no los quieres." /SD IDOK
 SectionEnd

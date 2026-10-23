@@ -96,7 +96,10 @@ class Tab(
     val isPrivate: Boolean = false,
     /** Para pestañas fijadas/essentials: la URL "de casa" a la que se puede volver. */
     pinnedUrl: String? = null,
+    /** Carpeta dentro del espacio ("" = suelta). Las pestañas con el mismo nombre forman la carpeta. */
+    folder: String = "",
 ) {
+    var folder by mutableStateOf(folder)
     var spaceId by mutableStateOf(spaceId)
     var url by mutableStateOf(url)
     var title by mutableStateOf(title)

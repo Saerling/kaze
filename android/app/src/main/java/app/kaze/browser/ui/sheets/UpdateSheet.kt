@@ -66,7 +66,7 @@ fun UpdateSheet(onDismiss: () -> Unit) {
         if (!u.canInstall()) {
             // Android pide, una sola vez, permitir que Kaze instale apps.
             context.startActivity(u.installPermissionIntent())
-            app.ui.show("Activa «Permitir de esta fuente» y vuelve a Kaze")
+            app.ui.show("Activa «Permitir de esta fuente» y vuelve a Zev")
             return
         }
         scope.launch {
@@ -95,7 +95,7 @@ fun UpdateSheet(onDismiss: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         when (u.phase) {
-                            Updater.Phase.UP_TO_DATE -> "Kaze está al día"
+                            Updater.Phase.UP_TO_DATE -> "Zev está al día"
                             Updater.Phase.CHECKING -> "Buscando actualizaciones…"
                             else -> if (info != null) "¡Nueva versión!" else "Actualizaciones"
                         },
@@ -170,7 +170,7 @@ fun UpdateSheet(onDismiss: () -> Unit) {
                         .clickable { u.skip(info); onDismiss() }.padding(horizontal = 20.dp, vertical = 10.dp),
                 )
                 if (u.phase == Updater.Phase.INSTALLING) {
-                    Text("Kaze se reiniciará con la versión nueva.", style = KazeType.small, color = k.ink55, modifier = Modifier.align(Alignment.CenterHorizontally))
+                    Text("Zev se reiniciará con la versión nueva.", style = KazeType.small, color = k.ink55, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -214,13 +214,13 @@ internal fun parseNotes(notes: String): Pair<String, List<String>> {
     return title to items.map { it.trim().removeSuffix(".") + "." }
 }
 
-/** "Kaze se cerró la última vez": muestra el error para copiarlo o compartirlo. */
+/** "Zev se cerró la última vez": muestra el error para copiarlo o compartirlo. */
 @Composable
 fun CrashSheet(text: String, onCopy: () -> Unit, onShare: () -> Unit, onDismiss: () -> Unit) {
     val k = LocalKaze.current
     KazeSheet(onDismiss) {
         Column(Modifier.padding(horizontal = 24.dp)) {
-            Text("Kaze se cerró la última vez", style = KazeType.sheetTitle, color = k.ink)
+            Text("Zev se cerró la última vez", style = KazeType.sheetTitle, color = k.ink)
             Spacer(Modifier.height(6.dp))
             Text("Copia o comparte este detalle para poder arreglarlo.", style = KazeType.small, color = k.ink55)
             Spacer(Modifier.height(14.dp))

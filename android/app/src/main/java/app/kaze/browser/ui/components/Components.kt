@@ -71,7 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-val LocalApp = staticCompositionLocalOf<Kaze> { error("Kaze no inicializado") }
+val LocalApp = staticCompositionLocalOf<Kaze> { error("Zev no inicializado") }
 
 // ── Fondo suave del grupo (página de inicio y vista de pestañas) ──────
 
@@ -172,16 +172,25 @@ fun Modifier.tap(onClick: () -> Unit, onLongClick: () -> Unit): Modifier {
 @Composable
 fun IosSectionHeader(text: String, modifier: Modifier = Modifier) {
     val k = LocalKaze.current
-    Text(
-        text.uppercase(), style = KazeType.footnote, color = k.ink55,
-        modifier = modifier.padding(start = 32.dp, end = 16.dp, top = 22.dp, bottom = 7.dp),
-    )
+    if (k.material) {
+        // Material You: título de sección en el color principal, sin mayúsculas (como Ajustes de Android).
+        Text(
+            text, style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = k.accent,
+            modifier = modifier.padding(start = 30.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+        )
+    } else {
+        Text(
+            text.uppercase(), style = KazeType.footnote, color = k.ink55,
+            modifier = modifier.padding(start = 32.dp, end = 16.dp, top = 22.dp, bottom = 7.dp),
+        )
+    }
 }
 
 /** Bloque blanco con esquinas redondeadas y filas separadas por líneas finas. */
 @Composable
 fun IosGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).card(RoundedCornerShape(12.dp)), content = content)
+    val k = LocalKaze.current
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).card(RoundedCornerShape(if (k.material) 26.dp else 12.dp)), content = content)
 }
 
 @Composable
@@ -203,7 +212,7 @@ fun IosRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 46.dp)
+                .heightIn(min = if (k.material) 58.dp else 46.dp)
                 .then(if (onClick != null && enabled) Modifier.clickable(onClick = onClick) else Modifier)
                 .alpha(if (enabled) 1f else 0.4f)
                 .padding(start = 16.dp, end = 14.dp, top = 9.dp, bottom = 9.dp),
@@ -226,7 +235,9 @@ fun IosRow(
             if (chevron) Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = k.ink35, modifier = Modifier.size(20.dp))
         }
         if (divider) {
-            HorizontalDivider(
+            // Material You: filas como mosaicos separados por un hueco del color de fondo.
+            if (k.material) HorizontalDivider(thickness = 2.dp, color = k.paper)
+            else HorizontalDivider(
                 Modifier.padding(start = if (icon != null || leading != null) 52.dp else 16.dp),
                 thickness = 0.5.dp, color = k.separator,
             )

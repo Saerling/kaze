@@ -122,7 +122,7 @@ fun styledColors(context: android.content.Context, dark: Boolean, style: UiStyle
     }
     return KazeColors(
         paper = scheme.surface, ink = scheme.onSurface, lift = scheme.surfaceContainerHighest,
-        accent = scheme.primary, isDark = dark, card = scheme.surfaceContainerLow,
+        accent = scheme.primary, isDark = dark, card = scheme.surfaceContainerHigh,
         glass = scheme.surfaceContainer, separator = scheme.outlineVariant,
         material = true, tonal = scheme.secondaryContainer, onTonal = scheme.onSecondaryContainer,
     )

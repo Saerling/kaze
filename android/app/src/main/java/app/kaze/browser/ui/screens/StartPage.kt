@@ -88,7 +88,7 @@ fun StartPage(
                     Text("Navegación privada", style = KazeType.title2, color = k.ink)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Kaze no guardará las páginas que visites, tu historial de búsqueda ni la información de autorrelleno. " +
+                        "Zev no guardará las páginas que visites, tu historial de búsqueda ni la información de autorrelleno. " +
                             "Las pestañas privadas desaparecen al cerrarlas.",
                         style = KazeType.subhead, color = k.ink55,
                     )
@@ -120,8 +120,8 @@ fun StartPage(
                     Spacer(Modifier.width(14.dp))
                     val n = app.settings.trackersTotal
                     Text(
-                        if (n == 0) "Kaze bloquea los rastreadores y te muestra cuántos detuvo." else
-                            "Kaze evitó que $n rastreadores te siguieran.",
+                        if (n == 0) "Zev bloquea los rastreadores y te muestra cuántos detuvo." else
+                            "Zev evitó que $n rastreadores te siguieran.",
                         style = KazeType.subhead, color = k.ink, modifier = Modifier.weight(1f),
                     )
                     Text(n.toString(), style = KazeType.title2, color = k.ink)

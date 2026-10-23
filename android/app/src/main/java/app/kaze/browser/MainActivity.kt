@@ -169,9 +169,9 @@ class MainActivity : ComponentActivity() {
                     CrashSheet(
                         text = text,
                         onCopy = {
-                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Kaze", text))
+                            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Zev", text))
                         },
-                        onShare = { share(text, "Error de Kaze") },
+                        onShare = { share(text, "Error de Zev") },
                         onDismiss = { startBrowser(null) },
                     )
                 }
@@ -194,7 +194,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         ClipboardBridge.copy = { text ->
-            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Kaze", text))
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Zev", text))
             app.ui.show("Copiado")
         }
 

@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
 class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION) {
 
     companion object {
-        private const val VERSION = 2
+        private const val VERSION = 3
         private const val HISTORY_LIMIT = 5000
     }
 
@@ -48,7 +48,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
             """CREATE TABLE tabs(
                 id TEXT PRIMARY KEY, space_id TEXT NOT NULL, url TEXT NOT NULL, title TEXT NOT NULL,
                 kind INTEGER NOT NULL, position INTEGER NOT NULL, last_used INTEGER NOT NULL,
-                state TEXT, pinned_url TEXT)""",
+                state TEXT, pinned_url TEXT, folder TEXT NOT NULL DEFAULT '')""",
         )
         createHistory(db)
         createV2(db)
@@ -74,6 +74,10 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 3) {
+            // v3: carpetas de pestañas.
+            runCatching { db.execSQL("ALTER TABLE tabs ADD COLUMN folder TEXT NOT NULL DEFAULT ''") }
+        }
         if (oldVersion < 2) {
             // v1 (Kaze 0.3.105) → v2: perfiles, marcadores, lista de lectura e historial por perfil.
             db.execSQL("ALTER TABLE spaces ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'personal'")
@@ -205,7 +209,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
     // ── Pestañas ──────────────────────────────────────────────────────
 
     fun loadTabs(): List<Tab> = readableDatabase.rawQuery(
-        "SELECT id, space_id, url, title, kind, position, last_used, state, pinned_url FROM tabs ORDER BY position",
+        "SELECT id, space_id, url, title, kind, position, last_used, state, pinned_url, folder FROM tabs ORDER BY position",
         null,
     ).use { c ->
         buildList {
@@ -221,6 +225,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
                         lastUsed = c.getLong(6),
                         sessionState = c.getString(7),
                         pinnedUrl = c.getString(8),
+                        folder = c.getString(9) ?: "",
                     ),
                 )
             }
@@ -232,7 +237,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
         val v = ContentValues().apply {
             put("id", t.id); put("space_id", t.spaceId); put("url", t.url); put("title", t.title)
             put("kind", t.kind.code); put("position", t.position); put("last_used", t.lastUsed)
-            put("state", t.sessionState); put("pinned_url", t.pinnedUrl)
+            put("state", t.sessionState); put("pinned_url", t.pinnedUrl); put("folder", t.folder)
         }
         io.execute { writableDatabase.insertWithOnConflict("tabs", null, v, SQLiteDatabase.CONFLICT_REPLACE) }
     }

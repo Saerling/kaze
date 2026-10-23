@@ -26,3 +26,4 @@ __pycache__/
 # Sistema
 .DS_Store
 Thumbs.db
+desktop/scripts/node_modules/

@@ -159,8 +159,8 @@ async function render() {
   fill("#lectura", reading, readingCard);
   $("#rastreadores").textContent = blocked.toLocaleString("es");
   $("#rastreadores-texto").textContent = blocked
-    ? `rastreadores bloqueados en los últimos siete días. Kaze evitó que te siguieran de un sitio a otro.`
-    : "En los últimos siete días, Kaze no encontró rastreadores en los sitios que visitaste.";
+    ? `rastreadores bloqueados en los últimos siete días. Zev evitó que te siguieran de un sitio a otro.`
+    : "En los últimos siete días, Zev no encontró rastreadores en los sitios que visitaste.";
   $("#vacio").hidden = !!(fav.length || freq.length || reading.length);
 }
 

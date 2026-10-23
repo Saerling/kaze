@@ -189,7 +189,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
                 Spacer(Modifier.width(4.dp))
             }
             Text(
-                addressLabel(tab).ifBlank { "Kaze" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
+                addressLabel(tab).ifBlank { "Zev" }, style = KazeType.footnote.copy(fontWeight = FontWeight.Medium),
                 color = k.ink, maxLines = 1,
             )
         }

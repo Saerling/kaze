@@ -485,7 +485,7 @@ class SessionPool(
     }
 
     companion object {
-        private const val TAG = "KazeSessions"
+        private const val TAG = "ZevSessions"
         private val WEB_SCHEMES = setOf(
             "http", "https", "about", "data", "blob", "file", "javascript", "moz-extension", "resource", "view-source",
         )

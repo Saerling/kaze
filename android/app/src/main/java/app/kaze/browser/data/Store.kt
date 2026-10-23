@@ -281,6 +281,43 @@ class Store(private val db: Db, private val settings: Settings) {
         return closed
     }
 
+    // ── Carpetas y orden de las pestañas ──────────────────────────────
+
+    /** Carpetas del espacio, en el orden de su primera pestaña. */
+    fun folders(spaceId: String): List<String> = normal(spaceId).map { it.folder }.filter { it.isNotEmpty() }.distinct()
+
+    fun folderTabs(spaceId: String, name: String): List<Tab> = normal(spaceId).filter { it.folder == name }
+
+    /** Mete pestañas en una carpeta (la crea si no existe). */
+    fun setFolder(list: List<Tab>, name: String) {
+        list.filter { !it.isPrivate }.forEach { it.folder = name; db.saveTab(it) }
+    }
+
+    /** Nombre libre para una carpeta nueva: "Carpeta", "Carpeta 2"… */
+    fun newFolderName(spaceId: String): String {
+        val used = folders(spaceId).toSet()
+        return generateSequence(1) { it + 1 }.map { if (it == 1) "Carpeta" else "Carpeta $it" }.first { it !in used }
+    }
+
+    fun renameFolder(spaceId: String, old: String, new: String) {
+        val name = new.trim().ifEmpty { return }
+        setFolder(folderTabs(spaceId, old), name)
+    }
+
+    fun ungroup(spaceId: String, name: String) = setFolder(folderTabs(spaceId, name), "")
+
+    /** Arrastrar y soltar: pone la pestaña [moved] en el lugar de [target] (las demás se corren). */
+    fun moveBefore(moved: Tab, target: Tab) {
+        if (moved.id == target.id || moved.spaceId != target.spaceId) return
+        val list = normal(moved.spaceId).toMutableList()
+        val from = list.indexOf(moved)
+        val to = list.indexOf(target)
+        if (from < 0 || to < 0) return
+        list.removeAt(from)
+        list.add(to, moved)
+        list.forEachIndexed { i, t -> if (t.position != i) { t.position = i; db.saveTab(t) } }
+    }
+
     private fun persistPositions(spaceId: String, kind: TabKind) {
         val list = when (kind) {
             TabKind.ESSENTIAL -> essentials()

@@ -45,30 +45,33 @@ jobs:
             "https://archive.mozilla.org/pub/firefox/releases/$FX/win64/es-MX/Firefox%20Setup%20$FX.exe"
           ls -la firefox-setup.exe
 
-      - name: Armar Kaze e instalador
+      - name: Herramienta para el ícono del .exe
+        run: npm ci --prefix desktop/scripts
+
+      - name: Armar Zev e instalador
         run: python3 desktop/scripts/empaquetar_windows.py --setup firefox-setup.exe --build "$KAZE_BUILD" --salida dist
 
       - name: Subir instalador
         uses: actions/upload-artifact@v7
         with:
-          name: kaze-windows
-          path: dist/Kaze-*-setup.exe
+          name: zev-windows
+          path: dist/Zev-*-setup.exe
 
-      - name: Publicar versión (Kaze la detecta y se actualiza)
+      - name: Publicar versión (Zev la detecta y se actualiza)
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo "Descarga **Kaze-0.4.$KAZE_BUILD-setup.exe**, ábrelo y listo: se instala sin permisos de administrador."
-            echo "Si ya tienes Kaze, se actualiza encima sin perder nada (y desde ahora Kaze te avisa solo)."
+            echo "Descarga **Zev-0.4.$KAZE_BUILD-setup.exe**, ábrelo y listo: se instala sin permisos de administrador."
+            echo "Si ya tienes Zev (antes Kaze), se actualiza encima sin perder nada y te avisa solo de las nuevas versiones."
             echo
             echo "Basado en Firefox $FIREFOX."
             echo
             echo "Cambios:"
             git log -1 --pretty=format:'%s%n%n%b' | sed '/^Co-Authored-By/d;/^Claude-Session/d'
           } > notes.md
-          gh release create "windows-$KAZE_BUILD" dist/Kaze-*-setup.exe \
-            --title "Kaze Windows 0.4.$KAZE_BUILD" \
+          gh release create "windows-$KAZE_BUILD" dist/Zev-*-setup.exe \
+            --title "Zev Windows 0.4.$KAZE_BUILD" \
             --notes-file notes.md \
             --target "$GITHUB_SHA"

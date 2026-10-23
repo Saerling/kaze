@@ -56,19 +56,19 @@ POLITICAS = {
     }
 }
 
-MARCA_FTL = """-brand-shorter-name = Kaze
--brand-short-name = Kaze
--brand-shortcut-name = Kaze
--brand-full-name = Kaze
--brand-product-name = Kaze
+MARCA_FTL = """-brand-shorter-name = Zev
+-brand-short-name = Zev
+-brand-shortcut-name = Zev
+-brand-full-name = Zev
+-brand-product-name = Zev
 -vendor-short-name = Mozilla
-trademarkInfo = Kaze es un navegador basado en Firefox. Firefox es una marca registrada de la Fundación Mozilla.
+trademarkInfo = Zev es un navegador basado en Firefox. Firefox es una marca registrada de la Fundación Mozilla.
 """
-MARCA_PROPERTIES = "brandShorterName = Kaze\nbrandShortName = Kaze\nbrandFullName = Kaze\n"
+MARCA_PROPERTIES = "brandShorterName = Zev\nbrandShortName = Zev\nbrandFullName = Zev\n"
 WORDMARK = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 42">'
     '<text x="0" y="33" font-family="Segoe UI, system-ui, sans-serif" font-size="36" '
-    'font-weight="700" fill="context-fill" letter-spacing="-1">Kaze</text></svg>\n'
+    'font-weight="700" fill="context-fill" letter-spacing="-1">Zev</text></svg>\n'
 )
 
 
@@ -167,6 +167,16 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
     shutil.copy2(MARCA / "firefox.ico", app / "kaze.ico")
 
 
+def poner_icono_exe(exe: Path, ico: Path) -> None:
+    """Cambia los íconos dentro de firefox.exe (barra de tareas, Alt+Tab) con resedit (Node, sin Windows)."""
+    script = AQUI / "icono_exe.mjs"
+    try:
+        subprocess.run(["node", str(script), str(exe), str(ico)], check=True, cwd=AQUI)
+        print("  ícono de firefox.exe cambiado por el de Zev")
+    except (OSError, subprocess.CalledProcessError) as e:
+        print(f"  (no se pudo cambiar el ícono del .exe: {e})")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--setup", required=True, type=Path, help='instalador oficial "Firefox Setup X.exe" (win64)')
@@ -200,6 +210,7 @@ def main() -> None:
     identidad(app, build_id)
     remarcar_omni(app / "browser" / "omni.ja")
     copiar_kaze(app, a.build, version)
+    poner_icono_exe(app / "firefox.exe", MARCA / "firefox.ico")
     (app / "kaze-version.txt").write_text(f"Kaze {version} (Firefox {firefox}, build {build_id})\n", encoding="utf-8")
     print(f"Carpeta lista: {app}")
 
@@ -208,7 +219,7 @@ def main() -> None:
     makensis = shutil.which("makensis")
     if not makensis:
         sys.exit("Falta makensis (NSIS) para crear el instalador; usa --sin-instalador para solo la carpeta.")
-    exe = a.salida / f"Kaze-{version}-setup.exe"
+    exe = a.salida / f"Zev-{version}-setup.exe"
     subprocess.run([
         makensis, "-V2", "-INPUTCHARSET", "UTF8",
         f"-DVERSION={version}", f"-DFIREFOX={firefox}", f"-DBUILD={a.build}",

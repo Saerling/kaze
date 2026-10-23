@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.sheets
 
+import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -152,20 +153,38 @@ object ClipboardBridge {
 @Composable
 fun KazeSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
     val k = LocalKaze.current
-    Switch(
-        checked = checked,
-        onCheckedChange = onChange,
-        colors = SwitchDefaults.colors(
-            checkedTrackColor = Color(0xFF34C759), checkedThumbColor = Color.White, checkedBorderColor = Color.Transparent,
-            uncheckedTrackColor = k.lift, uncheckedThumbColor = Color.White, uncheckedBorderColor = Color.Transparent,
-        ),
-    )
+    if (k.material) {
+        // Interruptor de Material 3: pista del color principal y palomita en el círculo.
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            thumbContent = if (checked) { { Icon(Icons.Outlined.Check, null, Modifier.size(SwitchDefaults.IconSize), tint = k.accent) } } else null,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = k.accent, checkedThumbColor = k.paper, checkedBorderColor = k.accent,
+                uncheckedTrackColor = k.tonal, uncheckedThumbColor = k.ink55, uncheckedBorderColor = k.ink55,
+            ),
+        )
+    } else {
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Color(0xFF34C759), checkedThumbColor = Color.White, checkedBorderColor = Color.Transparent,
+                uncheckedTrackColor = k.lift, uncheckedThumbColor = Color.White, uncheckedBorderColor = Color.Transparent,
+            ),
+        )
+    }
 }
 
 /** Botón grande de iOS (relleno gris o color). */
 @Composable
 fun TextPill(text: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.height(50.dp).tap(onClick).liftCard(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+    val k = LocalKaze.current
+    Box(
+        modifier.height(if (k.material) 52.dp else 50.dp).tap(onClick)
+            .then(if (k.material) Modifier.clip(RoundedCornerShape(50)).background(k.tonal) else Modifier.liftCard(RoundedCornerShape(14.dp))),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(text, style = KazeType.headline, color = color)
     }
 }
@@ -383,6 +402,9 @@ fun TabMenuSheet(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onMove: ()
                 }
                 if (store.profileSpaces.size > 1) IosRow("Mover a otro grupo", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
                 IosRow("Copiar dirección", Icons.Outlined.ContentCopy) { ClipboardBridge.copy?.invoke(tab.url); onDismiss() }
+                if (tab.folder.isNotEmpty()) {
+                    IosRow("Sacar de la carpeta «${tab.folder}»", Icons.Outlined.FolderOff) { store.setFolder(listOf(tab), ""); onDismiss() }
+                }
             }
             IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
                 app.pool.close(tab); store.close(tab); app.thumbnails.delete(tab.id); onDismiss()
@@ -612,8 +634,8 @@ fun PrivacyReportSheet(tab: Tab?, onDismiss: () -> Unit) {
                 Icon(Icons.Outlined.Shield, null, tint = k.ink, modifier = Modifier.size(34.dp))
                 Spacer(Modifier.width(14.dp))
                 Text(
-                    if (days > 0) "En ${if (days == 1L) "el último día" else "los últimos $days días"}, Kaze evitó que $total rastreadores te siguieran."
-                    else "Kaze bloquea los rastreadores que te siguen entre sitios.",
+                    if (days > 0) "En ${if (days == 1L) "el último día" else "los últimos $days días"}, Zev evitó que $total rastreadores te siguieran."
+                    else "Zev bloquea los rastreadores que te siguen entre sitios.",
                     style = KazeType.subhead, color = k.ink, modifier = Modifier.weight(1f),
                 )
             }

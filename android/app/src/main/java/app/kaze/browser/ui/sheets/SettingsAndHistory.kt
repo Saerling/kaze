@@ -216,7 +216,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             if (needsRestart) {
                 Spacer(Modifier.height(8.dp))
                 IosGroup {
-                    IosRow("Reiniciar Kaze para aplicar los cambios", titleColor = k.accent, divider = false, onClick = onRestart)
+                    IosRow("Reiniciar Zev para aplicar los cambios", titleColor = k.accent, divider = false, onClick = onRestart)
                 }
             }
 
@@ -267,7 +267,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
                 }
             }
-            Note("Kaze usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
+            Note("Zev usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
 
             IosSectionHeader("Memoria")
             IosGroup {
@@ -319,7 +319,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze/issues"))) }
                 }
             }
-            Note("Kaze es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
+            Note("Zev es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
             Spacer(Modifier.height(24.dp))
         }
     }

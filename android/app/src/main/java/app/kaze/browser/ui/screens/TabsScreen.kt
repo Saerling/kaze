@@ -4,6 +4,26 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
+import kotlinx.coroutines.delay
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.VisibilityThreshold
@@ -136,6 +156,68 @@ fun TabsScreen(
         if (i >= 4) grid.scrollToItem(header + i)
     }
 
+    // ── Arrastrar para ordenar y soltar encima para hacer carpetas ──
+    val haptics = LocalHapticFeedback.current
+    var dragId by remember { mutableStateOf<String?>(null) }
+    var dragStart by remember { mutableStateOf(Offset.Zero) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var hoverKey by remember { mutableStateOf<String?>(null) }
+    var mergeReady by remember { mutableStateOf(false) }
+    var openFolder by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(hoverKey) {
+        mergeReady = false
+        if (hoverKey != null && hoverKey != dragId) {
+            delay(450)
+            mergeReady = true
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+    fun keyAt(p: Offset): String? = grid.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+        p.x >= info.offset.x && p.x <= info.offset.x + info.size.width &&
+            p.y >= info.offset.y && p.y <= info.offset.y + info.size.height
+    }?.key as? String
+    fun dragModifier(t: Tab): Modifier = Modifier.pointerInput(t.id) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = { local ->
+                val info = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.key == t.id }
+                dragStart = (info?.offset?.let { Offset(it.x.toFloat(), it.y.toFloat()) } ?: Offset.Zero) + local
+                dragOffset = Offset.Zero
+                dragId = t.id
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            },
+            onDrag = { change, d ->
+                change.consume()
+                dragOffset += d
+                hoverKey = keyAt(dragStart + dragOffset)?.takeIf { it != t.id && (it.startsWith("f:") || store.tabById(it) != null) }
+            },
+            onDragEnd = {
+                val target = hoverKey
+                when {
+                    // Casi no se movió: es una pulsación larga normal → menú de la pestaña.
+                    dragOffset.getDistance() < 24f -> onTabMenu(t)
+                    target == null -> Unit
+                    target.startsWith("f:") && mergeReady -> store.setFolder(listOf(t), target.removePrefix("f:"))
+                    mergeReady -> store.tabById(target)?.let { other ->
+                        val name = other.folder.ifEmpty { store.newFolderName(space.id) }
+                        store.setFolder(listOf(other, t), name)
+                    }
+                    target.startsWith("f:") -> store.folderTabs(space.id, target.removePrefix("f:")).firstOrNull()?.let { store.moveBefore(t, it) }
+                    else -> store.tabById(target)?.let { store.moveBefore(t, it) }
+                }
+                dragId = null; hoverKey = null; mergeReady = false; dragOffset = Offset.Zero
+            },
+            onDragCancel = { dragId = null; hoverKey = null; mergeReady = false; dragOffset = Offset.Zero },
+        )
+    }
+    @Composable
+    fun Modifier.dragVisual(key: String): Modifier {
+        val target by animateFloatAsState(if (hoverKey == key && mergeReady) 0.9f else 1f, spring(0.6f, 500f), label = "merge")
+        return if (dragId == key) this.zIndex(10f).graphicsLayer {
+            translationX = dragOffset.x; translationY = dragOffset.y
+            scaleX = 1.07f; scaleY = 1.07f; shadowElevation = 28f; alpha = 0.95f
+        } else this.graphicsLayer { scaleX = target; scaleY = target }
+    }
+
     var drag by remember { mutableFloatStateOf(0f) }
     Box(
         Modifier.fillMaxSize().pointerInput(spaces.size, space.id) {
@@ -193,17 +275,39 @@ fun TabsScreen(
                     PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu)
                 }
             }
-            items(normal, key = { it.id }) { t ->
-                // Al cerrar o abrir pestañas, las demás se acomodan con animación.
-                Box(Modifier.animateItem(fadeInSpec = tween(220), placementSpec = spring(0.85f, 380f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(160))) {
-                if (mode == "list") TabRow(
-                    tab = t, selected = t.id == store.selectedTabId,
-                    onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) },
-                ) else TabCard(
-                    compact = mode == "compact",
-                    tab = t, selected = t.id == store.selectedTabId,
-                    onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) },
-                )
+            // Pestañas sueltas y carpetas (una carpeta ocupa el lugar de su primera pestaña).
+            val entries: List<Any> = if (query.isNotBlank()) normal else {
+                val seen = mutableSetOf<String>()
+                normal.mapNotNull { t ->
+                    when {
+                        t.folder.isEmpty() -> t
+                        seen.add(t.folder) -> t.folder
+                        else -> null
+                    }
+                }
+            }
+            items(entries, key = { e -> if (e is Tab) e.id else "f:$e" }) { e ->
+                // Al cerrar, abrir o reordenar pestañas, las demás se acomodan con animación.
+                val key = if (e is Tab) e.id else "f:$e"
+                Box(
+                    Modifier.animateItem(fadeInSpec = tween(220), placementSpec = spring(0.82f, 360f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(160))
+                        .dragVisual(key),
+                ) {
+                    if (e is Tab) {
+                        val t = e
+                        if (mode == "list") TabRow(
+                            tab = t, selected = t.id == store.selectedTabId,
+                            onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) }, drag = dragModifier(t),
+                        ) else TabCard(
+                            compact = mode == "compact",
+                            tab = t, selected = t.id == store.selectedTabId,
+                            onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) }, drag = dragModifier(t),
+                            highlight = hoverKey == key && mergeReady,
+                        )
+                    } else {
+                        val name = e as String
+                        FolderCard(name, store.folderTabs(space.id, name), list = mode == "list", highlight = hoverKey == key && mergeReady) { openFolder = name }
+                    }
                 }
             }
             if (normal.isEmpty() && pinned.isEmpty()) {
@@ -266,6 +370,26 @@ fun TabsScreen(
                 modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onDone).padding(horizontal = 14.dp, vertical = 12.dp),
             )
         }
+
+        // Carpeta abierta: se abre desde el centro con sus pestañas.
+        AnimatedVisibility(
+            visible = openFolder != null,
+            enter = fadeIn(tween(180)) + scaleIn(spring(0.8f, 420f), initialScale = 0.85f),
+            exit = fadeOut(tween(150)) + scaleOut(tween(180), targetScale = 0.9f),
+        ) {
+            var shown by remember { mutableStateOf(openFolder.orEmpty()) }
+            LaunchedEffect(openFolder) { openFolder?.let { shown = it } }
+            FolderView(
+                name = shown,
+                tabs = store.folderTabs(space.id, shown),
+                selectedId = store.selectedTabId,
+                onOpen = { openFolder = null; onOpen(it) },
+                onClose = onClose,
+                onRename = { new -> store.renameFolder(space.id, shown, new); shown = new.trim().ifEmpty { shown }; openFolder = shown },
+                onUngroup = { store.ungroup(space.id, shown); openFolder = null },
+                onDismiss = { openFolder = null },
+            )
+        }
     }
 }
 
@@ -298,7 +422,10 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
 }
 
 @Composable
-private fun TabCard(compact: Boolean = false, tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit) {
+private fun TabCard(
+    compact: Boolean = false, tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit,
+    drag: Modifier = Modifier, highlight: Boolean = false,
+) {
     val app = LocalApp.current
     val k = LocalKaze.current
     val scope = rememberCoroutineScope()
@@ -331,7 +458,9 @@ private fun TabCard(compact: Boolean = false, tab: Tab, selected: Boolean, onOpe
                 .aspectRatio(if (compact) 0.68f else 0.74f)
                 .card(RoundedCornerShape(k.corner.dp))
                 .then(if (selected) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier.border(0.5.dp, k.rim, RoundedCornerShape(k.corner.dp)))
-                .tap(onOpen, onMenu),
+                .then(if (highlight) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier)
+                .then(drag)
+                .tap(onOpen),
         ) {
             val b = thumb
             when {
@@ -374,12 +503,12 @@ private fun TabCard(compact: Boolean = false, tab: Tab, selected: Boolean, onOpe
 
 /** Fila de la vista de lista: ícono, título, sitio y cerrar. */
 @Composable
-private fun TabRow(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit) {
+private fun TabRow(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -> Unit, onClose: () -> Unit, drag: Modifier = Modifier) {
     val k = LocalKaze.current
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).card(RoundedCornerShape(14.dp))
             .then(if (selected) Modifier.border(2.dp, k.accent, RoundedCornerShape(14.dp)) else Modifier)
-            .tap(onOpen, onMenu).padding(horizontal = 10.dp, vertical = 8.dp),
+            .then(drag).tap(onOpen).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (tab.isStart) {
@@ -396,5 +525,117 @@ private fun TabRow(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -
             Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "Cerrar pestaña" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Outlined.Close, null, tint = k.ink55, modifier = Modifier.size(17.dp)) }
+    }
+}
+
+/** Carpeta en la vista de pestañas: mosaico con las miniaturas de hasta 4 pestañas. */
+@Composable
+private fun FolderCard(name: String, tabs: List<Tab>, list: Boolean, highlight: Boolean, onOpen: () -> Unit) {
+    val app = LocalApp.current
+    val k = LocalKaze.current
+    val color = folderColor(name)
+    if (list) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).card(RoundedCornerShape(14.dp))
+                .then(if (highlight) Modifier.border(2.dp, k.accent, RoundedCornerShape(14.dp)) else Modifier)
+                .tap(onOpen).padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Outlined.Folder, null, tint = color, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(name, style = KazeType.body.copy(fontWeight = FontWeight.SemiBold), color = k.ink, modifier = Modifier.weight(1f), maxLines = 1)
+            Text("${tabs.size}", style = KazeType.footnote, color = k.ink55)
+        }
+        return
+    }
+    Column {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(0.74f).clip(RoundedCornerShape(k.corner.dp))
+                .background(color.copy(alpha = if (k.isDark) 0.20f else 0.16f))
+                .border(if (highlight) 3.dp else 1.dp, if (highlight) k.accent else color.copy(alpha = 0.35f), RoundedCornerShape(k.corner.dp))
+                .tap(onOpen).padding(8.dp),
+        ) {
+            // Cuadrícula 2×2 de miniaturas (o íconos si la pestaña está dormida).
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                tabs.take(4).chunked(2).forEach { row ->
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { t ->
+                            val thumb = remember(t.id, app.thumbnails.version.intValue) { app.thumbnails.cached(t.id) }
+                            Box(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).background(k.card), contentAlignment = Alignment.Center) {
+                                if (thumb != null && !t.isStart) Image(thumb.asImageBitmap(), null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter, modifier = Modifier.fillMaxSize())
+                                else Favicon(t.url, 22.dp)
+                            }
+                        }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Folder, null, tint = color, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(name, style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text("  ${tabs.size}", style = KazeType.footnote, color = k.ink55)
+        }
+    }
+}
+
+/** Color estable para cada carpeta, a partir de su nombre. */
+private fun folderColor(name: String): Color {
+    val palette = listOf(0xFF7C6CF6, 0xFF3BA7F5, 0xFF2DB89A, 0xFFF0A23B, 0xFFE8618C, 0xFF9B7CF6, 0xFF5AC8FA)
+    return Color(palette[(name.hashCode() and 0x7fffffff) % palette.size])
+}
+
+/** Carpeta abierta: nombre editable, sus pestañas y "Desagrupar". */
+@Composable
+private fun FolderView(
+    name: String, tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> Unit, onClose: (Tab) -> Unit,
+    onRename: (String) -> Unit, onUngroup: () -> Unit, onDismiss: () -> Unit,
+) {
+    val k = LocalKaze.current
+    var text by remember(name) { mutableStateOf(name) }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+            if (text != name) onRename(text); onDismiss()
+        },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.padding(18.dp).fillMaxWidth().heightIn(max = 620.dp)
+                .clip(RoundedCornerShape(30.dp)).background(k.paper)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Folder, null, tint = folderColor(name), modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                BasicTextField(
+                    value = text, onValueChange = { text = it }, singleLine = true,
+                    textStyle = KazeType.title2.copy(color = k.ink), cursorBrush = SolidColor(k.accent),
+                    keyboardActions = KeyboardActions(onDone = { onRename(text) }),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "Desagrupar", style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = k.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onUngroup).padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                items(tabs, key = { it.id }) { t ->
+                    Box(Modifier.animateItem()) {
+                        TabCard(tab = t, selected = t.id == selectedId, onOpen = { onOpen(t) }, onMenu = {}, onClose = { onClose(t) })
+                    }
+                }
+            }
+        }
     }
 }

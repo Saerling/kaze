@@ -112,6 +112,18 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-oscuro.png")
     }
 
+    @Test fun pestanas_carpeta() {
+        thumbs()
+        val n = app.store.normal(app.store.currentSpaceId)
+        app.store.newTab("https://github.com/", select = false).title = "GitHub"
+        app.store.newTab("https://news.ycombinator.com/", select = false).title = "Hacker News"
+        val list = app.store.normal(app.store.currentSpaceId)
+        app.store.setFolder(list.take(3), "Lecturas")
+        compose.setContent { KazeTheme(true, UiStyle.MATERIAL, AccentColor.AUTO) { CompositionLocalProvider(LocalApp provides app) { Tabs() } } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-carpetas.png")
+    }
+
     @Test fun pestanas_lista() {
         app.settings.tabsView = "list"
         compose.setContent { Themed(true) { Tabs() } }

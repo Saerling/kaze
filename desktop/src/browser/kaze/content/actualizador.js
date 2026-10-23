@@ -151,20 +151,28 @@
     const NS = "http://www.w3.org/1999/xhtml";
     const el = (t, css, txt) => { const e = doc.createElementNS(NS, t); if (css) e.style.cssText = css; if (txt) e.textContent = txt; return e; };
     const version = Services.prefs.getStringPref("kaze.version", "");
-    const box = el("div", "display:flex;align-items:center;gap:12px;padding:12px 16px;");
+    // Versión de Zen ("Versión 1.x (64-bit) · Novedades"): se esconde, Fyx muestra la suya.
+    const zenInfo = doc.getElementById("updateAppInfo");
+    (zenInfo?.closest("setting-control") || zenInfo)?.setAttribute("hidden", "true");
+    // Texto a la izquierda (ocupa lo que sobra) y botón a la derecha; si no cabe, el botón baja.
+    const box = el("div", "display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:12px 16px;width:100%;box-sizing:border-box;");
     box.id = "pyx-update-box";
-    const text = el("div", "flex:1;display:flex;flex-direction:column;gap:2px;");
-    text.append(el("span", "font-weight:600;", `Fyx ${version}`), el("span", "opacity:.7;font-size:.9em;", "Basado en Zen. Fyx busca versiones nuevas solo y se actualiza encima."));
-    const status = el("span", "opacity:.8;font-size:.9em;");
-    const btn = el("button", "padding:6px 14px;border-radius:8px;border:0;background:#0A84FF;color:white;font-weight:600;cursor:pointer;", "Buscar actualizaciones");
+    const text = el("div", "flex:1 1 260px;min-width:220px;display:flex;flex-direction:column;gap:3px;overflow-wrap:normal;word-break:normal;");
+    const status = el("span", "font-size:.9em;color:#0A84FF;");
+    text.append(
+      el("span", "font-weight:600;", `Fyx ${version}`),
+      el("span", "opacity:.7;font-size:.9em;", "Basado en Zen. Fyx busca versiones nuevas solo y se actualiza encima."),
+      status,
+    );
+    const btn = el("button", "flex:none;padding:7px 16px;border-radius:8px;border:0;background:#0A84FF;color:white;font-weight:600;cursor:pointer;white-space:nowrap;", "Buscar actualizaciones");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       status.textContent = "Buscando…";
       const n = await FyxUpdater.checkForUpdate({ manual: true });
-      status.textContent = n ? "¡Hay una versión nueva! Mira el aviso arriba de la ventana." : "Fyx está al día.";
+      status.textContent = n ? "Hay una versión nueva: mira el aviso arriba de la ventana." : "Fyx está al día.";
       btn.disabled = false;
     });
-    box.append(text, status, btn);
+    box.append(text, btn);
     group.before(box);
   };
   gBrowser.addTabsProgressListener({

@@ -161,7 +161,7 @@ def copiar_kaze(app: Path, build: int, version: str) -> None:
     prefs = prefs_pyx(build, version)
     cfg = (KAZE / "cargador-zen.cfg").read_text(encoding="utf-8")
     cfg += '\nif (Services.appinfo.name == "Fyx") {\n' + prefs + "}\n"
-    for nombre in ("memoria.js", "pyx.css", "pestanas.js", "iconos/pestanas-pyx.svg"):
+    for nombre in ("memoria.js", "pyx.css", "pestanas.js", "tinte.js", "iconos/pestanas-pyx.svg"):
         (destino / "content" / nombre).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(KAZE / "content" / nombre, destino / "content" / nombre)
     (app / "kaze.cfg").write_text(cfg, encoding="utf-8")

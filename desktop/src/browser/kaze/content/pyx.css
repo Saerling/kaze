@@ -343,3 +343,17 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
 
 /* Menús y paneles: vidrio con esquinas grandes */
 menupopup, panel { --panel-border-radius: 14px; --panel-padding: 6px; }
+
+/* ── Tinte del sitio web (Safari): la barra de arriba toma el color de la página ── */
+#nav-bar, #zen-appcontent-navbar-container {
+  transition: background-color 280ms var(--pyx-ease), color 200ms var(--pyx-ease);
+}
+:root[pyx-tinted] :is(#zen-appcontent-navbar-container, #nav-bar) {
+  background-color: var(--pyx-tint) !important;
+}
+:root[pyx-tinted="light"] #nav-bar { color: #1d1d1f !important; --toolbarbutton-icon-fill: #1d1d1f; --toolbar-color: #1d1d1f; }
+:root[pyx-tinted="dark"] #nav-bar { color: #f5f5f7 !important; --toolbarbutton-icon-fill: #f5f5f7; --toolbar-color: #f5f5f7; }
+:root[pyx-tinted="light"] #nav-bar { --pyx-glass: rgb(255 255 255 / 0.55); --pyx-glass-strong: rgb(255 255 255 / 0.75); }
+:root[pyx-tinted="dark"] #nav-bar { --pyx-glass: rgb(255 255 255 / 0.12); --pyx-glass-strong: rgb(255 255 255 / 0.2); }
+:root[pyx-tinted="light"] #urlbar { color: #1d1d1f !important; --urlbar-box-text-color: #1d1d1f; }
+:root[pyx-tinted="dark"] #urlbar { color: #f5f5f7 !important; --urlbar-box-text-color: #f5f5f7; }

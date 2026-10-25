@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.screens
 
+import app.kaze.browser.ui.theme.flowBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,7 +75,7 @@ fun StartPage(
     }
     val space = app.store.currentSpace
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().flowBackground(LocalKaze.current)) {
         SpaceBackground(
             if (private) listOf(0xFF3A3A55.toInt(), 0xFF2A2A40.toInt()) else space?.colors.orEmpty(),
             strength = if (private) 0.9f else 0.5f,

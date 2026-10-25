@@ -1,5 +1,8 @@
 package app.kaze.browser
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Row
+import app.kaze.browser.ui.theme.flowBackground
 import app.kaze.browser.engine.UpdateInfo
 import app.kaze.browser.ui.sheets.UpdateSheet
 import app.kaze.browser.data.UiStyle
@@ -184,6 +187,26 @@ class ScreenshotTest {
         }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-material-you.png")
+    }
+
+    @Config(qualifiers = "w820dp-h891dp-xxhdpi")
+    @Test fun living_flow() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
+        tab.canGoBack = true
+        compose.setContent {
+            KazeTheme(false, UiStyle.FLOW, AccentColor.AUTO) {
+                CompositionLocalProvider(LocalApp provides app) {
+                    Row(Modifier.fillMaxSize()) {
+                        Box(Modifier.weight(1f).fillMaxHeight()) { Tabs() }
+                        Box(Modifier.weight(1f).fillMaxHeight().background(app.ui.let { androidx.compose.ui.graphics.Color(0xFFF3F1F8) }).flowBackground(LocalKaze.current)) {
+                            SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter), compact = true)
+                        }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-living-flow.png")
     }
 
     @Test fun actualizacion() {

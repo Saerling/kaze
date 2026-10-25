@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.theme
 
+import androidx.compose.ui.draw.drawBehind
 import app.kaze.browser.data.AccentColor
 import app.kaze.browser.data.UiStyle
 import androidx.compose.runtime.remember
@@ -72,9 +73,11 @@ data class KazeColors(
     /** Contenedor tonal (secondaryContainer en Material You). */
     val tonal: Color = lift,
     val onTonal: Color = ink,
+    /** Living Flow (ColorOS 17): vidrio de gota, esquinas grandes y movimiento elástico. */
+    val flow: Boolean = false,
 ) {
-    /** Radio de las tarjetas: más redondo en Material You (Material 3 Expressive). */
-    val corner get() = if (material) 24 else 14
+    /** Radio de las tarjetas: más redondo en Material You (Material 3 Expressive) y en Living Flow. */
+    val corner get() = when { material -> 24; flow -> 26; else -> 14 }
     val ink70 get() = ink.copy(alpha = 0.7f)
     val ink55 get() = ink.copy(alpha = 0.6f)
     val ink35 get() = ink.copy(alpha = 0.3f)
@@ -102,6 +105,20 @@ fun styledColors(context: android.content.Context, dark: Boolean, style: UiStyle
     val base = kazeColors(dark)
     val pick = if (accent == AccentColor.AUTO) null else Color(accent.argb)
     if (style == UiStyle.SAFARI) return if (pick == null) base else base.copy(accent = pick)
+    if (style == UiStyle.FLOW) {
+        // Living Flow: fondos con un leve tono violeta (nunca negro puro), tarjetas limpias,
+        // vidrio claro y acento violeta como los degradados de ColorOS 17.
+        val accentC = pick ?: if (dark) Color(0xFF9A8CFF) else Color(0xFF6B5BFF)
+        return base.copy(
+            paper = if (dark) Color(0xFF0E0C17) else Color(0xFFF3F1F8),
+            card = if (dark) Color(0xFF1B1826) else Color(0xFFFFFFFF),
+            glass = if (dark) Color(0xFF2A2639).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.74f),
+            lift = if (dark) Color(0xFF2E2A3D) else Color(0xFFE9E6F2),
+            accent = accentC,
+            tonal = accentC.copy(alpha = if (dark) 0.22f else 0.12f), onTonal = accentC,
+            flow = true,
+        )
+    }
     val scheme = when {
         pick == null && android.os.Build.VERSION.SDK_INT >= 31 ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -207,6 +224,20 @@ fun Modifier.card(shape: Shape = CardShape): Modifier {
 @Composable
 fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
     val k = LocalKaze.current
+    if (k.flow) {
+        // Gota de agua (Living Flow): sombra suave teñida, cuerpo un poco más claro arriba y
+        // un borde brillante que se apaga hacia abajo, como la luz en una gota.
+        val hi = if (k.isDark) 0.28f else 0.9f
+        return this
+            .shadow(elevation.dp, shape, ambientColor = k.accent.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.20f))
+            .clip(shape)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(lerp(k.glass, Color.White, if (k.isDark) 0.06f else 0.2f), k.glass)), shape)
+            .border(
+                1.dp,
+                androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = hi), Color.White.copy(alpha = hi * 0.15f))),
+                shape,
+            )
+    }
     return this
         .shadow(elevation.dp, shape, ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.22f))
         .clip(shape)
@@ -218,7 +249,13 @@ fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
 @Composable
 fun Modifier.pressFeedback(source: MutableInteractionSource, scaleTo: Float = 0.95f): Modifier {
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) scaleTo else 1f, tween(90), label = "pressScale")
+    // Living Flow: al soltar, rebota con elasticidad (como el agua); en los otros estilos, firme y rápido.
+    val flow = LocalKaze.current.flow
+    val scale by animateFloatAsState(
+        if (pressed) scaleTo else 1f,
+        if (flow) androidx.compose.animation.core.spring(dampingRatio = if (pressed) 0.9f else 0.42f, stiffness = 520f) else tween(90),
+        label = "pressScale",
+    )
     val alpha by animateFloatAsState(if (pressed) 0.6f else 1f, tween(90), label = "pressAlpha")
     return graphicsLayer {
         scaleX = scale
@@ -241,3 +278,24 @@ fun spaceBase(colors: List<Int>, dark: Boolean, paper: Color): Color =
     colors.firstOrNull()?.let { spaceColor(it, dark) } ?: paper
 
 fun Color.isLight(): Boolean = (0.299 * red + 0.587 * green + 0.114 * blue) > 0.6
+
+
+/**
+ * Fondo de Living Flow: dos manchas de color que fluyen (naranja y violeta, como los fondos de ColorOS 17)
+ * sobre el fondo de la app. Es estático (no gasta batería redibujándose).
+ */
+fun Modifier.flowBackground(k: KazeColors): Modifier = if (!k.flow) this else drawBehind {
+    val a = if (k.isDark) 0.38f else 0.30f
+    drawRect(
+        androidx.compose.ui.graphics.Brush.radialGradient(
+            listOf(Color(0xFFFF8A3D).copy(alpha = a), Color.Transparent),
+            center = androidx.compose.ui.geometry.Offset(size.width * 0.15f, size.height * 0.05f), radius = size.maxDimension * 0.55f,
+        ),
+    )
+    drawRect(
+        androidx.compose.ui.graphics.Brush.radialGradient(
+            listOf(k.accent.copy(alpha = a), Color.Transparent),
+            center = androidx.compose.ui.geometry.Offset(size.width * 0.95f, size.height * 0.35f), radius = size.maxDimension * 0.6f,
+        ),
+    )
+}

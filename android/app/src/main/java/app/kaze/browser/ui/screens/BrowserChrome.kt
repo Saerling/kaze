@@ -1064,7 +1064,7 @@ fun TabStrip(
         val seen = HashSet<String>()
         buildList { tabs.forEach { t -> if (t.folder.isEmpty()) add(t) else if (seen.add(t.folder)) addAll(tabs.filter { it.folder == t.folder }) } }
     }
-    val visible = ordered.filter { it.folder.isEmpty() || folded[it.folder] != true || it.id == tab.id }
+    val visible = ordered.filter { it.folder.isEmpty() || folded[it.folder] != true }
     val groups = ordered.map { it.folder }.filter { it.isNotEmpty() }.distinct()
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(30.dp)) {
         val n = visible.size.coerceAtLeast(1)
@@ -1078,8 +1078,9 @@ fun TabStrip(
             if (i >= 0) state.animateScrollToItem(i)
         }
         androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            visible.forEachIndexed { i, t ->
-                if (t.folder.isNotEmpty() && visible.getOrNull(i - 1)?.folder != t.folder) {
+            // La etiqueta sale aunque el grupo esté plegado (entonces sus pestañas se esconden tras ella).
+            ordered.forEachIndexed { oi, t ->
+                if (t.folder.isNotEmpty() && ordered.getOrNull(oi - 1)?.folder != t.folder) {
                     val name = t.folder
                     item(key = "g:$name") {
                         val c = folderColor(name)
@@ -1095,7 +1096,8 @@ fun TabStrip(
                         }
                     }
                 }
-                item(key = t.id) {
+                val i = visible.indexOf(t)
+                if (i >= 0) item(key = t.id) {
                     val dragging = dragId == t.id
                     val drag = Modifier.pointerInput(t.id, visible.size) {
                         detectDragGesturesAfterLongPress(

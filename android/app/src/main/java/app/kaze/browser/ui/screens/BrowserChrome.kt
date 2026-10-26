@@ -4,6 +4,12 @@
 
 package app.kaze.browser.ui.screens
 
+import app.kaze.browser.data.TabKind
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.core.animateDpAsState
@@ -163,6 +169,8 @@ fun SafariBottomBar(
     tablet: Boolean = false,
     /** Diseño "Arriba": aquí solo van los botones (la dirección va en SafariTopAddress). */
     split: Boolean = false,
+    /** Cerrar una pestaña desde la fila de pestañas de la tableta. */
+    onCloseTab: (Tab) -> Unit = {},
 ) {
     if (split) {
         AnimatedVisibility(
@@ -173,7 +181,7 @@ fun SafariBottomBar(
         return
     }
     if (tablet) {
-        TabletBar(tab, space, tabCount, a, tabs, onSelectTab, modifier)
+        TabletBar(tab, space, tabCount, a, tabs, onSelectTab, onCloseTab, modifier)
         return
     }
     if (compact) {
@@ -871,7 +879,7 @@ private fun CompactMenu(tab: Tab, tabCount: Int, a: ChromeActions, onDismiss: ()
  * pestañas de igual ancho (la activa resaltada). Con muchas pestañas, la fila se desliza.
  */
 @Composable
-private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, modifier: Modifier) {
+private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, onCloseTab: (Tab) -> Unit, modifier: Modifier) {
     val k = LocalKaze.current
     val list = if (tabs.any { it.id == tab.id }) tabs else listOf(tab)
     Column(
@@ -880,7 +888,10 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 10.dp)) {
             Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Capsule { BarIcon(Icons.Outlined.GridView, "Espacios y Essentials", onClick = a.onSpaces) }
+                // Como Safari: círculo de la barra lateral (favoritos, lectura e historial) y la píldora
+                // del perfil, que aquí es el espacio de Zen, con su color, ícono y nombre.
+                Capsule { BarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary) }
+                SpacePill(space, a.onSpaces)
                 AnimatedVisibility(
                     tab.canGoBack || tab.canGoForward,
                     enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)),
@@ -894,7 +905,7 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
                 }
             }
             // La dirección, centrada (deja sitio a las cápsulas de los lados).
-            TabletAddress(tab, a, Modifier.align(Alignment.Center).width(minOf(560.dp, maxWidth - 300.dp)))
+            TabletAddress(tab, a, Modifier.align(Alignment.Center).width(minOf(520.dp, maxWidth - 420.dp).coerceAtLeast(200.dp)))
             Row(Modifier.align(Alignment.CenterEnd)) {
                 Capsule {
                     BarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
@@ -912,10 +923,46 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
                     val i = list.indexOfFirst { it.id == tab.id }
                     if (i >= 0) state.animateScrollToItem(i)
                 }
+                val store = LocalApp.current.store
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                val step = with(density) { (w + 4.dp).toPx() }
+                var dragId by remember { mutableStateOf<String?>(null) }
+                var dragX by remember { mutableFloatStateOf(0f) }
                 androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(list.size, key = { list[it].id }) { i ->
                         val t = list[i]
-                        TabChip(t, t.id == tab.id, Modifier.animateItem().width(w)) { if (t.id != tab.id) onSelectTab(t) }
+                        val dragging = dragId == t.id
+                        // Mantener y arrastrar: soltar entre pestañas la mueve; soltar encima de otra crea un grupo
+                        // con ella (o la añade a su grupo), como en la vista de pestañas.
+                        val drag = Modifier.pointerInput(t.id, list.size) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { dragId = t.id; dragX = 0f; haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
+                                onDragEnd = {
+                                    val slots = dragX / step
+                                    val target = list.getOrNull(i + kotlin.math.round(slots).toInt())
+                                    val nearCenter = abs(slots - kotlin.math.round(slots)) < 0.25f
+                                    if (target != null && target.id != t.id && t.kind == TabKind.NORMAL && target.kind == TabKind.NORMAL) {
+                                        if (nearCenter) {
+                                            val name = target.folder.ifEmpty { store.newFolderName(t.spaceId) }
+                                            store.setFolder(listOf(target, t), name)
+                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                                        } else {
+                                            val dest = list.getOrNull(i + (if (slots > 0) kotlin.math.ceil(slots).toInt() else kotlin.math.floor(slots).toInt()))
+                                            if (dest != null && dest.id != t.id) store.moveBefore(t, dest)
+                                        }
+                                    }
+                                    dragId = null; dragX = 0f
+                                },
+                                onDragCancel = { dragId = null; dragX = 0f },
+                            ) { c, d -> c.consume(); dragX += d.x }
+                        }
+                        TabChip(
+                            t, t.id == tab.id,
+                            (if (dragging) Modifier.zIndex(1f).offset { IntOffset(dragX.roundToInt(), 0) }.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f } else Modifier.animateItem())
+                                .width(w).then(drag),
+                            onClose = { onCloseTab(t) },
+                        ) { if (t.id != tab.id) onSelectTab(t) }
                     }
                 }
             }
@@ -928,7 +975,8 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
 private fun Capsule(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     val k = LocalKaze.current
     Row(
-        Modifier.height(36.dp).clip(RoundedCornerShape(50)).background(k.card.copy(alpha = if (k.isDark) 0.55f else 0.7f)).padding(horizontal = 2.dp),
+        Modifier.height(36.dp).shadow(4.dp, RoundedCornerShape(50), ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
+            .clip(RoundedCornerShape(50)).background(k.card).padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
@@ -978,27 +1026,58 @@ private fun TabletAddress(tab: Tab, a: ChromeActions, modifier: Modifier) {
     }
 }
 
-/** Pestaña de la fila de tableta: ícono y título centrados; la activa es una tarjeta clara con sombra suave. */
+/**
+ * Pestaña de la fila de tableta: ícono y título centrados y una ✕ para cerrarla.
+ * La activa es una tarjeta clara con sombra suave; si está en un grupo, lleva una raya del color del grupo.
+ */
 @Composable
-private fun TabChip(t: Tab, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun TabChip(t: Tab, selected: Boolean, modifier: Modifier, onClose: () -> Unit, onClick: () -> Unit) {
     val k = LocalKaze.current
     val bg by androidx.compose.animation.animateColorAsState(if (selected) k.card else Color.Transparent, tween(180), label = "chip")
-    Row(
+    Box(
         modifier.fillMaxHeight()
             .then(if (selected) Modifier.shadow(2.dp, RoundedCornerShape(9.dp), ambientColor = Color.Black.copy(alpha = 0.1f)) else Modifier)
             .clip(RoundedCornerShape(9.dp)).background(bg).clickable(onClick = onClick)
-            .padding(horizontal = 10.dp)
             .semantics { contentDescription = t.displayTitle },
-        horizontalArrangement = Arrangement.Center,
+    ) {
+        Row(Modifier.fillMaxSize().padding(start = 28.dp, end = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            if (t.isStart) Icon(Icons.Outlined.Home, null, tint = k.ink55, modifier = Modifier.size(14.dp))
+            else FaviconTile(t.url, 16.dp, 11.dp)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (t.isStart) "Inicio" else t.displayTitle.ifBlank { Urls.displayHost(t.url) },
+                style = KazeType.footnote.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+                color = if (selected) k.ink else k.ink55, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        // ✕ a la izquierda, como Safari (tamaño táctil de 28 dp).
+        Box(
+            Modifier.align(Alignment.CenterStart).size(28.dp).clip(CircleShape).clickable(onClick = onClose)
+                .semantics { contentDescription = "Cerrar pestaña" },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Outlined.Close, null, tint = k.ink55, modifier = Modifier.size(12.dp)) }
+        if (t.folder.isNotEmpty()) {
+            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp).width(18.dp).height(2.5.dp).clip(RoundedCornerShape(50)).background(k.accent))
+        }
+    }
+}
+
+/** Píldora del espacio (el "perfil" de Safari): color del espacio, su ícono, nombre y ⌄. */
+@Composable
+private fun SpacePill(space: Space?, onClick: () -> Unit) {
+    val k = LocalKaze.current
+    val c = space?.colors?.firstOrNull()?.let { Color(it) } ?: k.accent
+    // Texto oscuro sobre colores claros y blanco sobre oscuros (siempre legible).
+    val on = if (c.luminance() > 0.55f) Color(0xFF1D1D1F) else Color.White
+    Row(
+        Modifier.height(36.dp).shadow(3.dp, RoundedCornerShape(50), ambientColor = c.copy(alpha = 0.4f)).clip(RoundedCornerShape(50))
+            .background(c).tap(onClick).padding(horizontal = 14.dp)
+            .semantics { contentDescription = "Espacio ${space?.name.orEmpty()} (cambiar de espacio)" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (t.isStart) Icon(Icons.Outlined.Home, null, tint = k.ink55, modifier = Modifier.size(14.dp))
-        else FaviconTile(t.url, 16.dp, 11.dp)
+        if (space != null) Text(space.emoji, fontSize = 15.sp)
         Spacer(Modifier.width(6.dp))
-        Text(
-            if (t.isStart) "Inicio" else t.displayTitle.ifBlank { Urls.displayHost(t.url) },
-            style = KazeType.footnote.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
-            color = if (selected) k.ink else k.ink55, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        )
+        Text(space?.name ?: "Espacios", style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = on, maxLines = 1)
+        Icon(Icons.Outlined.KeyboardArrowDown, null, tint = on, modifier = Modifier.padding(start = 2.dp).size(16.dp))
     }
 }

@@ -644,6 +644,7 @@ class MainActivity : ComponentActivity() {
                             compact = barCompact,
                             tablet = tabletBar,
                             split = barSplit,
+                            onCloseTab = ::closeTab,
                         )
                         if (barSplit) SafariTopAddress(
                             tab, store.spaceById(tab.spaceId), collapsed, actions,

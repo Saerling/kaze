@@ -866,59 +866,59 @@ private fun CompactMenu(tab: Tab, tabCount: Int, a: ChromeActions, onDismiss: ()
 }
 
 /**
- * Tableta: una fila arriba como Safari compacto en iPad y Mac. Los controles van agrupados en
- * cápsulas pequeñas: [espacios] [‹ | ›] (solo si sirven) · pestañas en línea (la activa es la
- * dirección) · [⋯ + pestañas]. Las pestañas se reparten el ancho; si no caben con nombre, muestran solo el ícono.
+ * Tableta: como Safari en iPad/Mac con pestañas separadas. Arriba, la dirección centrada con los
+ * controles en cápsulas a los lados ([espacios] [‹ | ›] … [⋯ + pestañas]); debajo, la fila de
+ * pestañas de igual ancho (la activa resaltada). Con muchas pestañas, la fila se desliza.
  */
 @Composable
 private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, modifier: Modifier) {
     val k = LocalKaze.current
     val list = if (tabs.any { it.id == tab.id }) tabs else listOf(tab)
-    Row(
+    Column(
         modifier.fillMaxWidth().background(k.glass)
-            .then(if (k.material) Modifier else Modifier.background(spaceTint(space)))
-            .height(52.dp).padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .then(if (k.material) Modifier else Modifier.background(spaceTint(space))),
     ) {
-        Capsule { BarIcon(Icons.Outlined.GridView, "Espacios y Essentials", onClick = a.onSpaces) }
-        AnimatedVisibility(
-            tab.canGoBack || tab.canGoForward,
-            enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)),
-            exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160)),
-        ) {
-            Capsule {
-                if (tab.canGoBack) BarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", { a.onHistoryMenu(-1) }, a.onBack)
-                if (tab.canGoBack && tab.canGoForward) Box(Modifier.width(0.5.dp).height(18.dp).background(k.separator))
-                if (tab.canGoForward) BarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", { a.onHistoryMenu(1) }, a.onForward)
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 10.dp)) {
+            Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Capsule { BarIcon(Icons.Outlined.GridView, "Espacios y Essentials", onClick = a.onSpaces) }
+                AnimatedVisibility(
+                    tab.canGoBack || tab.canGoForward,
+                    enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)),
+                    exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160)),
+                ) {
+                    Capsule {
+                        if (tab.canGoBack) BarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", { a.onHistoryMenu(-1) }, a.onBack)
+                        if (tab.canGoBack && tab.canGoForward) Box(Modifier.width(0.5.dp).height(18.dp).background(k.separator))
+                        if (tab.canGoForward) BarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", { a.onHistoryMenu(1) }, a.onForward)
+                    }
+                }
             }
-        }
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
-            val n = list.size
-            val gap = 6.dp
-            val activeW = if (n == 1) maxWidth else minOf(maxWidth, maxOf(260.dp, maxWidth * 0.42f))
-            val otherW = if (n == 1) 0.dp else ((maxWidth - activeW - gap * (n - 1)) / (n - 1)).coerceIn(40.dp, 190.dp)
-            val state = androidx.compose.foundation.lazy.rememberLazyListState()
-            LaunchedEffect(tab.id, n) {
-                val i = list.indexOfFirst { it.id == tab.id }
-                if (i >= 0) state.animateScrollToItem(i)
-            }
-            androidx.compose.foundation.lazy.LazyRow(
-                state = state,
-                horizontalArrangement = Arrangement.spacedBy(gap),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                items(n, key = { list[it].id }) { i ->
-                    val t = list[i]
-                    if (t.id == tab.id) TabletAddress(tab, a, Modifier.animateItem().width(activeW))
-                    else TabChip(t, otherW < 96.dp, Modifier.animateItem().width(otherW)) { onSelectTab(t) }
+            // La dirección, centrada (deja sitio a las cápsulas de los lados).
+            TabletAddress(tab, a, Modifier.align(Alignment.Center).width(minOf(560.dp, maxWidth - 300.dp)))
+            Row(Modifier.align(Alignment.CenterEnd)) {
+                Capsule {
+                    BarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
+                    BarIcon(Icons.Outlined.Add, "Pestaña nueva", onClick = a.onNewTab)
+                    TabsButton(tabCount, a.onTabs, a.onTabsLong, size = 40.dp)
                 }
             }
         }
-        Capsule {
-            BarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
-            BarIcon(Icons.Outlined.Add, "Pestaña nueva", onClick = a.onNewTab)
-            TabsButton(tabCount, a.onTabs, a.onTabsLong, size = 40.dp)
+        // Fila de pestañas: todas del mismo ancho; si no caben (menos de 120 dp cada una), se desliza.
+        if (list.size > 1) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(34.dp).padding(start = 8.dp, end = 8.dp, bottom = 4.dp)) {
+                val w = maxOf(120.dp, (maxWidth - 4.dp * (list.size - 1)) / list.size)
+                val state = androidx.compose.foundation.lazy.rememberLazyListState()
+                LaunchedEffect(tab.id, list.size) {
+                    val i = list.indexOfFirst { it.id == tab.id }
+                    if (i >= 0) state.animateScrollToItem(i)
+                }
+                androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(list.size, key = { list[it].id }) { i ->
+                        val t = list[i]
+                        TabChip(t, t.id == tab.id, Modifier.animateItem().width(w)) { if (t.id != tab.id) onSelectTab(t) }
+                    }
+                }
+            }
         }
     }
 }
@@ -978,26 +978,27 @@ private fun TabletAddress(tab: Tab, a: ChromeActions, modifier: Modifier) {
     }
 }
 
-/** Pestaña inactiva en tableta: ícono del sitio y título; si hay poco espacio, solo el ícono. */
+/** Pestaña de la fila de tableta: ícono y título centrados; la activa es una tarjeta clara con sombra suave. */
 @Composable
-private fun TabChip(t: Tab, iconOnly: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun TabChip(t: Tab, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val k = LocalKaze.current
+    val bg by androidx.compose.animation.animateColorAsState(if (selected) k.card else Color.Transparent, tween(180), label = "chip")
     Row(
-        modifier.height(36.dp).clip(RoundedCornerShape(50)).background(k.card.copy(alpha = if (k.isDark) 0.3f else 0.4f)).clickable(onClick = onClick)
-            .padding(horizontal = if (iconOnly) 0.dp else 10.dp)
+        modifier.fillMaxHeight()
+            .then(if (selected) Modifier.shadow(2.dp, RoundedCornerShape(9.dp), ambientColor = Color.Black.copy(alpha = 0.1f)) else Modifier)
+            .clip(RoundedCornerShape(9.dp)).background(bg).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp)
             .semantics { contentDescription = t.displayTitle },
-        horizontalArrangement = if (iconOnly) Arrangement.Center else Arrangement.Start,
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (t.isStart) Icon(Icons.Outlined.Home, null, tint = k.ink55, modifier = Modifier.size(16.dp))
-        else FaviconTile(t.url, 18.dp, 12.dp)
-        if (!iconOnly) {
-            Spacer(Modifier.width(7.dp))
-            Text(
-                if (t.isStart) "Inicio" else t.displayTitle.ifBlank { Urls.displayHost(t.url) },
-                style = KazeType.footnote.copy(fontWeight = FontWeight.Medium), color = k.ink.copy(alpha = 0.8f),
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-        }
+        if (t.isStart) Icon(Icons.Outlined.Home, null, tint = k.ink55, modifier = Modifier.size(14.dp))
+        else FaviconTile(t.url, 16.dp, 11.dp)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            if (t.isStart) "Inicio" else t.displayTitle.ifBlank { Urls.displayHost(t.url) },
+            style = KazeType.footnote.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+            color = if (selected) k.ink else k.ink55, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
 }

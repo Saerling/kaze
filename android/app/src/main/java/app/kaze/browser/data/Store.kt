@@ -191,11 +191,14 @@ class Store(private val db: Db, private val settings: Settings) {
 
     // ── Pestañas ──────────────────────────────────────────────────────
 
-    fun newTab(url: String, spaceId: String = currentSpaceId, private: Boolean = false, select: Boolean = true): Tab {
+    fun newTab(url: String, spaceId: String = currentSpaceId, private: Boolean = false, select: Boolean = true, after: Tab? = null): Tab {
         val sid = if (private) Space.PRIVATE_ID else spaceId
-        // Las pestañas nuevas van arriba de la lista, como en Zen.
-        tabs.filter { it.spaceId == sid && it.kind == TabKind.NORMAL }.forEach { it.position += 1 }
-        val t = Tab(spaceId = sid, url = url, kind = TabKind.NORMAL, position = 0, isPrivate = private)
+        // Junto a la pestaña actual (y en su mismo grupo), como Safari y Chrome; si no hay, arriba de la lista.
+        val near = after?.takeIf { it.spaceId == sid && it.kind == TabKind.NORMAL && it.isPrivate == private }
+        val pos = near?.let { it.position + 1 } ?: 0
+        tabs.filter { it.spaceId == sid && it.kind == TabKind.NORMAL && it.position >= pos }.forEach { it.position += 1 }
+        val t = Tab(spaceId = sid, url = url, kind = TabKind.NORMAL, position = pos, isPrivate = private)
+        if (near != null) t.folder = near.folder
         tabs.add(t)
         if (!private) persistPositions(sid, TabKind.NORMAL)
         if (select) select(t)

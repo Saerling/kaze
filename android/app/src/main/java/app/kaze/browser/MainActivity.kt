@@ -373,7 +373,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun newTab(private: Boolean = false) {
-            val t = store.newTab(Urls.START, private = private)
+            val t = store.newTab(Urls.START, private = private, after = store.selectedTab)
             open(t)
         }
 

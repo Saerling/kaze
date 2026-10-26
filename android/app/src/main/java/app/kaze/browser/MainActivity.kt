@@ -145,11 +145,32 @@ class MainActivity : ComponentActivity() {
             data?.clipData?.let { c -> for (i in 0 until c.itemCount) add(c.getItemAt(i).uri) }
             if (isEmpty()) data?.data?.let(::add)
         }
-        when {
-            uris.isEmpty() -> pending.dismiss()
-            prompt.type == PromptDelegate.FilePrompt.Type.MULTIPLE -> pending.finish(prompt.confirm(this, uris.toTypedArray()))
-            else -> pending.finish(prompt.confirm(this, uris.first()))
-        }
+        if (uris.isEmpty()) { pending.dismiss(); return@registerForActivityResult }
+        // GeckoView no puede leer los enlaces content:// que devuelve el selector de Android: como Firefox
+        // para Android, se copian a una carpeta temporal y se le pasa el archivo. En segundo plano (archivos grandes).
+        Thread {
+            val files = uris.mapNotNull { runCatching { toUploadFile(it) }.getOrNull() }
+            runOnUiThread {
+                when {
+                    files.isEmpty() -> pending.dismiss()
+                    prompt.type == PromptDelegate.FilePrompt.Type.MULTIPLE -> pending.finish(prompt.confirm(this, files.toTypedArray()))
+                    else -> pending.finish(prompt.confirm(this, files.first()))
+                }
+            }
+        }.start()
+    }
+
+    /** Copia lo elegido a cache/subidas con su nombre original (las copias anteriores se borran). */
+    private fun toUploadFile(uri: android.net.Uri): android.net.Uri {
+        if (uri.scheme == "file") return uri
+        val dir = java.io.File(cacheDir, "subidas/${System.nanoTime()}").apply { mkdirs() }
+        java.io.File(cacheDir, "subidas").listFiles()?.filter { it != dir && it.lastModified() < System.currentTimeMillis() - 3_600_000 }?.forEach { it.deleteRecursively() }
+        val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }?.replace('/', '_') ?: "archivo"
+        val out = java.io.File(dir, name)
+        contentResolver.openInputStream(uri)!!.use { input -> out.outputStream().use { input.copyTo(it, 64 * 1024) } }
+        return android.net.Uri.fromFile(out)
     }
 
     private var pendingPermission: PermissionDelegate.Callback? = null

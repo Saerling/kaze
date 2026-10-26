@@ -113,6 +113,7 @@ class SessionPool(
     fun unload(tab: Tab) {
         val s = sessions.remove(tab.id) ?: return
         ports.remove(tab.id)
+        playing.remove(tab.id)
         beforeClose?.invoke(s)
         s.setActive(false)
         s.close()
@@ -126,10 +127,13 @@ class SessionPool(
         unload(tab)
     }
 
+    /** Pestañas que están reproduciendo audio o video: siguen sonando al cambiar de pestaña y nunca se duermen. */
+    private val playing = HashSet<Any>()
+
     /** Respeta el máximo de páginas cargadas: duerme las usadas hace más tiempo. */
     fun trim() {
         val max = settings.liveTabs.coerceAtLeast(1)
-        val live = sessions.keys.mapNotNull(store::tabById).filter { it.id != visibleTabId }
+        val live = sessions.keys.mapNotNull(store::tabById).filter { it.id != visibleTabId && it.id !in playing }
             .sortedByDescending { it.lastUsed }
         live.drop(max - 1).forEach {
             Log.d(TAG, "Durmiendo pestaña (límite): ${it.url}")
@@ -142,7 +146,7 @@ class SessionPool(
         if (minutes <= 0) return
         val limit = System.currentTimeMillis() - minutes * 60_000L
         sessions.keys.mapNotNull(store::tabById)
-            .filter { it.id != visibleTabId && it.lastUsed < limit }
+            .filter { it.id != visibleTabId && it.id !in playing && it.lastUsed < limit }
             .forEach {
                 Log.d(TAG, "Durmiendo pestaña (inactiva): ${it.url}")
                 unload(it)
@@ -186,7 +190,7 @@ class SessionPool(
         val b = GeckoSessionSettings.Builder()
             .usePrivateMode(tab.isPrivate)
             .useTrackingProtection(Urls.host(tab.url) !in offHosts())
-            .suspendMediaWhenInactive(true)
+            .suspendMediaWhenInactive(false)
             .allowJavascript(settings.javascript)
         space?.contextId(store.profileById(space.profileId))?.let(b::contextId)
         // En tableta, las páginas se piden en versión de escritorio (se puede cambiar por pestaña).
@@ -275,6 +279,12 @@ class SessionPool(
 
     private fun attach(tab: Tab, s: GeckoSession) {
         connectExtension(tab, s)
+        s.mediaSessionDelegate = object : org.mozilla.geckoview.MediaSession.Delegate {
+            override fun onPlay(session: GeckoSession, mediaSession: org.mozilla.geckoview.MediaSession) { main.post { playing += tab.id } }
+            override fun onPause(session: GeckoSession, mediaSession: org.mozilla.geckoview.MediaSession) { main.post { playing -= tab.id } }
+            override fun onStop(session: GeckoSession, mediaSession: org.mozilla.geckoview.MediaSession) { main.post { playing -= tab.id } }
+            override fun onDeactivated(session: GeckoSession, mediaSession: org.mozilla.geckoview.MediaSession) { main.post { playing -= tab.id } }
+        }
         s.translationsSessionDelegate = object : TranslationsController.SessionTranslation.Delegate {
             override fun onTranslationStateChange(
                 session: GeckoSession,

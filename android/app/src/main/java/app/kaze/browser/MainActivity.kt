@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.font.FontWeight
 import app.kaze.browser.ui.sheets.RecentlyClosedSheet
 import app.kaze.browser.ui.sheets.ClearDataSheet
+import app.kaze.browser.ui.sheets.DownloadsSheet
 import app.kaze.browser.ui.sheets.MenuActions
 import app.kaze.browser.ui.sheets.MainMenuSheet
 import androidx.compose.animation.core.spring
@@ -337,6 +338,7 @@ class MainActivity : ComponentActivity() {
         var historyMenu by remember { mutableIntStateOf(0) }
         // Tras buscar, la barra queda en píldora para dejarle la pantalla a la página.
         var pillAfterSearch by remember { mutableStateOf(false) }
+        var downloadsOpen by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
         // Buscar una versión nueva en GitHub al abrir (solo en las versiones publicadas).
@@ -717,7 +719,7 @@ class MainActivity : ComponentActivity() {
                         onRecent = { recentClosed = true },
                         onClearData = { clearData = true },
                         onDownloads = {
-                            runCatching { startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
+                            downloadsOpen = true
                         },
                         onFind = { finding = true },
                         onShare = { shareMenu = true },
@@ -745,6 +747,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             if (clearData) ClearDataSheet { clearData = false }
+            if (downloadsOpen) DownloadsSheet { downloadsOpen = false }
             if (recentClosed) {
                 RecentlyClosedSheet(onDismiss = { recentClosed = false }) { url ->
                     store.newTab(url); showTabs = false

@@ -226,7 +226,7 @@ class ScreenshotTest {
             Themed(false) {
                 Box(Modifier.fillMaxSize().background(Color.White)) {
                     FakePage()
-                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter), compact = true)
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), 7, false, actions(), Modifier.align(Alignment.BottomCenter), tabs = app.store.normal(app.store.currentSpaceId), compact = true)
                 }
             }
         }
@@ -257,11 +257,14 @@ class ScreenshotTest {
         val tabs = app.store.normal(space)
         val tab = tabs.first { it.url.contains("wikipedia") }
         tab.canGoBack = true
+        app.store.newTab("https://example.com", select = false, after = tab)
+        app.store.setFolder(app.store.normal(space).take(2), "Lectura")
+        val all = app.store.normal(space)
         compose.setContent {
             Themed(false) {
                 Box(Modifier.fillMaxSize().background(Color.White)) {
                     FakePage()
-                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), tabs.size, false, actions(), Modifier.align(Alignment.TopCenter), tabs = tabs, top = true, tablet = true)
+                    SafariBottomBar(tab, app.store.spaceById(tab.spaceId), all.size, false, actions(), Modifier.align(Alignment.TopCenter), tabs = all, top = true, tablet = true)
                 }
             }
         }

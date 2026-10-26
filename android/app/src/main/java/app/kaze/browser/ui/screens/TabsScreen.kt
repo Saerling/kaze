@@ -609,7 +609,7 @@ private fun FolderCard(name: String, tabs: List<Tab>, list: Boolean, highlight: 
 }
 
 /** Color estable para cada carpeta, a partir de su nombre. */
-private fun folderColor(name: String): Color {
+internal fun folderColor(name: String): Color {
     val palette = listOf(0xFF7C6CF6, 0xFF3BA7F5, 0xFF2DB89A, 0xFFF0A23B, 0xFFE8618C, 0xFF9B7CF6, 0xFF5AC8FA)
     return Color(palette[(name.hashCode() and 0x7fffffff) % palette.size])
 }

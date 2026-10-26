@@ -4,6 +4,8 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
 import app.kaze.browser.data.TabKind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.mutableFloatStateOf
@@ -177,7 +179,7 @@ fun SafariBottomBar(
             !collapsed, modifier = modifier,
             enter = slideInVertically(spring(0.86f, 420f)) { it } + fadeIn(tween(180)),
             exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(150)),
-        ) { ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab, showAddress = false) }
+        ) { ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab, showAddress = false, onCloseTab = onCloseTab) }
         return
     }
     if (tablet) {
@@ -185,7 +187,7 @@ fun SafariBottomBar(
         return
     }
     if (compact) {
-        CompactBar(tab, space, tabCount, collapsed, a, modifier)
+        CompactBar(tab, space, tabCount, collapsed, a, modifier, tabs, onSelectTab, onCloseTab)
         return
     }
     AnimatedContent(
@@ -200,7 +202,7 @@ fun SafariBottomBar(
         label = "bar",
     ) { small ->
         CompositionLocalProvider(LocalBarTop provides top) {
-            if (small) CollapsedBar(tab, space, a.onExpand) else ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab)
+            if (small) CollapsedBar(tab, space, a.onExpand) else ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab, onCloseTab = onCloseTab)
         }
     }
 }
@@ -254,7 +256,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
 }
 
 @Composable
-private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, showAddress: Boolean = true) {
+private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, showAddress: Boolean = true, onCloseTab: (Tab) -> Unit = {}) {
     val k = LocalKaze.current
     val top = LocalBarTop.current
     val r = if (k.material) 28.dp else 22.dp
@@ -271,6 +273,7 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
         Column(Modifier.widthIn(max = 760.dp).align(Alignment.CenterHorizontally)) {
+        if (LocalApp.current.settings.tabStripPhone && tabs.size > 1) TabStrip(tab, tabs, onSelectTab, onCloseTab, Modifier.padding(bottom = 6.dp), minTab = 110.dp, maxTab = 170.dp)
         if (showAddress) TabPager(tab, tabs, a, onSelectTab)
         Row(
             Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -717,14 +720,22 @@ fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () ->
  * se encoge; "⋯" abre un menú vertical con el resto de acciones. Deslizar hacia arriba abre las pestañas.
  */
 @Composable
-private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolean, a: ChromeActions, modifier: Modifier) {
+private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolean, a: ChromeActions, modifier: Modifier, tabs: List<Tab> = emptyList(), onSelectTab: (Tab) -> Unit = {}, onCloseTab: (Tab) -> Unit = {}) {
     val k = LocalKaze.current
+    val showStrip = LocalApp.current.settings.tabStripPhone && tabs.size > 1
     var menu by remember { mutableStateOf(false) }
     val height by animateDpAsState(if (collapsed) 36.dp else 50.dp, spring(0.8f, 420f), label = "compactH")
     val side by animateDpAsState(if (collapsed) 64.dp else 12.dp, spring(0.8f, 420f), label = "compactW")
     val enter = fadeIn(tween(160)) + scaleIn(spring(0.6f, 520f), initialScale = 0.8f)
     val exit = fadeOut(tween(110)) + scaleOut(tween(140), targetScale = 0.85f)
-    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
+    Column(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
+    // Fila de pestañas (opcional): una cápsula de vidrio encima de la barra, solo con la barra abierta.
+    AnimatedVisibility(showStrip && !collapsed, enter = fadeIn(tween(180)) + expandVertically(spring(0.85f, 420f)), exit = fadeOut(tween(120)) + shrinkVertically(tween(180))) {
+        Box(Modifier.padding(bottom = 8.dp).glass(RoundedCornerShape(18.dp), 10f).padding(4.dp)) {
+            TabStrip(tab, tabs, onSelectTab, onCloseTab, minTab = 110.dp, maxTab = 170.dp)
+        }
+    }
+    Box(Modifier.fillMaxWidth()) {
         // Como Safari en iOS: burbujas de vidrio a los lados (atrás, adelante, ⋯) y la píldora grande del sitio.
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -785,6 +796,7 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
                 Bubble(Icons.Outlined.MoreHoriz, "Más", true, a.onShare, { menu = true }, Modifier.padding(start = 8.dp))
             }
         }
+    }
     }
     if (menu) CompactMenu(tab, tabCount, a) { menu = false }
 }
@@ -915,58 +927,7 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
             }
         }
         // Fila de pestañas: todas del mismo ancho; si no caben (menos de 120 dp cada una), se desliza.
-        if (list.size > 1) {
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(34.dp).padding(start = 8.dp, end = 8.dp, bottom = 4.dp)) {
-                val w = maxOf(120.dp, (maxWidth - 4.dp * (list.size - 1)) / list.size)
-                val state = androidx.compose.foundation.lazy.rememberLazyListState()
-                LaunchedEffect(tab.id, list.size) {
-                    val i = list.indexOfFirst { it.id == tab.id }
-                    if (i >= 0) state.animateScrollToItem(i)
-                }
-                val store = LocalApp.current.store
-                val density = androidx.compose.ui.platform.LocalDensity.current
-                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-                val step = with(density) { (w + 4.dp).toPx() }
-                var dragId by remember { mutableStateOf<String?>(null) }
-                var dragX by remember { mutableFloatStateOf(0f) }
-                androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(list.size, key = { list[it].id }) { i ->
-                        val t = list[i]
-                        val dragging = dragId == t.id
-                        // Mantener y arrastrar: soltar entre pestañas la mueve; soltar encima de otra crea un grupo
-                        // con ella (o la añade a su grupo), como en la vista de pestañas.
-                        val drag = Modifier.pointerInput(t.id, list.size) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { dragId = t.id; dragX = 0f; haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
-                                onDragEnd = {
-                                    val slots = dragX / step
-                                    val target = list.getOrNull(i + kotlin.math.round(slots).toInt())
-                                    val nearCenter = abs(slots - kotlin.math.round(slots)) < 0.25f
-                                    if (target != null && target.id != t.id && t.kind == TabKind.NORMAL && target.kind == TabKind.NORMAL) {
-                                        if (nearCenter) {
-                                            val name = target.folder.ifEmpty { store.newFolderName(t.spaceId) }
-                                            store.setFolder(listOf(target, t), name)
-                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
-                                        } else {
-                                            val dest = list.getOrNull(i + (if (slots > 0) kotlin.math.ceil(slots).toInt() else kotlin.math.floor(slots).toInt()))
-                                            if (dest != null && dest.id != t.id) store.moveBefore(t, dest)
-                                        }
-                                    }
-                                    dragId = null; dragX = 0f
-                                },
-                                onDragCancel = { dragId = null; dragX = 0f },
-                            ) { c, d -> c.consume(); dragX += d.x }
-                        }
-                        TabChip(
-                            t, t.id == tab.id,
-                            (if (dragging) Modifier.zIndex(1f).offset { IntOffset(dragX.roundToInt(), 0) }.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f } else Modifier.animateItem())
-                                .width(w).then(drag),
-                            onClose = { onCloseTab(t) },
-                        ) { if (t.id != tab.id) onSelectTab(t) }
-                    }
-                }
-            }
-        }
+        if (list.size > 1) TabStrip(tab, list, onSelectTab, onCloseTab, Modifier.padding(start = 8.dp, end = 8.dp, bottom = 4.dp))
     }
 }
 
@@ -1031,9 +992,9 @@ private fun TabletAddress(tab: Tab, a: ChromeActions, modifier: Modifier) {
  * La activa es una tarjeta clara con sombra suave; si está en un grupo, lleva una raya del color del grupo.
  */
 @Composable
-private fun TabChip(t: Tab, selected: Boolean, modifier: Modifier, onClose: () -> Unit, onClick: () -> Unit) {
+private fun TabChip(t: Tab, selected: Boolean, group: Color?, modifier: Modifier, onClose: () -> Unit, onClick: () -> Unit) {
     val k = LocalKaze.current
-    val bg by androidx.compose.animation.animateColorAsState(if (selected) k.card else Color.Transparent, tween(180), label = "chip")
+    val bg by androidx.compose.animation.animateColorAsState(if (selected) k.card else group?.copy(alpha = 0.16f) ?: Color.Transparent, tween(180), label = "chip")
     Box(
         modifier.fillMaxHeight()
             .then(if (selected) Modifier.shadow(2.dp, RoundedCornerShape(9.dp), ambientColor = Color.Black.copy(alpha = 0.1f)) else Modifier)
@@ -1056,8 +1017,8 @@ private fun TabChip(t: Tab, selected: Boolean, modifier: Modifier, onClose: () -
                 .semantics { contentDescription = "Cerrar pestaña" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Outlined.Close, null, tint = k.ink55, modifier = Modifier.size(12.dp)) }
-        if (t.folder.isNotEmpty()) {
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp).width(18.dp).height(2.5.dp).clip(RoundedCornerShape(50)).background(k.accent))
+        if (group != null) {
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 8.dp).height(2.5.dp).clip(RoundedCornerShape(50)).background(group))
         }
     }
 }
@@ -1079,5 +1040,96 @@ private fun SpacePill(space: Space?, onClick: () -> Unit) {
         Spacer(Modifier.width(6.dp))
         Text(space?.name ?: "Espacios", style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = on, maxLines = 1)
         Icon(Icons.Outlined.KeyboardArrowDown, null, tint = on, modifier = Modifier.padding(start = 2.dp).size(16.dp))
+    }
+}
+
+
+/**
+ * Fila de pestañas (tableta y, si se activa, teléfono). Las pestañas de un mismo grupo van juntas,
+ * detrás de una etiqueta con el color y nombre del grupo (como los grupos de Chrome y Safari);
+ * tocar la etiqueta pliega o despliega el grupo. Cada pestaña del grupo lleva su color de fondo y una raya.
+ * Mantener y arrastrar mueve una pestaña; soltarla encima de otra crea un grupo o la añade al suyo.
+ */
+@Composable
+fun TabStrip(
+    tab: Tab, tabs: List<Tab>, onSelectTab: (Tab) -> Unit, onCloseTab: (Tab) -> Unit, modifier: Modifier = Modifier,
+    minTab: androidx.compose.ui.unit.Dp = 120.dp, maxTab: androidx.compose.ui.unit.Dp = 600.dp,
+) {
+    val store = LocalApp.current.store
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val folded = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    // Los miembros de cada grupo, juntos donde aparece el primero.
+    val ordered = run {
+        val seen = HashSet<String>()
+        buildList { tabs.forEach { t -> if (t.folder.isEmpty()) add(t) else if (seen.add(t.folder)) addAll(tabs.filter { it.folder == t.folder }) } }
+    }
+    val visible = ordered.filter { it.folder.isEmpty() || folded[it.folder] != true || it.id == tab.id }
+    val groups = ordered.map { it.folder }.filter { it.isNotEmpty() }.distinct()
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(30.dp)) {
+        val n = visible.size.coerceAtLeast(1)
+        val w = ((maxWidth - 4.dp * (n - 1) - 74.dp * groups.size) / n).coerceIn(minTab, maxTab)
+        val step = with(density) { (w + 4.dp).toPx() }
+        var dragId by remember { mutableStateOf<String?>(null) }
+        var dragX by remember { mutableFloatStateOf(0f) }
+        val state = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(tab.id, n) {
+            val i = visible.indexOfFirst { it.id == tab.id }
+            if (i >= 0) state.animateScrollToItem(i)
+        }
+        androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            visible.forEachIndexed { i, t ->
+                if (t.folder.isNotEmpty() && visible.getOrNull(i - 1)?.folder != t.folder) {
+                    val name = t.folder
+                    item(key = "g:$name") {
+                        val c = folderColor(name)
+                        val count = ordered.count { it.folder == name }
+                        Row(
+                            Modifier.animateItem().height(24.dp).clip(RoundedCornerShape(50)).background(c)
+                                .tap { folded[name] = folded[name] != true }.padding(horizontal = 10.dp)
+                                .semantics { contentDescription = "Grupo $name, $count pestañas (tocar para plegar o desplegar)" },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(name, style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
+                            if (folded[name] == true) Text("  $count", style = KazeType.footnote, color = Color.White.copy(alpha = 0.85f))
+                        }
+                    }
+                }
+                item(key = t.id) {
+                    val dragging = dragId == t.id
+                    val drag = Modifier.pointerInput(t.id, visible.size) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { dragId = t.id; dragX = 0f; haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
+                            onDragEnd = {
+                                val slots = dragX / step
+                                val r = kotlin.math.round(slots).toInt()
+                                val target = visible.getOrNull(i + r)
+                                if (target != null && target.id != t.id && t.kind == TabKind.NORMAL && target.kind == TabKind.NORMAL) {
+                                    if (abs(slots - r) < 0.25f) {
+                                        store.setFolder(listOf(target, t), target.folder.ifEmpty { store.newFolderName(t.spaceId) })
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+                                    } else {
+                                        val dest = visible.getOrNull(i + (if (slots > 0) kotlin.math.ceil(slots).toInt() else kotlin.math.floor(slots).toInt()))
+                                        if (dest != null && dest.id != t.id) {
+                                            // Al sacarla de su grupo hacia una pestaña suelta, deja el grupo.
+                                            if (t.folder != dest.folder) store.setFolder(listOf(t), dest.folder)
+                                            store.moveBefore(t, dest)
+                                        }
+                                    }
+                                }
+                                dragId = null; dragX = 0f
+                            },
+                            onDragCancel = { dragId = null; dragX = 0f },
+                        ) { c, d -> c.consume(); dragX += d.x }
+                    }
+                    TabChip(
+                        t, t.id == tab.id, t.folder.takeIf { it.isNotEmpty() }?.let { folderColor(it) },
+                        (if (dragging) Modifier.zIndex(1f).offset { IntOffset(dragX.roundToInt(), 0) }.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f } else Modifier.animateItem())
+                            .width(w).then(drag),
+                        onClose = { onCloseTab(t) },
+                    ) { if (t.id != tab.id) onSelectTab(t) }
+                }
+            }
+        }
     }
 }

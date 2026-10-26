@@ -235,6 +235,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             IosGroup {
                 Choice("Estilo", UiStyle.entries, s.uiStyle, { it.label }) { s.uiStyle = it }
                 BarLayoutPicker(s.barLayout) { s.barLayout = it; s.barTop = false }
+                Toggle("Pestañas en la barra (teléfono)", s.tabStripPhone) { s.tabStripPhone = it }
                 Choice("Color", AccentColor.entries, s.accent, { it.label }) { s.accent = it }
                 Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
                 Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {

@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import app.kaze.browser.ui.sheets.RecentlyClosedSheet
 import app.kaze.browser.ui.sheets.ClearDataSheet
 import app.kaze.browser.ui.sheets.DownloadsSheet
+import app.kaze.browser.zsync.ZenSync
 import app.kaze.browser.ui.sheets.MenuActions
 import app.kaze.browser.ui.sheets.MainMenuSheet
 import androidx.compose.animation.core.spring
@@ -583,6 +584,12 @@ class MainActivity : ComponentActivity() {
         // barra. Al minimizarse, ese contenido baja con un resorte hasta quedar encima de la píldora pequeña.
         // Cada diseño tiene su altura de barra: al cambiar de diseño se vuelve a medir.
         LaunchedEffect(layout, tabletBar) { barExpandedPx = 0 }
+        // Sincronización con el escritorio (si hay sesión): trae lo nuevo poco después de abrir, sin frenar el arranque.
+        LaunchedEffect(Unit) {
+            if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect
+            delay(4000)
+            runCatching { ZenSync.pull(this@MainActivity, store) }.onSuccess { if (it > 0) ui.show("$it pestañas nuevas del escritorio") }
+        }
         val navPx = WindowInsets.navigationBars.getBottom(density)
         val smallPx = with(density) { 54.dp.roundToPx() }
         val clip = remember { androidx.compose.animation.core.Animatable(0f) }

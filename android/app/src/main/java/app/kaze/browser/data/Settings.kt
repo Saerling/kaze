@@ -14,7 +14,7 @@ enum class ThemeMode(val label: String) { SYSTEM("Sistema"), LIGHT("Claro"), DAR
 
 /** Estilo de la interfaz: Safari (vidrio, azul) o Material You (colores del fondo de pantalla, Android 12+). */
 /** FLOW = "Living Flow Design" de ColorOS 17: vidrio como gota de agua, esquinas grandes, degradados que fluyen y movimiento elástico. */
-enum class UiStyle(val label: String) { SAFARI("Safari"), MATERIAL("Material You"), FLOW("Living Flow (ColorOS)") }
+enum class UiStyle(val label: String) { SAFARI("Safari"), MATERIAL("Material You"), FLOW("Living Flow (ColorOS)"), ZEN("Zen") }
 
 /** Color principal. AUTO = azul en Safari, el del fondo de pantalla en Material You. */
 enum class AccentColor(val label: String, val argb: Long) {

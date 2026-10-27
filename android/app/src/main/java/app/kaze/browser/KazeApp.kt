@@ -82,6 +82,7 @@ class Kaze private constructor(context: Context) {
     val engineStarted: Boolean get() = poolLazy.isInitialized()
 
     init {
+        app.kaze.browser.zsync.AppContextHolder.initialize(context)
         db.trimHistory()
     }
 

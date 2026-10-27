@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.sheets
 
+import kotlinx.coroutines.launch
+import app.kaze.browser.zsync.ZenSync
+import app.kaze.browser.zsync.MozillaSignInScreen
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.border
@@ -300,6 +303,8 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             }
             Note("Las pestañas dormidas no gastan RAM y se recargan al volver a ellas. El aislamiento estricto (un proceso por sitio) es más seguro pero usa bastante más memoria.")
 
+            ZenSyncSection()
+
             IosSectionHeader("Privacidad y seguridad")
             IosGroup {
                 Choice("Protección contra rastreo", TrackingLevel.entries, s.tracking, { it.label }) { s.tracking = it; needsRestart = true }
@@ -413,6 +418,60 @@ private fun <T> Choice(title: String, options: List<T>, value: T, label: (T) -> 
                     trailing = { if (o == value) Icon(Icons.Outlined.Check, null, tint = k.accent, modifier = Modifier.size(20.dp)) },
                 ) { onChange(o); open = false }
             }
+        }
+    }
+}
+
+
+/** Sincronización con Fyx/Zen de escritorio por tu cuenta de Mozilla (como Z-Sync). */
+@Composable
+private fun ZenSyncSection() {
+    val app = LocalApp.current
+    val k = LocalKaze.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var email by remember { mutableStateOf(ZenSync.email(context)) }
+    var signIn by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    fun pull() {
+        busy = true
+        scope.launch {
+            runCatching { ZenSync.pull(context, app.store) }
+                .onSuccess { app.ui.show(if (it == 0) "Todo al día con el escritorio" else "$it pestañas traídas del escritorio") }
+                .onFailure { app.ui.show("No se pudo sincronizar: ${it.message ?: it.javaClass.simpleName}") }
+            busy = false
+        }
+    }
+    IosSectionHeader("Sincronizar con el escritorio")
+    IosGroup {
+        if (email == null) {
+            IosRow("Iniciar sesión con tu cuenta de Mozilla", titleColor = k.accent, divider = false) { signIn = true }
+        } else {
+            IosRow("Cuenta", trailing = { Text(email.orEmpty(), style = KazeType.body, color = k.ink55, maxLines = 1) }) {}
+            IosRow(if (busy) "Sincronizando…" else "Traer espacios y pestañas del escritorio", titleColor = k.accent) { if (!busy) pull() }
+            IosRow("Enviar la pestaña actual al escritorio", titleColor = k.accent) {
+                val t = app.store.selectedTab ?: return@IosRow
+                scope.launch {
+                    runCatching { ZenSync.send(context, t.url, t.displayTitle, app.store.spaceById(t.spaceId)?.name) }
+                        .onSuccess { app.ui.show("Enviada al escritorio") }.onFailure { app.ui.show("No se pudo enviar: ${it.message}") }
+                }
+            }
+            IosRow("Cerrar sesión", titleColor = SystemRed, divider = false) { ZenSync.signOut(context); email = null }
+        }
+    }
+    Note("Inicia sesión en Fyx de escritorio con la misma cuenta de Mozilla y activa la sincronización: sus espacios, pestañas y Essentials llegan aquí (basado en Z-Sync).")
+    if (signIn) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { signIn = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            MozillaSignInScreen(
+                onFinishLogin = { login ->
+                    ZenSync.completeLogin(context, login)
+                    email = login.email; signIn = false; pull()
+                },
+                onCancel = { signIn = false },
+            )
         }
     }
 }

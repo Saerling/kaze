@@ -93,6 +93,7 @@ android {
 
 dependencies {
     implementation(libs.geckoview)
+    implementation("androidx.security:security-crypto:1.1.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

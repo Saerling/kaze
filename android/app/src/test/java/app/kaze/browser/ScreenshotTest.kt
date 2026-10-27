@@ -190,11 +190,16 @@ class ScreenshotTest {
     }
 
     @Config(qualifiers = "w820dp-h891dp-xxhdpi")
-    @Test fun living_flow() {
+    @Test fun living_flow() = flowShot(UiStyle.FLOW, "android-living-flow.png")
+
+    @Config(qualifiers = "w820dp-h891dp-xxhdpi")
+    @Test fun estilo_zen() = flowShot(UiStyle.ZEN, "android-estilo-zen.png")
+
+    private fun flowShot(style: UiStyle, file: String) {
         val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
         tab.canGoBack = true
         compose.setContent {
-            KazeTheme(false, UiStyle.FLOW, AccentColor.AUTO) {
+            KazeTheme(false, style, AccentColor.AUTO) {
                 CompositionLocalProvider(LocalApp provides app) {
                     Row(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(1f).fillMaxHeight()) { Tabs() }
@@ -206,7 +211,7 @@ class ScreenshotTest {
             }
         }
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("../../docs/capturas/android-living-flow.png")
+        compose.onRoot().captureRoboImage("../../docs/capturas/" + file)
     }
 
     @Test fun actualizacion() {

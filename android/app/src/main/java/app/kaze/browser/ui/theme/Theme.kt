@@ -75,9 +75,11 @@ data class KazeColors(
     val onTonal: Color = ink,
     /** Living Flow (ColorOS 17): vidrio de gota, esquinas grandes y movimiento elástico. */
     val flow: Boolean = false,
+    /** Zen (como Zen Browser y Z-Sync): papel cálido, acento verde azulado, superficies planas. */
+    val zen: Boolean = false,
 ) {
     /** Radio de las tarjetas: más redondo en Material You (Material 3 Expressive) y en Living Flow. */
-    val corner get() = when { material -> 24; flow -> 26; else -> 14 }
+    val corner get() = when { material -> 24; flow -> 26; zen -> 16; else -> 14 }
     val ink70 get() = ink.copy(alpha = 0.7f)
     val ink55 get() = ink.copy(alpha = 0.6f)
     val ink35 get() = ink.copy(alpha = 0.3f)
@@ -105,6 +107,22 @@ fun styledColors(context: android.content.Context, dark: Boolean, style: UiStyle
     val base = kazeColors(dark)
     val pick = if (accent == AccentColor.AUTO) null else Color(accent.argb)
     if (style == UiStyle.SAFARI) return if (pick == null) base else base.copy(accent = pick)
+    if (style == UiStyle.ZEN) {
+        // Paleta de Zen/Z-Sync: papel cálido (claro) o gris carbón (oscuro), tinta suave y acento verde azulado.
+        val accentC = pick ?: if (dark) Color(0xFFA3CCC6) else Color(0xFF264540)
+        val ink = if (dark) Color(0xFFF3ECE6) else Color(0xFF2E2E2E)
+        return base.copy(
+            paper = if (dark) Color(0xFF1F1F1F) else Color(0xFFF3ECE6),
+            ink = ink,
+            card = if (dark) Color(0xFF2A2A2A) else Color(0xFFFBF7F3),
+            glass = if (dark) Color(0xFF2A2A2A).copy(alpha = 0.9f) else Color(0xFFFBF7F3).copy(alpha = 0.92f),
+            lift = if (dark) Color.White.copy(alpha = 0.07f) else Color.Black.copy(alpha = 0.06f),
+            separator = ink.copy(alpha = 0.08f),
+            accent = accentC,
+            tonal = accentC.copy(alpha = if (dark) 0.2f else 0.12f), onTonal = accentC,
+            zen = true,
+        )
+    }
     if (style == UiStyle.FLOW) {
         // Living Flow: fondos con un leve tono violeta (nunca negro puro), tarjetas limpias,
         // vidrio claro y acento violeta como los degradados de ColorOS 17.
@@ -224,6 +242,13 @@ fun Modifier.card(shape: Shape = CardShape): Modifier {
 @Composable
 fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
     val k = LocalKaze.current
+    if (k.zen) {
+        // Zen: superficie plana con un borde finísimo y una sombra casi imperceptible.
+        return this
+            .shadow((elevation / 6f).dp, shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
+            .clip(shape).background(k.glass, shape)
+            .border(0.5.dp, k.ink.copy(alpha = if (k.isDark) 0.10f else 0.07f), shape)
+    }
     if (k.flow) {
         // Gota de agua (Living Flow): sombra suave teñida, cuerpo un poco más claro arriba y
         // un borde brillante que se apaga hacia abajo, como la luz en una gota.

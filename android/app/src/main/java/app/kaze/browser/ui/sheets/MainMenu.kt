@@ -54,6 +54,8 @@ import app.kaze.browser.data.Tab
 import app.kaze.browser.data.TabKind
 import app.kaze.browser.ui.components.IosGroup
 import app.kaze.browser.ui.components.IosRow
+import app.kaze.browser.ui.components.FaviconTile
+import app.kaze.browser.data.Urls
 import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
 import app.kaze.browser.ui.theme.SystemRed
@@ -89,55 +91,64 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
     val web = !tab.isStart && !tab.url.startsWith("about:")
     fun go(action: () -> Unit) = { onDismiss(); action() }
 
+    val k = LocalKaze.current
     KazeSheet(onDismiss) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            // 1. La página: de qué sitio es y copiar su enlace con un toque (contexto antes que acciones).
+            if (web) {
+                Row(
+                    Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card)
+                        .clickable { ClipboardBridge.copy?.invoke(tab.url); app.ui.show("Enlace copiado"); onDismiss() }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FaviconTile(tab.url, 36.dp, 20.dp)
+                    Spacer(Modifier.size(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(tab.displayTitle, style = KazeType.body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = k.ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Text(Urls.displayHost(tab.url), style = KazeType.footnote, color = k.ink55, maxLines = 1)
+                    }
+                    Icon(Icons.Outlined.ContentCopy, "Copiar enlace", tint = k.accent, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            // 2. Acciones de la página (las más usadas, en mosaicos grandes al alcance del pulgar).
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val fav = tab.kind == TabKind.ESSENTIAL
-                QuickAction(if (fav) Icons.Outlined.Star else Icons.Outlined.StarBorder, if (fav) "Favorito" else "Favorito", enabled = web && !tab.isPrivate, active = fav, modifier = Modifier.weight(1f)) {
+                QuickAction(if (fav) Icons.Outlined.Star else Icons.Outlined.StarBorder, "Favorito", enabled = web && !tab.isPrivate, active = fav, modifier = Modifier.weight(1f)) {
                     store.setKind(tab, if (fav) TabKind.PINNED else TabKind.ESSENTIAL)
                     app.ui.show(if (fav) "Quitada de Favoritos" else "Añadida a Favoritos")
                 }
                 QuickAction(Icons.Outlined.Share, "Compartir", enabled = web, modifier = Modifier.weight(1f), onClick = go(a.onShare))
-                QuickAction(Icons.Outlined.ContentCopy, "Copiar", enabled = web, modifier = Modifier.weight(1f)) {
-                    ClipboardBridge.copy?.invoke(tab.url); onDismiss()
-                }
-                QuickAction(Icons.Outlined.Download, "PDF", enabled = web, modifier = Modifier.weight(1f), onClick = go(a.onSavePdf))
-                QuickAction(Icons.Outlined.Refresh, "Recargar", enabled = web, modifier = Modifier.weight(1f)) {
-                    pool.sessionOf(tab.id)?.reload(); onDismiss()
+                QuickAction(Icons.Outlined.FindInPage, "Buscar", enabled = web, modifier = Modifier.weight(1f), onClick = go(a.onFind))
+                QuickAction(Icons.Outlined.DesktopWindows, "Escritorio", enabled = web, active = tab.desktopMode, modifier = Modifier.weight(1f)) {
+                    pool.setDesktopMode(tab, !tab.desktopMode)
                 }
             }
-
-            IosGroup {
-                IosRow("Nueva pestaña", Icons.Outlined.Add, onClick = go(a.onNewTab))
-                IosRow("Nueva pestaña privada", Icons.Outlined.VisibilityOff, onClick = go(a.onNewPrivate))
-                if (store.profileSpaces.size > 1 && !tab.isPrivate) {
-                    IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove, onClick = go(a.onMove))
-                }
-                IosRow("Buscar en la página", Icons.Outlined.FindInPage, divider = web, onClick = go(a.onFind))
-                if (web) {
-                    IosRow(
-                        "Versión de escritorio", Icons.Outlined.DesktopWindows, divider = false,
-                        trailing = { KazeSwitch(tab.desktopMode) { pool.setDesktopMode(tab, it) } },
-                    ) { pool.setDesktopMode(tab, !tab.desktopMode) }
-                }
+            Spacer(Modifier.height(8.dp))
+            // 3. El navegador: pestañas nuevas y lo que se consulta seguido.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickAction(Icons.Outlined.Add, "Nueva", modifier = Modifier.weight(1f), onClick = go(a.onNewTab))
+                QuickAction(Icons.Outlined.VisibilityOff, "Privada", modifier = Modifier.weight(1f), onClick = go(a.onNewPrivate))
+                QuickAction(Icons.Outlined.History, "Historial", modifier = Modifier.weight(1f), onClick = go(a.onLibrary))
+                QuickAction(Icons.Outlined.Download, "Descargas", modifier = Modifier.weight(1f), onClick = go(a.onDownloads))
             }
             Spacer(Modifier.height(14.dp))
             IosGroup {
-                IosRow("Historial", Icons.Outlined.History, onClick = go(a.onLibrary))
                 IosRow("Favoritos y lista de lectura", Icons.AutoMirrored.Outlined.MenuBook, onClick = go(a.onLibrary))
                 IosRow("Pestañas cerradas recientemente", Icons.Outlined.Restore, onClick = go(a.onRecent))
-                IosRow("Descargas", Icons.Outlined.Download, onClick = go(a.onDownloads))
-                IosRow("Borrar datos de navegación", Icons.Outlined.DeleteOutline, divider = false, onClick = go(a.onClearData))
+                if (store.profileSpaces.size > 1 && !tab.isPrivate) {
+                    IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove, onClick = go(a.onMove))
+                }
+                IosRow("Guardar como PDF", Icons.Outlined.Download, enabled = web, divider = false, onClick = go(a.onSavePdf))
             }
             Spacer(Modifier.height(14.dp))
             IosGroup {
                 IosRow("Ajustes", Icons.Outlined.Settings, onClick = go(a.onSettings))
                 IosRow("Personalizar página de inicio", Icons.Outlined.Home, onClick = go(a.onCustomizeHome))
+                IosRow("Establecer Fyx como predeterminado", Icons.Outlined.TaskAlt, onClick = go(a.onDefaultBrowser))
                 IosRow("Ayuda y comentarios", Icons.AutoMirrored.Outlined.HelpOutline, onClick = go(a.onHelp))
-                IosRow("Establecer Fyx como predeterminado", Icons.Outlined.TaskAlt, divider = false, onClick = go(a.onDefaultBrowser))
+                IosRow("Borrar datos de navegación", Icons.Outlined.DeleteOutline, titleColor = SystemRed, divider = false, onClick = go(a.onClearData))
             }
             Spacer(Modifier.height(24.dp))
         }

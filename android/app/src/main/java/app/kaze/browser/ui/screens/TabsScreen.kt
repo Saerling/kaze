@@ -421,8 +421,11 @@ fun TabsScreen(
 @Composable
 private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> Unit, onMenu: (Tab) -> Unit, essential: Boolean = false) {
     val k = LocalKaze.current
+    // Columnas según el ancho (4 en teléfono, más en tableta): los íconos no quedan perdidos en columnas enormes.
+    androidx.compose.foundation.layout.BoxWithConstraints {
+    val cols = maxOf(4, ((maxWidth + 8.dp) / 76.dp).toInt())
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tabs.chunked(4).forEach { row ->
+        tabs.chunked(cols).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { t ->
                     Box(
@@ -434,14 +437,15 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
                         if (!essential) {
                             Icon(
                                 Icons.Outlined.PushPin, null, tint = k.ink35,
-                                modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(11.dp),
+                                modifier = Modifier.align(Alignment.Center).offset(24.dp, (-24).dp).size(11.dp),
                             )
                         }
                     }
                 }
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+    }
     }
 }
 

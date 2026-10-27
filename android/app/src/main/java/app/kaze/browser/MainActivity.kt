@@ -137,6 +137,16 @@ class MainActivity : ComponentActivity() {
     /** Estado de navegación de la UI (sobrevive mientras viva la actividad). */
     private var showTabs by mutableStateOf(false)
 
+    /** Atajos de teclado (los pone la interfaz, que tiene acceso a pestañas y barra). */
+    private var keyHandler: ((android.view.KeyEvent) -> Boolean)? = null
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && (event.isCtrlPressed || event.isAltPressed || event.keyCode == android.view.KeyEvent.KEYCODE_F5) &&
+            keyHandler?.invoke(event) == true
+        ) return true
+        return super.dispatchKeyEvent(event)
+    }
+
     private var pendingFile: Pair<PromptDelegate.FilePrompt, PendingPrompt>? = null
     private val fileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         val (prompt, pending) = pendingFile ?: return@registerForActivityResult
@@ -584,6 +594,38 @@ class MainActivity : ComponentActivity() {
         // barra. Al minimizarse, ese contenido baja con un resorte hasta quedar encima de la píldora pequeña.
         // Cada diseño tiene su altura de barra: al cambiar de diseño se vuelve a medir.
         LaunchedEffect(layout, tabletBar) { barExpandedPx = 0 }
+        // Atajos de teclado como en Chrome y Firefox (teclado físico en tableta o con funda).
+        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { keyHandler = null } }
+        SideEffect {
+            keyHandler = { e ->
+                val cur = store.selectedTab
+                val shift = e.isShiftPressed
+                when {
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_T && shift ->
+                        store.recentlyClosed.removeLastOrNull()?.let { (url, _) -> open(store.newTab(url, after = cur)) } != null
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_T -> { newTab(); true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_N && shift -> { newTab(private = true); true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_W -> { cur?.let(::closeTab); true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_TAB -> { swipeTab(if (shift) -1 else 1); true }
+                    e.isCtrlPressed && e.keyCode in android.view.KeyEvent.KEYCODE_1..android.view.KeyEvent.KEYCODE_9 -> {
+                        val list = (store.pinned(store.currentSpaceId) + store.normal(store.currentSpaceId))
+                        val i = e.keyCode - android.view.KeyEvent.KEYCODE_1
+                        (if (i == 8) list.lastOrNull() else list.getOrNull(i))?.let { t -> snapshot { open(t) } }; true
+                    }
+                    e.isCtrlPressed && (e.keyCode == android.view.KeyEvent.KEYCODE_L || e.keyCode == android.view.KeyEvent.KEYCODE_K) -> { actions?.onAddress?.invoke(); true }
+                    (e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_R) || e.keyCode == android.view.KeyEvent.KEYCODE_F5 -> { actions?.onReload?.invoke(); true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_F -> { finding = true; true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_D -> { actions?.onLibrary?.invoke(); true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_J -> { downloadsOpen = true; true }
+                    e.isCtrlPressed && e.keyCode == android.view.KeyEvent.KEYCODE_H -> { librarySection = 2; library = true; true }
+                    e.isCtrlPressed && shift && e.keyCode == android.view.KeyEvent.KEYCODE_BACKSLASH -> { showTabsGrid(); true }
+                    e.isAltPressed && e.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT -> { actions?.onBack?.invoke(); true }
+                    e.isAltPressed && e.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { actions?.onForward?.invoke(); true }
+                    else -> false
+                }
+            }
+        }
+
         // Sincronización con el escritorio (si hay sesión): trae lo nuevo poco después de abrir, sin frenar el arranque.
         LaunchedEffect(Unit) {
             if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect

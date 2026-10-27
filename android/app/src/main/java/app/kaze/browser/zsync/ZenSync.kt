@@ -33,13 +33,13 @@ object ZenSync {
         val snap = SpacesSyncService.refresh(context)
         return withContext(Dispatchers.Main) {
             var added = 0
+            tidy(store)
             snap.spaces.forEach { zs ->
                 val space = store.spaces.firstOrNull { it.name.equals(zs.name, true) }
                     ?: store.addSpace(zs.name, zs.icon?.takeIf { it.isNotBlank() && it.length <= 4 } ?: "🖥️", zs.themeColors.mapNotNull { parse(it) }.ifEmpty { listOf(0xFF6B5BFF.toInt()) })
-                val have = store.tabs.filter { it.spaceId == space.id }.map { it.url }.toHashSet()
+                val have = store.tabs.filter { it.spaceId == space.id }.map { norm(it.url) }.toHashSet()
                 fun add(url: String, kind: TabKind, folder: String = "") {
-                    if (url.isBlank() || url in have || !url.startsWith("http")) return
-                    have += url
+                    if (url.isBlank() || !url.startsWith("http") || !have.add(norm(url))) return
                     val t = store.newTab(url, spaceId = space.id, select = false)
                     if (kind != TabKind.NORMAL) store.setKind(t, kind)
                     if (folder.isNotEmpty()) store.setFolder(listOf(t), folder)
@@ -48,7 +48,7 @@ object ZenSync {
                 fun items(list: List<ZenSpaces.ZenItem>, kind: TabKind) = list.forEach { item ->
                     when (item) {
                         is ZenSpaces.ZenItem.Tab -> add(item.tab.url, kind)
-                        is ZenSpaces.ZenItem.Folder -> item.folder.tabs.forEach { add(it.url, kind, item.folder.name) }
+                        is ZenSpaces.ZenItem.Folder -> item.folder.tabs.forEach { add(it.url, TabKind.NORMAL, item.folder.name.ifBlank { "Carpeta" }) }
                         is ZenSpaces.ZenItem.Split -> item.split.tabs.forEach { add(it.url, kind) }
                     }
                 }
@@ -56,8 +56,9 @@ object ZenSync {
                 items(zs.tabs, TabKind.NORMAL)
             }
             val first = store.spaces.firstOrNull()
+            val ess = store.tabs.filter { it.kind == TabKind.ESSENTIAL }.map { norm(it.url) }.toHashSet()
             if (first != null) snap.essentials.values.flatten().forEach { e ->
-                if (store.tabs.none { it.kind == TabKind.ESSENTIAL && it.url == e.url } && e.url.startsWith("http")) {
+                if (e.url.startsWith("http") && ess.add(norm(e.url))) {
                     store.setKind(store.newTab(e.url, spaceId = first.id, select = false), TabKind.ESSENTIAL); added++
                 }
             }
@@ -82,6 +83,20 @@ object ZenSync {
             upload.forEach { c.putRecord("passwords", it.getString("id"), it) }
             logins.markSynced(upload.map { it.getString("id") })
             added
+        }
+    }
+
+    /** Misma página aunque cambie la consulta o el ancla (evita duplicados como varias bandejas de Gmail). */
+    private fun norm(url: String) = url.substringBefore('#').substringBefore('?').trimEnd('/').removePrefix("https://").removePrefix("http://").removePrefix("www.")
+
+    /** Arregla lo importado antes: fijadas que eran de una carpeta → a la carpeta; Essentials repetidos → uno solo. */
+    private fun tidy(store: Store) {
+        store.tabs.filter { it.kind == TabKind.PINNED && it.folder.isNotEmpty() }.forEach { store.setKind(it, TabKind.NORMAL) }
+        val seen = HashSet<String>()
+        store.tabs.filter { it.kind == TabKind.ESSENTIAL }.toList().forEach { if (!seen.add(norm(it.url))) store.close(it) }
+        store.spaces.forEach { sp ->
+            val s2 = HashSet<String>()
+            store.tabs.filter { it.spaceId == sp.id && it.kind == TabKind.PINNED }.toList().forEach { if (!s2.add(norm(it.url))) store.close(it) }
         }
     }
 

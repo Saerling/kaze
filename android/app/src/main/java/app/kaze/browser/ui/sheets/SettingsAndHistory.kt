@@ -284,7 +284,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     runCatching { context.startActivity(android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)) }
                 }
             }
-            Note("Fyx usa el autocompletado de Android (Google, Bitwarden, etc.) para rellenar contraseñas.")
+            Note("Fyx guarda tus contraseñas cifradas en el teléfono y las rellena solo (${app.logins.count} guardadas). También funciona con el autocompletado de Android (Google, Bitwarden…).")
 
             IosSectionHeader("Memoria")
             IosGroup {
@@ -306,10 +306,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                 Choice("DNS seguro", DnsMode.entries, s.dns, { it.label }) { s.dns = it; needsRestart = true }
                 Toggle("JavaScript", s.javascript) { s.javascript = it; needsRestart = true }
                 IosRow("Instalar bloqueador de anuncios (uBlock Origin)", titleColor = k.accent) {
-                    app.runtime.webExtensionController
-                        .install("https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi")
-                        .accept({ app.ui.show("uBlock Origin instalado") }, { app.ui.show("No se pudo instalar uBlock Origin") })
-                    app.ui.show("Instalando uBlock Origin…")
+                    app.installAddon("https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi", "uBlock Origin")
                 }
                 IosRow("Borrar caché", titleColor = k.accent) {
                     app.runtime.storageController.clearData(StorageController.ClearFlags.ALL_CACHES)

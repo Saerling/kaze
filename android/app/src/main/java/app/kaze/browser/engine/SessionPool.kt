@@ -127,6 +127,9 @@ class SessionPool(
         unload(tab)
     }
 
+    /** Instala un complemento desde su enlace .xpi (lo pone KazeApp). */
+    var installAddon: ((String) -> Unit)? = null
+
     /** Pestañas que están reproduciendo audio o video: siguen sonando al cambiar de pestaña y nunca se duermen. */
     private val playing = HashSet<Any>()
 
@@ -410,6 +413,11 @@ class SessionPool(
 
         override fun onLoadRequest(session: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny>? {
             val scheme = request.uri.substringBefore(':').lowercase()
+            // Complementos: un enlace a un .xpi (como "Añadir a Firefox" en addons.mozilla.org) se instala.
+            if (scheme == "https" && request.uri.substringBefore('?').endsWith(".xpi")) {
+                installAddon?.invoke(request.uri)
+                return GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
             if (scheme in WEB_SCHEMES) return null
             val opened = externalOpener?.invoke(request.uri) ?: false
             if (!opened && scheme != "intent") ui.show("No hay una app para abrir este enlace")
@@ -513,6 +521,9 @@ class SessionPool(
         override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt) = ask(prompt)
         override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = ask(prompt)
         override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = ask(prompt)
+        // Contraseñas: preguntar si guardar; al rellenar con una sola cuenta, se usa directamente.
+        override fun onLoginSave(session: GeckoSession, request: PromptDelegate.AutocompleteRequest<org.mozilla.geckoview.Autocomplete.LoginSaveOption>) = ask(request)
+        override fun onLoginSelect(session: GeckoSession, request: PromptDelegate.AutocompleteRequest<org.mozilla.geckoview.Autocomplete.LoginSelectOption>) = ask(request)
     }
 
     companion object {

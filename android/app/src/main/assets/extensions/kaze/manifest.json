@@ -1,15 +1,37 @@
 {
   "manifest_version": 2,
   "name": "Kaze",
-  "version": "1.0",
-  "description": "Funciones internas de Kaze: modo Lector.",
-  "browser_specific_settings": { "gecko": { "id": "interno@kaze.app" } },
-  "permissions": ["nativeMessaging", "nativeMessagingFromContent", "geckoViewAddons"],
+  "version": "1.1",
+  "description": "Funciones internas de Fyx: modo Lector y mantener sesiones iniciadas.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "interno@kaze.app"
+    }
+  },
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons",
+    "cookies",
+    "<all_urls>"
+  ],
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["Readability-readerable.js", "Readability.js", "lector.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "Readability-readerable.js",
+        "Readability.js",
+        "lector.js"
+      ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "background": {
+    "scripts": [
+      "sesiones.js"
+    ]
+  }
 }

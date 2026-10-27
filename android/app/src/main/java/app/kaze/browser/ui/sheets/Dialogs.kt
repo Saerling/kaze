@@ -68,6 +68,20 @@ fun PromptHost(pending: PendingPrompt, onDone: () -> Unit, onFile: (PromptDelega
             "¿Salir de la página?", "Es posible que los cambios que hiciste no se guarden.", "Salir", "Quedarme",
             { finish(p.confirm(AllowOrDeny.ALLOW)) }, { finish(p.confirm(AllowOrDeny.DENY)) },
         )
+        is PromptDelegate.AutocompleteRequest<*> -> {
+            val first = p.options.firstOrNull()
+            when (val v = first?.value) {
+                is org.mozilla.geckoview.Autocomplete.LoginEntry -> if (first is org.mozilla.geckoview.Autocomplete.LoginSaveOption) Simple(
+                    "¿Guardar la contraseña?", "${v.username.ifBlank { "Cuenta" }} · ${v.origin.substringAfter("://")}", "Guardar", "Ahora no",
+                    { finish(p.confirm(first)) }, { cancel() },
+                ) else DisposableEffect(p) {
+                    // Varias cuentas: se usa la más reciente (Gecko ya las ordena).
+                    finish(p.confirm(first))
+                    onDispose { }
+                }
+                else -> DisposableEffect(p) { cancel(); onDispose { } }
+            }
+        }
         is PromptDelegate.RepostConfirmPrompt -> Simple(
             "¿Reenviar el formulario?", "La página volverá a enviar los datos que escribiste.", "Reenviar", "Cancelar",
             { finish(p.confirm(AllowOrDeny.ALLOW)) }, { finish(p.confirm(AllowOrDeny.DENY)) },

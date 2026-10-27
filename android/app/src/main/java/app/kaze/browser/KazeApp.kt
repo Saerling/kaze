@@ -75,6 +75,7 @@ class Kaze private constructor(context: Context) {
     private val runtimeLazy = lazy { Engine.create(context, settings).also(::setupExtensions) }
     private val poolLazy = lazy { SessionPool(runtime, store, settings, db, ui, downloads).also(::installExtension) }
     val runtime: GeckoRuntime by runtimeLazy
+    val logins by lazy { app.kaze.browser.engine.Logins(context) }
     val pool: SessionPool by poolLazy
 
     /** true cuando el motor ya existe (para no crearlo solo por un aviso de memoria). */
@@ -87,13 +88,22 @@ class Kaze private constructor(context: Context) {
     val thumbnails = Thumbnails(context)
 
     /** Extensión interna (modo Lector). Va dentro del APK y se instala/actualiza sola. */
+    /** Instala un complemento (desde Ajustes o un enlace .xpi) y dice por qué falló, si falla. */
+    fun installAddon(url: String, name: String = "el complemento") {
+        ui.show("Instalando $name…")
+        runtime.webExtensionController.install(url, WebExtensionController.INSTALLATION_METHOD_MANAGER)
+            .accept({ ext -> ui.show("${ext?.metaData?.name ?: name} instalado") }, { e -> ui.show("No se pudo instalar $name: ${e?.message ?: "error"}") })
+    }
+
     private fun installExtension(pool: SessionPool) {
+        pool.installAddon = { installAddon(it) }
         runtime.webExtensionController
             .ensureBuiltIn("resource://android/assets/extensions/kaze/", "interno@kaze.app")
             .accept({ ext -> pool.extension = ext }, { e -> android.util.Log.w("Fyx", "Extensión interna", e) })
     }
 
     private fun setupExtensions(runtime: GeckoRuntime) {
+        runtime.autocompleteStorageDelegate = logins
         // Solo instalamos extensiones cuando el usuario lo pide desde Ajustes: se aceptan sin otro diálogo.
         runtime.webExtensionController.promptDelegate = object : WebExtensionController.PromptDelegate {
             override fun onInstallPromptRequest(

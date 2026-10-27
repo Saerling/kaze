@@ -93,7 +93,8 @@ object Engine {
             // Fission = un proceso por sitio. Más seguro, pero varias veces más RAM en el celular.
             .fissionEnabled(settings.siteIsolation)
             // Sin extensiones instaladas no hace falta un proceso aparte para ellas.
-            .extensionsProcessEnabled(false)
+            .extensionsProcessEnabled(true)
+            .loginAutofillEnabled(true)
             .lowMemoryDetection(true)
             .webManifest(false)
             .globalPrivacyControlEnabled(true)

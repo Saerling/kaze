@@ -283,12 +283,12 @@ fun TabsScreen(
             }
             if (essentials.isNotEmpty() && query.isBlank()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "essentials") {
-                    PinnedStrip(essentials, store.selectedTabId, onOpen, onTabMenu, essential = true)
+                    Column { PinnedStrip(essentials, store.selectedTabId, onOpen, onTabMenu, essential = true) }
                 }
             }
             if (pinned.isNotEmpty() && query.isBlank()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "pinned") {
-                    PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu)
+                    Column { PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu) }
                 }
             }
             // Pestañas sueltas y carpetas (una carpeta ocupa el lugar de su primera pestaña).
@@ -421,6 +421,38 @@ fun TabsScreen(
 @Composable
 private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> Unit, onMenu: (Tab) -> Unit, essential: Boolean = false) {
     val k = LocalKaze.current
+    Text(
+        if (essential) "Essentials" else "Fijadas", style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink55,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+    )
+    if (!essential) {
+        // Fijadas: píldoras con ícono y nombre (como la lista de Zen), distintas de los Essentials y de las carpetas.
+        androidx.compose.foundation.layout.BoxWithConstraints {
+            val cols = maxOf(2, ((maxWidth + 8.dp) / 220.dp).toInt())
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                tabs.chunked(cols).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { t ->
+                            Row(
+                                Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(50))
+                                    .background(if (t.id == selectedId) k.accent.copy(alpha = 0.18f) else k.card)
+                                    .tap({ onOpen(t) }, { onMenu(t) }).padding(horizontal = 12.dp)
+                                    .semantics { contentDescription = t.displayTitle },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Favicon(t.pinnedUrl ?: t.url, 18.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(t.displayTitle, style = KazeType.subhead, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Icon(Icons.Outlined.PushPin, null, tint = k.ink35, modifier = Modifier.size(12.dp))
+                            }
+                        }
+                        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
+        return
+    }
     // Columnas según el ancho (4 en teléfono, más en tableta): los íconos no quedan perdidos en columnas enormes.
     androidx.compose.foundation.layout.BoxWithConstraints {
     val cols = maxOf(4, ((maxWidth + 8.dp) / 76.dp).toInt())
@@ -603,11 +635,15 @@ private fun FolderCard(name: String, tabs: List<Tab>, list: Boolean, highlight: 
             }
         }
         Spacer(Modifier.height(6.dp))
-        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Folder, null, tint = color, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(name, style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            Text("  ${tabs.size}", style = KazeType.footnote, color = k.ink55)
+        // Etiqueta de color, igual que en la fila de pestañas: se distingue de una pestaña de un vistazo.
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).background(color).padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Folder, null, tint = Color.White, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(name, style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Text("  ${tabs.size}", style = KazeType.footnote, color = Color.White.copy(alpha = 0.8f))
         }
     }
 }

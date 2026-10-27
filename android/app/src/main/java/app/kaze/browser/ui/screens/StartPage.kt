@@ -166,16 +166,20 @@ private fun Section(title: String) {
 
 @Composable
 private fun TileGrid(items: List<Pair<String, String>>, onClick: (Int, Boolean) -> Unit) {
+    // Columnas según el ancho: 4 en teléfono, más en tableta (los mosaicos no quedan perdidos).
+    androidx.compose.foundation.layout.BoxWithConstraints {
+    val cols = maxOf(4, (maxWidth / 110.dp).toInt())
     Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        items.withIndex().chunked(4).forEach { row ->
+        items.withIndex().chunked(cols).forEach { row ->
             Row(Modifier.fillMaxWidth()) {
                 row.forEach { (i, item) ->
                     Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
                         SiteTile(item.first, item.second, onClick = { onClick(i, false) }, onLongClick = { onClick(i, true) })
                     }
                 }
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+    }
     }
 }

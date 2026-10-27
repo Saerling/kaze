@@ -678,7 +678,10 @@ class MainActivity : ComponentActivity() {
                         .then(if (showBar || ui.fullscreen) Modifier else Modifier.navigationBarsPadding()),
                 )
 
-                if (tab != null && tab.isStart && !showTabs) {
+                if (tab != null && tab.isStart && !showTabs) Box(
+                    // Con la barra arriba (tableta), la página de inicio empieza debajo de ella: nada queda tapado.
+                    Modifier.padding(top = with(density) { if (barTop) barExpandedPx.toDp() else 0.dp }),
+                ) {
                     StartPage(
                         private = tab.isPrivate,
                         onOpenUrl = { url -> app.pool.ensure(tab).loadUri(url); store.onUrl(tab, url) },

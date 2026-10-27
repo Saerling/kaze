@@ -4,6 +4,7 @@
 
 package app.kaze.browser
 
+import kotlinx.coroutines.launch
 import android.app.Application
 import android.content.ComponentCallbacks2
 import android.content.Context
@@ -75,6 +76,7 @@ class Kaze private constructor(context: Context) {
     private val runtimeLazy = lazy { Engine.create(context, settings).also(::setupExtensions) }
     private val poolLazy = lazy { SessionPool(runtime, store, settings, db, ui, downloads).also(::installExtension) }
     val runtime: GeckoRuntime by runtimeLazy
+    private val appContext = context.applicationContext
     val logins by lazy { app.kaze.browser.engine.Logins(context) }
     val pool: SessionPool by poolLazy
 
@@ -105,6 +107,12 @@ class Kaze private constructor(context: Context) {
 
     private fun setupExtensions(runtime: GeckoRuntime) {
         runtime.autocompleteStorageDelegate = logins
+        // Contraseña nueva + sesión de Firefox iniciada: se sube a la cuenta en segundo plano.
+        logins.onSaved = {
+            if (app.kaze.browser.zsync.ZenSync.email(appContext) != null) kotlinx.coroutines.MainScope().launch {
+                runCatching { app.kaze.browser.zsync.ZenSync.syncPasswords(appContext, logins) }
+            }
+        }
         // Solo instalamos extensiones cuando el usuario lo pide desde Ajustes: se aceptan sin otro diálogo.
         runtime.webExtensionController.promptDelegate = object : WebExtensionController.PromptDelegate {
             override fun onInstallPromptRequest(

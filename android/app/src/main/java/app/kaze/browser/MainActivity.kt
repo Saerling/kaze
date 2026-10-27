@@ -589,6 +589,7 @@ class MainActivity : ComponentActivity() {
             if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect
             delay(4000)
             runCatching { ZenSync.pull(this@MainActivity, store) }.onSuccess { if (it > 0) ui.show("$it pestañas nuevas del escritorio") }
+            runCatching { ZenSync.syncPasswords(this@MainActivity, app.logins) }
         }
         val navPx = WindowInsets.navigationBars.getBottom(density)
         val smallPx = with(density) { 54.dp.roundToPx() }

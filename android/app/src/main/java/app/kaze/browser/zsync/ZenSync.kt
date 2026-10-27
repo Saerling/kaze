@@ -72,5 +72,18 @@ object ZenSync {
         SpacesSyncService.addTab(context, url, title, target.id, kind = SaveKind.NORMAL)
     }
 
+    /**
+     * Contraseñas con la cuenta de Firefox: trae las de la cuenta (cifradas de extremo a extremo con la
+     * clave de tu cuenta, igual que Firefox) y sube las guardadas en el teléfono que falten.
+     */
+    suspend fun syncPasswords(context: Context, logins: app.kaze.browser.engine.Logins): Int = withContext(Dispatchers.IO) {
+        AccountStore.withClient(context) { c ->
+            val (added, upload) = logins.merge(c.getRecords("passwords"))
+            upload.forEach { c.putRecord("passwords", it.getString("id"), it) }
+            logins.markSynced(upload.map { it.getString("id") })
+            added
+        }
+    }
+
     private fun parse(c: String): Int? = runCatching { android.graphics.Color.parseColor(c.trim()) }.getOrNull()
 }

@@ -436,7 +436,7 @@ private fun ZenSyncSection() {
     fun pull() {
         busy = true
         scope.launch {
-            runCatching { ZenSync.pull(context, app.store) }
+            runCatching { ZenSync.pull(context, app.store) + 0 * runCatching { ZenSync.syncPasswords(context, app.logins) }.getOrDefault(0) }
                 .onSuccess { app.ui.show(if (it == 0) "Todo al día con el escritorio" else "$it pestañas traídas del escritorio") }
                 .onFailure { app.ui.show("No se pudo sincronizar: ${it.message ?: it.javaClass.simpleName}") }
             busy = false
@@ -459,7 +459,7 @@ private fun ZenSyncSection() {
             IosRow("Cerrar sesión", titleColor = SystemRed, divider = false) { ZenSync.signOut(context); email = null }
         }
     }
-    Note("Inicia sesión en Fyx de escritorio con la misma cuenta de Mozilla y activa la sincronización: sus espacios, pestañas y Essentials llegan aquí (basado en Z-Sync).")
+    Note("Inicia sesión en Fyx de escritorio con la misma cuenta de Mozilla y activa la sincronización: sus espacios, pestañas, Essentials y contraseñas llegan aquí (basado en Z-Sync). Las contraseñas viajan cifradas de extremo a extremo con la clave de tu cuenta, como en Firefox.")
     if (signIn) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { signIn = false },

@@ -29,6 +29,8 @@ class Logins(context: Context) : Autocomplete.StorageDelegate {
     private val file = File(context.filesDir, "contrasenas.bin")
     private val items: MutableList<JSONObject> by lazy { load() }
     val count get() = items.size
+    /** Se llama al guardar una contraseña nueva (para subirla a la cuenta de Firefox si hay sesión). */
+    var onSaved: (() -> Unit)? = null
 
     private fun key(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -76,8 +78,44 @@ class Logins(context: Context) : Autocomplete.StorageDelegate {
         val o = existing ?: JSONObject().put("guid", login.guid ?: UUID.randomUUID().toString()).also { items += it }
         o.put("origin", login.origin).put("formActionOrigin", login.formActionOrigin ?: "").put("httpRealm", login.httpRealm ?: "")
             .put("username", login.username).put("password", login.password).put("used", System.currentTimeMillis())
+            .put("synced", false)
         save()
+        onSaved?.invoke()
     }
+
+    /**
+     * Junta las contraseñas de la cuenta de Firefox (registros de la colección "passwords", ya descifrados)
+     * con las del teléfono. Devuelve las que llegaron y las locales que faltan por subir (en formato Firefox).
+     */
+    @Synchronized
+    fun merge(remote: List<JSONObject>): Pair<Int, List<JSONObject>> {
+        var added = 0
+        remote.forEach { r ->
+            if (r.optBoolean("deleted")) { items.removeAll { it.optString("guid") == r.optString("id") }; return@forEach }
+            val origin = r.optString("hostname"); val user = r.optString("username")
+            val o = items.firstOrNull { it.optString("guid") == r.optString("id") || (host(it.optString("origin")) == host(origin) && it.optString("username") == user) }
+                ?: JSONObject().also { items += it; added++ }
+            o.put("guid", r.optString("id")).put("origin", origin).put("formActionOrigin", r.optString("formSubmitURL").takeIf { it != "null" } ?: "")
+                .put("httpRealm", r.optString("httpRealm").takeIf { it != "null" } ?: "").put("username", user).put("password", r.optString("password"))
+                .put("synced", true)
+        }
+        val ids = remote.map { it.optString("id") }.toHashSet()
+        val upload = items.filter { !it.optBoolean("synced") || it.optString("guid") !in ids }.map { o ->
+            if (!o.optString("guid").startsWith("{")) o.put("guid", "{" + UUID.randomUUID() + "}")
+            val now = System.currentTimeMillis()
+            JSONObject().put("id", o.optString("guid")).put("hostname", o.optString("origin"))
+                .put("formSubmitURL", o.optString("formActionOrigin").ifEmpty { JSONObject.NULL })
+                .put("httpRealm", o.optString("httpRealm").ifEmpty { JSONObject.NULL })
+                .put("username", o.optString("username")).put("password", o.optString("password"))
+                .put("usernameField", "").put("passwordField", "")
+                .put("timeCreated", now).put("timePasswordChanged", now)
+        }
+        save()
+        return added to upload
+    }
+
+    @Synchronized
+    fun markSynced(ids: Collection<String>) { items.filter { it.optString("guid") in ids }.forEach { it.put("synced", true) }; save() }
 
     @Synchronized
     override fun onLoginUsed(login: Autocomplete.LoginEntry, usedFields: Int) {

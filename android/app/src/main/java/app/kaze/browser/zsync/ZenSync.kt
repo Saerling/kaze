@@ -28,9 +28,12 @@ object ZenSync {
 
     fun signOut(context: Context) = AccountStore.clear(context)
 
+    fun lastSync(context: Context): Long = context.getSharedPreferences("zsync", Context.MODE_PRIVATE).getLong("last", 0)
+
     /** Trae los espacios del escritorio. Devuelve cuántas pestañas nuevas llegaron. */
     suspend fun pull(context: Context, store: Store): Int {
         val snap = SpacesSyncService.refresh(context)
+        context.getSharedPreferences("zsync", Context.MODE_PRIVATE).edit().putLong("last", System.currentTimeMillis()).apply()
         return withContext(Dispatchers.Main) {
             var added = 0
             tidy(store)
@@ -79,6 +82,8 @@ object ZenSync {
      */
     suspend fun syncPasswords(context: Context, logins: app.kaze.browser.engine.Logins): Int = withContext(Dispatchers.IO) {
         AccountStore.withClient(context) { c ->
+            logins.pendingDeletes.forEach { runCatching { c.putTombstone("passwords", it) } }
+            logins.clearPendingDeletes()
             val (added, upload) = logins.merge(c.getRecords("passwords"))
             upload.forEach { c.putRecord("passwords", it.getString("id"), it) }
             logins.markSynced(upload.map { it.getString("id") })

@@ -6,6 +6,7 @@ package app.kaze.browser.ui.sheets
 
 import kotlinx.coroutines.launch
 import app.kaze.browser.zsync.ZenSync
+import app.kaze.browser.ui.components.FaviconTile
 import app.kaze.browser.zsync.MozillaSignInScreen
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.graphicsLayer
@@ -442,24 +443,64 @@ private fun ZenSyncSection() {
             busy = false
         }
     }
-    IosSectionHeader("Sincronizar con el escritorio")
-    IosGroup {
-        if (email == null) {
-            IosRow("Iniciar sesión con tu cuenta de Mozilla", titleColor = k.accent, divider = false) { signIn = true }
-        } else {
-            IosRow("Cuenta", trailing = { Text(email.orEmpty(), style = KazeType.body, color = k.ink55, maxLines = 1) }) {}
-            IosRow(if (busy) "Sincronizando…" else "Traer espacios y pestañas del escritorio", titleColor = k.accent) { if (!busy) pull() }
-            IosRow("Enviar la pestaña actual al escritorio", titleColor = k.accent) {
+    var passwords by remember { mutableStateOf(false) }
+    var last by remember { mutableStateOf(ZenSync.lastSync(context)) }
+    IosSectionHeader("Cuenta y sincronización")
+    if (email == null) {
+        // Sin sesión: una tarjeta que explica qué se gana y un solo botón claro.
+        Column(
+            Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card).padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("Tus pestañas y contraseñas en todos tus dispositivos", style = KazeType.headline, color = k.ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(6.dp))
+            Text("Inicia sesión con tu cuenta de Mozilla, la misma de Fyx en el computador.", style = KazeType.subhead, color = k.ink55, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "Iniciar sesión", style = KazeType.body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = Color.White,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent).clickable { signIn = true }.padding(horizontal = 28.dp, vertical = 11.dp),
+            )
+        }
+    } else {
+        // Con sesión: quién eres, cuándo se sincronizó y el botón principal a la vista.
+        Row(
+            Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card).padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(44.dp).clip(CircleShape).background(k.accent), contentAlignment = Alignment.Center) {
+                Text(email.orEmpty().take(1).uppercase(), style = KazeType.headline, color = Color.White)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(email.orEmpty(), style = KazeType.body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = k.ink, maxLines = 1)
+                Text(
+                    if (busy) "Sincronizando…" else if (last == 0L) "Aún no se ha sincronizado" else "Sincronizado " + android.text.format.DateUtils.getRelativeTimeSpanString(last),
+                    style = KazeType.footnote, color = k.ink55,
+                )
+            }
+            Text(
+                "Sincronizar", style = KazeType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), color = k.accent,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent.copy(alpha = 0.12f)).clickable(enabled = !busy) { pull(); last = System.currentTimeMillis() }.padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        IosGroup {
+            IosRow("Contraseñas guardadas", trailing = { Text("${app.logins.count}", style = KazeType.body, color = k.ink55) }, chevron = true) { passwords = true }
+            IosRow("Enviar la pestaña actual al computador", titleColor = k.accent) {
                 val t = app.store.selectedTab ?: return@IosRow
                 scope.launch {
                     runCatching { ZenSync.send(context, t.url, t.displayTitle, app.store.spaceById(t.spaceId)?.name) }
-                        .onSuccess { app.ui.show("Enviada al escritorio") }.onFailure { app.ui.show("No se pudo enviar: ${it.message}") }
+                        .onSuccess { app.ui.show("Enviada al computador") }.onFailure { app.ui.show("No se pudo enviar: ${it.message}") }
                 }
             }
             IosRow("Cerrar sesión", titleColor = SystemRed, divider = false) { ZenSync.signOut(context); email = null }
         }
+        Note("Se sincronizan espacios, pestañas, carpetas, Essentials y contraseñas. Las contraseñas viajan cifradas de extremo a extremo, como en Firefox.")
     }
-    Note("Inicia sesión en Fyx de escritorio con la misma cuenta de Mozilla y activa la sincronización: sus espacios, pestañas, Essentials y contraseñas llegan aquí (basado en Z-Sync). Las contraseñas viajan cifradas de extremo a extremo con la clave de tu cuenta, como en Firefox.")
+    if (email == null) IosGroup {
+        IosRow("Contraseñas guardadas", trailing = { Text("${app.logins.count}", style = KazeType.body, color = k.ink55) }, chevron = true, divider = false) { passwords = true }
+    }
+    if (passwords) PasswordsSheet { passwords = false }
     if (signIn) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { signIn = false },
@@ -473,5 +514,50 @@ private fun ZenSyncSection() {
                 onCancel = { signIn = false },
             )
         }
+    }
+}
+
+
+/** Contraseñas guardadas: por sitio, con búsqueda; tocar copia la contraseña, ✕ la borra (también de la cuenta). */
+@Composable
+private fun PasswordsSheet(onDismiss: () -> Unit) {
+    val app = LocalApp.current
+    val k = LocalKaze.current
+    var query by remember { mutableStateOf("") }
+    var version by remember { mutableIntStateOf(0) }
+    var shown by remember { mutableStateOf<String?>(null) }
+    val list = remember(version, query) { app.logins.all().filter { query.isBlank() || it.first.contains(query, true) || it.second.contains(query, true) } }
+    KazeSheet(onDismiss, full = true) {
+        SheetTitle("Contraseñas", "OK", onDismiss)
+        androidx.compose.foundation.text.BasicTextField(
+            query, { query = it }, singleLine = true, textStyle = KazeType.body.copy(color = k.ink),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(k.accent),
+            modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(k.lift).padding(12.dp),
+            decorationBox = { inner -> if (query.isEmpty()) Text("Buscar sitio o usuario", style = KazeType.body, color = k.ink55); inner() },
+        )
+        Spacer(Modifier.height(12.dp))
+        if (list.isEmpty()) Text("No hay contraseñas guardadas.", style = KazeType.body, color = k.ink55, modifier = Modifier.padding(32.dp))
+        else IosGroup {
+            list.forEachIndexed { i, (site, user, pass) ->
+                val key = "$site|$user"
+                Row(
+                    Modifier.fillMaxWidth().clickable { ClipboardBridge.copy?.invoke(pass); app.ui.show("Contraseña copiada") }.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FaviconTile("https://$site", 34.dp, 18.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(site, style = KazeType.body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = k.ink, maxLines = 1)
+                        Text(user.ifBlank { "(sin usuario)" } + "  ·  " + (if (shown == key) pass else "••••••••"), style = KazeType.footnote, color = k.ink55, maxLines = 1)
+                    }
+                    Text(if (shown == key) "Ocultar" else "Ver", style = KazeType.footnote, color = k.accent, modifier = Modifier.clip(RoundedCornerShape(50)).clickable { shown = if (shown == key) null else key }.padding(8.dp))
+                    Box(Modifier.size(32.dp).clip(CircleShape).clickable { app.logins.remove(site, user); version++ }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Close, "Borrar", tint = k.ink55, modifier = Modifier.size(16.dp))
+                    }
+                }
+                if (i < list.lastIndex) Box(Modifier.padding(start = 60.dp).fillMaxWidth().height(0.5.dp).background(k.separator))
+            }
+        }
+        Spacer(Modifier.height(24.dp))
     }
 }

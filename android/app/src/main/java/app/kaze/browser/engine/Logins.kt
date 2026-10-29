@@ -26,7 +26,14 @@ import javax.crypto.spec.GCMParameterSpec
  * almacén seguro de Android, que nunca sale del teléfono).
  */
 class Logins(context: Context) : Autocomplete.StorageDelegate {
+    private val prefs = context.getSharedPreferences("contrasenas", Context.MODE_PRIVATE)
+    /** Borradas en el teléfono que hay que borrar también de la cuenta de Firefox. */
+    val pendingDeletes: MutableSet<String> get() = prefs.getStringSet("borrar", emptySet())!!.toMutableSet()
+    fun clearPendingDeletes() = prefs.edit().remove("borrar").apply()
     private val file = File(context.filesDir, "contrasenas.bin")
+    private val backup = File(context.filesDir, "contrasenas.bak")
+    /** Si el archivo no se pudo leer, no se escribe encima (así nunca se pierden las guardadas). */
+    @Volatile private var readOnly = false
     private val items: MutableList<JSONObject> by lazy { load() }
     val count get() = items.size
     /** Se llama al guardar una contraseña nueva (para subirla a la cuenta de Firefox si hay sesión). */
@@ -43,18 +50,44 @@ class Logins(context: Context) : Autocomplete.StorageDelegate {
         }.generateKey()
     }
 
-    private fun load(): MutableList<JSONObject> = runCatching {
-        val raw = Base64.decode(file.readText(), Base64.NO_WRAP)
+    private fun load(): MutableList<JSONObject> {
+        if (!file.exists() && !backup.exists()) return mutableListOf()
+        for (f in listOf(file, backup)) runCatching { return read(f) }
+        readOnly = true
+        return mutableListOf()
+    }
+
+    private fun read(f: File): MutableList<JSONObject> {
+        val raw = Base64.decode(f.readText(), Base64.NO_WRAP)
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, raw, 0, 12)) }
         val arr = JSONArray(String(c.doFinal(raw, 12, raw.size - 12)))
-        MutableList(arr.length()) { arr.getJSONObject(it) }
-    }.getOrElse { mutableListOf() }
+        return MutableList(arr.length()) { arr.getJSONObject(it) }
+    }
 
     @Synchronized
     private fun save() = runCatching {
+        if (readOnly) return@runCatching
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
         val body = c.doFinal(JSONArray(items).toString().toByteArray())
-        file.writeText(Base64.encodeToString(c.iv + body, Base64.NO_WRAP))
+        // Escritura segura: a un archivo temporal y luego se cambia de nombre (si la app se cierra a medias,
+        // queda el anterior). La versión anterior se guarda como respaldo.
+        val tmp = File(file.parentFile, "contrasenas.tmp")
+        tmp.writeText(Base64.encodeToString(c.iv + body, Base64.NO_WRAP))
+        if (file.exists()) file.copyTo(backup, overwrite = true)
+        if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
+    }
+
+    /** Lista para la pantalla de contraseñas: sitio, usuario y contraseña. */
+    @Synchronized
+    fun all(): List<Triple<String, String, String>> =
+        items.map { Triple(host(it.optString("origin")), it.optString("username"), it.optString("password")) }.sortedBy { it.first }
+
+    @Synchronized
+    fun remove(site: String, user: String) {
+        val gone = items.filter { host(it.optString("origin")) == site && it.optString("username") == user }
+        items.removeAll(gone)
+        prefs.edit().putStringSet("borrar", pendingDeletes + gone.map { it.optString("guid") }.filter { it.startsWith("{") }).apply()
+        save()
     }
 
     private fun host(origin: String) = origin.substringAfter("://").substringBefore('/').substringBefore(':').removePrefix("www.")

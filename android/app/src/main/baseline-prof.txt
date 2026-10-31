@@ -1,0 +1,5 @@
+# Perfil de arranque de Fyx: Android compila por adelantado (AOT) el código de la app al instalarla,
+# así abre más rápido y las animaciones no tropiezan las primeras veces. Las librerías (Compose,
+# GeckoView…) traen sus propios perfiles; aquí va todo el código propio de Fyx.
+HSPLapp/kaze/browser/**->**(**)**
+Lapp/kaze/browser/**;

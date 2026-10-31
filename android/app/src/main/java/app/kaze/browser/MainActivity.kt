@@ -626,6 +626,17 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Primera descarga en Android 13+: pedir permiso de notificaciones para ver el progreso (una sola vez).
+        LaunchedEffect(app.downloads.items.size) {
+            if (app.downloads.items.isEmpty() || android.os.Build.VERSION.SDK_INT < 33) return@LaunchedEffect
+            val prefs = getSharedPreferences("permisos", MODE_PRIVATE)
+            if (prefs.getBoolean("notif", false) ||
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) return@LaunchedEffect
+            prefs.edit().putBoolean("notif", true).apply()
+            permissionLauncher.launch(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS))
+        }
+
         // Sincronización con el escritorio (si hay sesión): trae lo nuevo poco después de abrir, sin frenar el arranque.
         LaunchedEffect(Unit) {
             if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect

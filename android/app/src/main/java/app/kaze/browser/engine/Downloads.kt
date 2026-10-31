@@ -98,7 +98,7 @@ class Downloads(private val context: Context, private val ui: BrowserUi) {
     fun write(input: InputStream, name: String, mime: String?, total: Long = -1) {
         val type = mime ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
         val item = DownloadItem(System.nanoTime(), name, type, total, System.currentTimeMillis())
-        main.post { items.add(0, item) }
+        main.post { items.add(0, item); DownloadService.start(context) }
         try {
             writeTo(input, name, type, item)
             main.post { item.state = DownloadItem.State.DONE; persist() }

@@ -311,9 +311,8 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                 Choice("Protección contra rastreo", TrackingLevel.entries, s.tracking, { it.label }) { s.tracking = it; needsRestart = true }
                 Choice("DNS seguro", DnsMode.entries, s.dns, { it.label }) { s.dns = it; needsRestart = true }
                 Toggle("JavaScript", s.javascript) { s.javascript = it; needsRestart = true }
-                IosRow("Instalar bloqueador de anuncios (uBlock Origin)", titleColor = k.accent) {
-                    app.installAddon("https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi", "uBlock Origin")
-                }
+                var adblock by remember { mutableStateOf(s.adblock) }
+                Toggle("Bloquear anuncios (uBlock Origin)", adblock) { adblock = it; app.setAdblock(it) }
                 IosRow("Borrar caché", titleColor = k.accent) {
                     app.runtime.storageController.clearData(StorageController.ClearFlags.ALL_CACHES)
                     app.favicons.clear()

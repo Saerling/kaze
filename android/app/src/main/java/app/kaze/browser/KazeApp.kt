@@ -100,6 +100,10 @@ class Kaze private constructor(context: Context) {
 
     private fun installExtension(pool: SessionPool) {
         pool.installAddon = { installAddon(it) }
+        // Bloqueador de anuncios integrado: si está activado y uBlock Origin no está, se instala solo (una vez por arranque).
+        if (settings.adblock) runtime.webExtensionController.list().accept({ list ->
+            if (list?.none { it.id == UBLOCK_ID } == true) installAddon(UBLOCK_URL, "el bloqueador de anuncios")
+        }, { })
         runtime.webExtensionController
             .ensureBuiltIn("resource://android/assets/extensions/kaze/", "interno@kaze.app")
             .accept({ ext -> pool.extension = ext }, { e -> android.util.Log.w("Fyx", "Extensión interna", e) })
@@ -125,7 +129,20 @@ class Kaze private constructor(context: Context) {
         }
     }
 
+    /** Activa o quita el bloqueador de anuncios (uBlock Origin). */
+    fun setAdblock(on: Boolean) {
+        settings.adblock = on
+        runtime.webExtensionController.list().accept({ list ->
+            val ext = list?.firstOrNull { it.id == UBLOCK_ID }
+            if (on && ext == null) installAddon(UBLOCK_URL, "el bloqueador de anuncios")
+            if (!on && ext != null) runtime.webExtensionController.uninstall(ext).accept({ ui.show("Bloqueador de anuncios quitado") }, { })
+        }, { })
+    }
+
     companion object {
+        const val UBLOCK_ID = "uBlock0@raymondhill.net"
+        const val UBLOCK_URL = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
+
         @Volatile
         private var instance: Kaze? = null
 

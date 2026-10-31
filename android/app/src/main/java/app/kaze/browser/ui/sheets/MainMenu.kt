@@ -140,7 +140,11 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
                 if (store.profileSpaces.size > 1 && !tab.isPrivate) {
                     IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove, onClick = go(a.onMove))
                 }
-                IosRow("Guardar como PDF", Icons.Outlined.Download, enabled = web, divider = false, onClick = go(a.onSavePdf))
+                IosRow("Guardar como PDF", Icons.Outlined.Download, enabled = web, onClick = go(a.onSavePdf))
+                val context = androidx.compose.ui.platform.LocalContext.current
+                IosRow("Añadir a la pantalla de inicio", Icons.Outlined.Home, enabled = web, divider = false) {
+                    addToHomeScreen(context, tab, app.favicons); onDismiss()
+                }
             }
             Spacer(Modifier.height(14.dp))
             IosGroup {
@@ -230,4 +234,39 @@ fun RecentlyClosedSheet(onDismiss: () -> Unit, onOpen: (String) -> Unit) {
         }
         Spacer(Modifier.height(24.dp))
     }
+}
+
+
+/**
+ * Añadir a la pantalla de inicio (como instalar una app web): acceso directo con el ícono del sitio
+ * que abre la página en Fyx. El ícono se prepara en segundo plano.
+ */
+fun addToHomeScreen(context: android.content.Context, tab: Tab, favicons: app.kaze.browser.data.Favicons) {
+    val main = android.os.Handler(android.os.Looper.getMainLooper())
+    Thread {
+        val fav = Urls.host(tab.url)?.let { h -> runCatching { favicons.load(h) }.getOrNull() }
+        // Ícono adaptable: fondo blanco y el ícono del sitio en el centro (zona segura de 72/108).
+        val size = 216
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(bmp).apply {
+            drawColor(android.graphics.Color.WHITE)
+            if (fav != null) {
+                val s = 88; val o = (size - s) / 2
+                drawBitmap(fav, null, android.graphics.Rect(o, o, o + s, o + s), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+            } else {
+                val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF555555.toInt(); textSize = 90f; textAlign = android.graphics.Paint.Align.CENTER }
+                drawText(Urls.displayHost(tab.url).take(1).uppercase(), size / 2f, size / 2f + 32f, p)
+            }
+        }
+        val info = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, "web-" + tab.url.hashCode())
+            .setShortLabel(tab.displayTitle.ifBlank { Urls.displayHost(tab.url) }.take(24))
+            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithAdaptiveBitmap(bmp))
+            .setIntent(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(tab.url)).setClass(context, app.kaze.browser.MainActivity::class.java))
+            .build()
+        main.post {
+            if (!androidx.core.content.pm.ShortcutManagerCompat.requestPinShortcut(context, info, null)) {
+                android.widget.Toast.makeText(context, "Tu pantalla de inicio no permite añadir accesos directos", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }.start()
 }

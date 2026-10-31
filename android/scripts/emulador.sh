@@ -12,6 +12,10 @@ sleep 12; adb exec-out screencap -p > $OUT/1-inicio.png
 adb shell am start -W -a android.intent.action.VIEW -d "https://es.wikipedia.org/wiki/Aurora_polar" $PKG
 sleep 15; adb exec-out screencap -p > $OUT/2-pagina.png
 adb shell input swipe 540 1500 540 600 300; sleep 2; adb exec-out screencap -p > $OUT/3-desplazado.png
+# Pestaña personalizada (como la abre Gmail o WhatsApp)
+adb shell am start -W -a android.intent.action.VIEW -d "https://example.com" --es android.support.customtabs.extra.SESSION x $PKG
+sleep 10; adb exec-out screencap -p > $OUT/5-pestana-personalizada.png
+adb shell input keyevent KEYCODE_BACK; sleep 2
 adb shell monkey -p $PKG --throttle 250 --pct-syskeys 0 --pct-appswitch 0 -s 42 400 > $OUT/monkey.txt 2>&1 || true
 sleep 3; adb exec-out screencap -p > $OUT/4-tras-monkey.png
 adb logcat -d > $OUT/logcat.txt

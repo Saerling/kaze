@@ -140,11 +140,11 @@ class MainActivity : ComponentActivity() {
     /** Atajos de teclado (los pone la interfaz, que tiene acceso a pestañas y barra). */
     private var keyHandler: ((android.view.KeyEvent) -> Boolean)? = null
 
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (event.action == android.view.KeyEvent.ACTION_DOWN && (event.isCtrlPressed || event.isAltPressed || event.keyCode == android.view.KeyEvent.KEYCODE_F5) &&
             keyHandler?.invoke(event) == true
         ) return true
-        return super.dispatchKeyEvent(event)
+        return super.onKeyDown(keyCode, event)
     }
 
     private var pendingFile: Pair<PromptDelegate.FilePrompt, PendingPrompt>? = null

@@ -4,6 +4,12 @@
 
 package app.kaze.browser.ui.screens
 
+import app.kaze.browser.ui.components.FaviconTile
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.widthIn
 import app.kaze.browser.ui.theme.flowBackground
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,78 +87,120 @@ fun StartPage(
             strength = if (private) 0.9f else 0.5f,
         )
         Column(
-            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
-                .padding(top = 24.dp, bottom = 140.dp),
+            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(top = 28.dp, bottom = 140.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (private) {
-                Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().card(RoundedCornerShape(16.dp)).padding(20.dp)) {
-                    Text("Navegación privada", style = KazeType.title2, color = k.ink)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Fyx no guardará las páginas que visites, tu historial de búsqueda ni la información de autorrelleno. " +
-                            "Las pestañas privadas desaparecen al cerrarlas.",
-                        style = KazeType.subhead, color = k.ink55,
-                    )
+            // Contenido centrado y con ancho máximo: en tableta no se estira de borde a borde.
+            Column(Modifier.widthIn(max = 760.dp).fillMaxWidth()) {
+                // Saludo y fecha: la página se siente viva y da contexto sin estorbar.
+                val now = remember { java.util.Calendar.getInstance() }
+                val h = now.get(java.util.Calendar.HOUR_OF_DAY)
+                Text(
+                    if (private) "Navegación privada" else if (h < 12) "Buenos días" else if (h < 19) "Buenas tardes" else "Buenas noches",
+                    style = KazeType.largeTitle, color = k.ink, modifier = Modifier.padding(horizontal = 20.dp),
+                )
+                Text(
+                    java.text.SimpleDateFormat("EEEE d 'de' MMMM", java.util.Locale("es")).format(now.time).replaceFirstChar { it.uppercase() },
+                    style = KazeType.subhead, color = k.ink55, modifier = Modifier.padding(start = 20.dp, top = 2.dp, bottom = 8.dp),
+                )
+                if (private) {
+                    Panel {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Badge(Icons.Outlined.Shield, Color(0xFF8E8CF0))
+                            Spacer(Modifier.width(14.dp))
+                            Text(
+                                "Fyx no guarda las páginas que visites, tus búsquedas ni lo que escribas en formularios. Las pestañas privadas desaparecen al cerrarlas.",
+                                style = KazeType.subhead, color = k.ink70,
+                            )
+                        }
+                    }
                 }
-            }
 
-            if (favorites.isNotEmpty() && app.settings.startFavorites) {
-                Section("Favoritos")
-                TileGrid(favorites.map { (it.pinnedUrl ?: it.url) to it.displayTitle }) { i, long ->
-                    if (long) onFavoriteMenu(favorites[i]) else onOpenFavorite(favorites[i])
+                if (favorites.isNotEmpty() && app.settings.startFavorites) {
+                    Section("Favoritos")
+                    Panel(pad = 8.dp) {
+                        TileGrid(favorites.map { (it.pinnedUrl ?: it.url) to it.displayTitle }) { i, long ->
+                            if (long) onFavoriteMenu(favorites[i]) else onOpenFavorite(favorites[i])
+                        }
+                    }
                 }
-            }
 
-            if (frequent.isNotEmpty() && app.settings.startFrequent) {
-                Section("Visitados con frecuencia")
-                TileGrid(frequent.map { it.url to it.title.ifBlank { Urls.displayHost(it.url) } }) { i, long ->
-                    if (!long) onOpenUrl(frequent[i].url)
-                }
-            }
-
-            if (!private && app.settings.startPrivacy) {
-                Section("Reporte de privacidad")
-                Row(
-                    Modifier.padding(horizontal = 20.dp).fillMaxWidth().card(RoundedCornerShape(16.dp))
-                        .tap(onPrivacyReport).padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.Shield, null, tint = k.ink, modifier = Modifier.size(30.dp))
-                    Spacer(Modifier.width(14.dp))
-                    val n = app.settings.trackersTotal
-                    Text(
-                        if (n == 0) "Fyx bloquea los rastreadores y te muestra cuántos detuvo." else
-                            "Fyx evitó que $n rastreadores te siguieran.",
-                        style = KazeType.subhead, color = k.ink, modifier = Modifier.weight(1f),
-                    )
-                    Text(n.toString(), style = KazeType.title2, color = k.ink)
-                }
-            }
-
-            if (reading.isNotEmpty() && app.settings.startReading) {
-                Section("Lista de lectura")
-                Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().card(RoundedCornerShape(16.dp))) {
-                    reading.forEach { r ->
-                        Row(
-                            Modifier.fillMaxWidth().tap { onOpenUrl(r.url) }.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Favicon(r.url, 30.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(r.title.ifBlank { Urls.displayHost(r.url) }, style = KazeType.subhead, color = k.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(Urls.displayHost(r.url), style = KazeType.footnote, color = k.ink55, maxLines = 1)
+                if (frequent.isNotEmpty() && app.settings.startFrequent) {
+                    Section("Visitados con frecuencia")
+                    // Filas con ícono, título y sitio en dos columnas: se distinguen de los Favoritos de un vistazo.
+                    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(horizontal = 16.dp)) {
+                        val cols = if (maxWidth > 560.dp) 2 else 1
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            frequent.take(if (cols == 2) 8 else 6).chunked(cols).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { e ->
+                                        Row(
+                                            Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(k.card.copy(alpha = 0.85f))
+                                                .tap { onOpenUrl(e.url) }.padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            FaviconTile(e.url, 36.dp, 20.dp)
+                                            Spacer(Modifier.width(12.dp))
+                                            Column(Modifier.weight(1f)) {
+                                                Text(e.title.ifBlank { Urls.displayHost(e.url) }, style = KazeType.subhead.copy(fontWeight = FontWeight.Medium), color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(Urls.displayHost(e.url), style = KazeType.footnote, color = k.ink55, maxLines = 1)
+                                            }
+                                        }
+                                    }
+                                    if (row.size < cols) Spacer(Modifier.weight(1f))
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            if (favorites.isEmpty() && frequent.isEmpty() && !private) {
-                Text(
-                    "Toca la barra de abajo para buscar. Para añadir sitios a Favoritos, usa el botón Compartir de una página.",
-                    style = KazeType.subhead, color = k.ink55, modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
-                )
+                if (!private && app.settings.startPrivacy) {
+                    Section("Privacidad")
+                    val n = app.settings.trackersTotal
+                    // Tarjeta destacada: el número grande es lo que importa; el resto lo explica.
+                    Row(
+                        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(k.accent.copy(alpha = 0.22f), k.accent.copy(alpha = 0.08f))))
+                            .tap(onPrivacyReport).padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Badge(Icons.Outlined.Shield, k.accent)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(if (n == 0) "Protección activa" else "%,d".format(n).replace(',', '.'), style = (if (n == 0) KazeType.headline else KazeType.largeTitle), color = k.ink)
+                            Text(if (n == 0) "Fyx bloqueará los rastreadores que encuentre." else "rastreadores bloqueados", style = KazeType.subhead, color = k.ink70)
+                        }
+                        Text("Ver informe", style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.accent)
+                    }
+                }
+
+                if (reading.isNotEmpty() && app.settings.startReading) {
+                    Section("Lista de lectura")
+                    Panel(pad = 0.dp) {
+                        reading.forEachIndexed { i, r ->
+                            Row(
+                                Modifier.fillMaxWidth().tap { onOpenUrl(r.url) }.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                FaviconTile(r.url, 36.dp, 20.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(r.title.ifBlank { Urls.displayHost(r.url) }, style = KazeType.subhead.copy(fontWeight = FontWeight.Medium), color = k.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Text(Urls.displayHost(r.url), style = KazeType.footnote, color = k.ink55, maxLines = 1)
+                                }
+                            }
+                            if (i < reading.lastIndex) Box(Modifier.padding(start = 62.dp).fillMaxWidth().height(0.5.dp).background(k.separator))
+                        }
+                    }
+                }
+
+                if (favorites.isEmpty() && frequent.isEmpty() && !private) {
+                    Panel {
+                        Text("Empieza a navegar", style = KazeType.headline, color = k.ink)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Toca la barra para buscar. Para tener un sitio aquí, añádelo a Favoritos desde el menú ⋯.", style = KazeType.subhead, color = k.ink55)
+                    }
+                }
             }
         }
     }
@@ -161,25 +209,42 @@ fun StartPage(
 @Composable
 private fun Section(title: String) {
     val k = LocalKaze.current
-    Text(title, style = KazeType.sectionHeader, color = k.ink, modifier = Modifier.padding(start = 20.dp, top = 26.dp, bottom = 12.dp))
+    Text(title, style = KazeType.title2.copy(fontWeight = FontWeight.Bold), color = k.ink, modifier = Modifier.padding(start = 20.dp, top = 24.dp, bottom = 10.dp))
+}
+
+/** Panel suave (tarjeta translúcida) que agrupa una sección. */
+@Composable
+private fun Panel(pad: androidx.compose.ui.unit.Dp = 16.dp, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    val k = LocalKaze.current
+    Column(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(k.card.copy(alpha = 0.85f)).padding(pad),
+        content = content,
+    )
+}
+
+@Composable
+private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+    Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(color), contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(26.dp))
+    }
 }
 
 @Composable
 private fun TileGrid(items: List<Pair<String, String>>, onClick: (Int, Boolean) -> Unit) {
-    // Columnas según el ancho: 4 en teléfono, más en tableta (los mosaicos no quedan perdidos).
+    // Columnas según el ancho: 4 en teléfono, más en tableta.
     androidx.compose.foundation.layout.BoxWithConstraints {
-    val cols = maxOf(4, (maxWidth / 110.dp).toInt())
-    Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        items.withIndex().chunked(cols).forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                row.forEach { (i, item) ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                        SiteTile(item.first, item.second, onClick = { onClick(i, false) }, onLongClick = { onClick(i, true) })
+        val cols = maxOf(4, (maxWidth / 96.dp).toInt())
+        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items.withIndex().chunked(cols).forEach { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEach { (i, item) ->
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                            SiteTile(item.first, item.second, onClick = { onClick(i, false) }, onLongClick = { onClick(i, true) })
+                        }
                     }
+                    repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                 }
-                repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
-    }
     }
 }

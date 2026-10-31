@@ -174,6 +174,14 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage("../../docs/capturas/android-navegador.png")
     }
 
+    @Test fun fijadas_grupo() {
+        val pinned = app.store.pinned(app.store.currentSpaceId)
+        app.store.setFolder(pinned.take(2), "Trabajo")
+        compose.setContent { Themed(true) { CompositionLocalProvider(LocalApp provides app) { Box(Modifier.fillMaxSize()) { Tabs() } } } }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-fijadas-grupo.png")
+    }
+
     @Test fun material_you() {
         val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
         compose.setContent {

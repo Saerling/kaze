@@ -84,6 +84,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
@@ -426,11 +427,16 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
     )
     if (!essential) {
-        // Fijadas: píldoras con ícono y nombre (como la lista de Zen), distintas de los Essentials y de las carpetas.
+        // Fijadas: píldoras con ícono y nombre (como la lista de Zen). Las que están en un grupo van bajo su
+        // etiqueta de color, que se pliega o despliega al tocarla (grupos de fijadas, como las carpetas de Zen).
+        val loose = tabs.filter { it.folder.isEmpty() }
+        val groups = tabs.filter { it.folder.isNotEmpty() }.groupBy { it.folder }
+        val open = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
         androidx.compose.foundation.layout.BoxWithConstraints {
             val cols = maxOf(2, ((maxWidth + 8.dp) / 220.dp).toInt())
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                tabs.chunked(cols).forEach { row ->
+            @Composable
+            fun Chips(list: List<Tab>) = Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                list.chunked(cols).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         row.forEach { t ->
                             Row(
@@ -443,10 +449,41 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
                                 Favicon(t.pinnedUrl ?: t.url, 18.dp)
                                 Spacer(Modifier.width(8.dp))
                                 Text(t.displayTitle, style = KazeType.subhead, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                Icon(Icons.Outlined.PushPin, null, tint = k.ink35, modifier = Modifier.size(12.dp))
                             }
                         }
                         repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (loose.isNotEmpty()) Chips(loose)
+                groups.forEach { (name, list) ->
+                    val c = folderColor(name)
+                    val expanded = open[name] ?: (list.any { it.id == selectedId })
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(c.copy(alpha = if (k.isDark) 0.14f else 0.10f))
+                            .animateContentSize(spring(0.9f, 500f)).padding(6.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).tap({ open[name] = !expanded }, { open[name] = !expanded })
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .semantics { contentDescription = "Grupo $name, ${list.size} pestañas" },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(c), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Outlined.Folder, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(name, style = KazeType.body.copy(fontWeight = FontWeight.SemiBold), color = k.ink, maxLines = 1, modifier = Modifier.weight(1f))
+                            // Vista previa: los íconos del grupo cuando está plegado.
+                            if (!expanded) list.take(4).forEach { Favicon(it.pinnedUrl ?: it.url, 16.dp, Modifier.padding(start = 4.dp)) }
+                            Text("  ${list.size}", style = KazeType.footnote, color = k.ink55)
+                            Icon(
+                                Icons.Outlined.KeyboardArrowDown, null, tint = k.ink55,
+                                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (expanded) 180f else 0f },
+                            )
+                        }
+                        if (expanded) { Spacer(Modifier.height(4.dp)); Chips(list) }
                     }
                 }
             }

@@ -51,7 +51,7 @@ object ZenSync {
                 fun items(list: List<ZenSpaces.ZenItem>, kind: TabKind) = list.forEach { item ->
                     when (item) {
                         is ZenSpaces.ZenItem.Tab -> add(item.tab.url, kind)
-                        is ZenSpaces.ZenItem.Folder -> item.folder.tabs.forEach { add(it.url, TabKind.NORMAL, item.folder.name.ifBlank { "Carpeta" }) }
+                        is ZenSpaces.ZenItem.Folder -> item.folder.tabs.forEach { add(it.url, kind, item.folder.name.ifBlank { "Carpeta" }) }
                         is ZenSpaces.ZenItem.Split -> item.split.tabs.forEach { add(it.url, kind) }
                     }
                 }
@@ -96,7 +96,6 @@ object ZenSync {
 
     /** Arregla lo importado antes: fijadas que eran de una carpeta → a la carpeta; Essentials repetidos → uno solo. */
     private fun tidy(store: Store) {
-        store.tabs.filter { it.kind == TabKind.PINNED && it.folder.isNotEmpty() }.forEach { store.setKind(it, TabKind.NORMAL) }
         val seen = HashSet<String>()
         store.tabs.filter { it.kind == TabKind.ESSENTIAL }.toList().forEach { if (!seen.add(norm(it.url))) store.close(it) }
         store.spaces.forEach { sp ->

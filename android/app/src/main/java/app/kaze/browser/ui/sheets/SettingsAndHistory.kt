@@ -434,6 +434,8 @@ private fun ZenSyncSection() {
     var signIn by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var last by remember { mutableStateOf(ZenSync.lastSync(context)) }
+    /** Confirmación pendiente de un cambio frenado: ("close" | "delete") y cuántas pestañas. */
+    var confirm by remember { mutableStateOf<Pair<String, Int>?>(null) }
     fun pull() {
         busy = true
         scope.launch {
@@ -498,21 +500,22 @@ private fun ZenSyncSection() {
                         .onSuccess { app.ui.show("Enviada al computador") }.onFailure { app.ui.show("No se pudo enviar: ${it.message}") }
                 }
             }
-            // Si la sincronización se frenó porque faltan muchas fijadas (en Zen o aquí), esto la aplica una vez.
-            IosRow("Aplicar cambios del escritorio", subtitle = "Sin el freno que evita cerrar o borrar muchas fijadas de golpe", enabled = !busy) {
-                busy = true
-                scope.launch {
-                    runCatching { app.tabSync.syncForced() }
-                        .onSuccess { app.ui.show("Cambios del escritorio aplicados") }
-                        .onFailure { app.ui.show("No se pudo sincronizar: ${it.message ?: it.javaClass.simpleName}") }
-                    busy = false
-                    last = ZenSync.lastSync(context)
-                }
-            }
-            var discarded by remember { mutableStateOf(ZenSync.discardedCount(context)) }
-            if (discarded > 0) IosRow("Volver a traer espacios descartados", subtitle = "Los espacios de Zen que borraste aquí vuelven en la próxima sincronización") {
+            // El freno de seguridad retuvo cambios: se confirman por separado, con un diálogo que dice cuántas.
+            val (pausedCloses, pausedDeletes) = remember(busy, last) { ZenSync.paused(context) }
+            if (pausedCloses > 0) IosRow(
+                "Cerrar aquí las $pausedCloses que faltan en el escritorio", titleColor = SystemRed, enabled = !busy,
+                subtitle = "En pausa por seguridad: faltan en Zen",
+            ) { confirm = "close" to pausedCloses }
+            if (pausedDeletes > 0) IosRow(
+                "Borrar en el escritorio las $pausedDeletes que quitaste aquí", titleColor = SystemRed, enabled = !busy,
+                subtitle = "En pausa por seguridad: faltan en este teléfono",
+            ) { confirm = "delete" to pausedDeletes }
+            val discarded = remember(busy, last) { ZenSync.discardedCount(context) }
+            if (discarded > 0) IosRow(
+                "Volver a traer espacios descartados", enabled = !busy,
+                subtitle = "Los espacios de Zen que borraste aquí vuelven en la próxima sincronización",
+            ) {
                 ZenSync.restoreDiscarded(context)
-                discarded = 0
                 pull()
             }
             IosRow("Cerrar sesión", titleColor = SystemRed, divider = false) { ZenSync.signOut(context, app.store); email = null }
@@ -523,6 +526,34 @@ private fun ZenSyncSection() {
         IosRow("Contraseñas guardadas", trailing = { Text("${app.logins.count}", style = KazeType.body, color = k.ink55) }, chevron = true, divider = false) { passwords = true }
     }
     if (passwords) PasswordsSheet { passwords = false }
+    confirm?.let { (what, n) ->
+        val close = what == "close"
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = null }, containerColor = k.paper,
+            title = { Text(if (close) "¿Cerrar $n fijadas en este teléfono?" else "¿Borrar $n fijadas en el escritorio?", style = KazeType.headline, color = k.ink) },
+            text = {
+                Text(
+                    if (close) "Faltan en Zen $n de tus fijadas sincronizadas. Si las quitaste en el escritorio, se cerrarán también aquí. No se borra nada en Zen."
+                    else "Faltan en este teléfono $n de tus fijadas sincronizadas. Si las quitaste aquí a propósito, se borrarán también en Zen de escritorio. Esto no se puede deshacer desde el teléfono.",
+                    style = KazeType.body, color = k.ink70,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirm = null
+                    busy = true
+                    scope.launch {
+                        runCatching { if (close) app.tabSync.confirmCloses() else app.tabSync.confirmDeletes() }
+                            .onSuccess { app.ui.show(if (close) "Cerradas aquí" else "Borradas en el escritorio") }
+                            .onFailure { app.ui.show("No se pudo sincronizar: ${it.message ?: it.javaClass.simpleName}") }
+                        busy = false
+                        last = ZenSync.lastSync(context)
+                    }
+                }) { Text(if (close) "Cerrar $n" else "Borrar $n", color = SystemRed) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null }) { Text("Cancelar", color = k.accent) } },
+        )
+    }
     if (signIn) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { signIn = false },

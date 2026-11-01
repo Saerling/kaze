@@ -4,7 +4,6 @@
 
 package app.kaze.browser
 
-import app.kaze.browser.zsync.ZenTabSync
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.SideEffect
 import app.kaze.browser.ui.screens.HistoryPopup
@@ -427,18 +426,19 @@ class MainActivity : ComponentActivity() {
             val zenId = t.zenId
             val home = t.pinnedUrl
             // Si está sincronizada con Zen, el cierre no se sube mientras se puede deshacer.
-            if (zenId != null) app.tabSync.hold(zenId, ZenTabSync.UNDO_HOLD_MS)
+            // Si está en Zen, el cierre no se sube mientras se vea el aviso de "Deshacer" (y al menos 5 s).
+            val release = zenId?.let { app.tabSync.hold(it) }
             val next = if (wasSelected) store.nextAfterClose(t) else null
             app.pool.close(t)
             app.thumbnails.delete(t.id)
             store.close(t)
             if (next != null) open(next) else if (store.selectedTab == null) showTabs = true
             // Píldora para deshacer el cierre.
-            ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer") {
+            ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer", onAction = {
                 store.recentlyClosed.removeAll { it.first == url }
                 val back = store.reopen(url, sid, kind, folder, zenId, home, priv, select = wasSelected)
                 if (wasSelected) open(back)
-            }
+            }, onDismiss = release)
         }
 
         fun showTabsGrid() = snapshot { showTabs = true }
@@ -978,7 +978,7 @@ class MainActivity : ComponentActivity() {
             ui.prompt?.let { p -> PromptHost(p, onDone = { ui.prompt = null }, onFile = ::openFilePicker) }
             ui.permission?.let { p -> PermissionHost(p) { ui.permission = null } }
 
-            Toast(ui.toast, ui.toastAction) { ui.toast = null; ui.toastAction = null }
+            Toast(ui.toast, ui.toastAction) { ui.dismissToast() }
         }
 
         // Ajustes se abre desde la Biblioteca y desde la vista de pestañas.

@@ -103,7 +103,8 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
      * Una sola vez, al pasar de v3 (la publicada) o anterior a v4, antes de que exista ninguna pestaña
      * nueva: las versiones anteriores podían traer de Zen la misma fijada o Essential repetida. Se deja una
      * por dirección **completa** (con su consulta: dos vídeos distintos no son la misma página) y por grupo
-     * (la misma página en dos grupos son dos fijadas), por espacio en las fijadas y por perfil en las
+     * (la misma página en dos grupos son dos fijadas), con el mismo título y la misma página de casa (si
+     * difieren, se crearon a propósito), por espacio en las fijadas y por perfil en las
      * Essentials. Se conserva la enlazada con Zen si la hay; si no, la más antigua.
      */
     internal fun dedupeImported(db: SQLiteDatabase) {
@@ -111,7 +112,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
             """DELETE FROM tabs WHERE kind = 0 AND rowid != (
                 SELECT t2.rowid FROM tabs t2
                 WHERE t2.kind = 0 AND t2.folder = tabs.folder
-                  AND COALESCE(t2.pinned_url, t2.url) = COALESCE(tabs.pinned_url, tabs.url)
+                  AND t2.url = tabs.url AND t2.pinned_url IS tabs.pinned_url AND t2.title = tabs.title
                   AND COALESCE((SELECT profile_id FROM spaces WHERE id = t2.space_id), '') =
                       COALESCE((SELECT profile_id FROM spaces WHERE id = tabs.space_id), '')
                 ORDER BY t2.zen_id IS NULL, t2.rowid LIMIT 1)""",
@@ -120,7 +121,7 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
             """DELETE FROM tabs WHERE kind = 1 AND rowid != (
                 SELECT t2.rowid FROM tabs t2
                 WHERE t2.kind = 1 AND t2.space_id = tabs.space_id AND t2.folder = tabs.folder
-                  AND COALESCE(t2.pinned_url, t2.url) = COALESCE(tabs.pinned_url, tabs.url)
+                  AND t2.url = tabs.url AND t2.pinned_url IS tabs.pinned_url AND t2.title = tabs.title
                 ORDER BY t2.zen_id IS NULL, t2.rowid LIMIT 1)""",
         )
     }

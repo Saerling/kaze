@@ -4,7 +4,6 @@
 
 package app.kaze.browser.ui.sheets
 
-import app.kaze.browser.zsync.ZenTabSync
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.outlined.Folder
@@ -505,7 +504,8 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
 internal fun closeWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
     val store = app.store
     val zenId = tab.zenId
-    if (zenId != null) app.tabSync.hold(zenId, ZenTabSync.UNDO_HOLD_MS)
+    // Si está en Zen, el cierre no se sube mientras se vea el aviso de "Deshacer" (y al menos 5 s).
+    val release = zenId?.let { app.tabSync.hold(it) }
     val url = tab.url
     val sid = tab.spaceId
     val kind = tab.kind
@@ -514,10 +514,10 @@ internal fun closeWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
     val priv = tab.isPrivate
     app.pool.close(tab); store.close(tab); app.thumbnails.delete(tab.id)
     if (zenId != null || kind != TabKind.NORMAL) {
-        app.ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer") {
+        app.ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer", onAction = {
             store.recentlyClosed.removeAll { it.first == url }
             store.reopen(url, sid, kind, folder, zenId, home, priv)
-        }
+        }, onDismiss = release)
     }
 }
 
@@ -528,14 +528,13 @@ internal fun unpinWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
     val folder = tab.folder
     val home = tab.pinnedUrl
     val position = tab.position
-    if (zenId != null) app.tabSync.hold(zenId, ZenTabSync.UNDO_HOLD_MS)
+    val release = zenId?.let { app.tabSync.hold(it) }
     store.setKind(tab, TabKind.NORMAL)
     if (zenId != null) {
-        app.ui.show("Desfijada (también se quitará de Zen)", "Deshacer") {
+        app.ui.show("Desfijada (también se quitará de Zen)", "Deshacer", onAction = {
             // Si mientras tanto se cerró, no hay nada que deshacer.
-            val t = store.tabById(tab.id) ?: return@show
-            store.repin(t, folder, home, position)
-        }
+            store.tabById(tab.id)?.let { t -> store.repin(t, folder, home, position) }
+        }, onDismiss = release)
     }
 }
 

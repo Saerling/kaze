@@ -58,53 +58,80 @@ object TabSyncPlanner {
     /** Solo se sincronizan páginas web: about:, file:, content:… se quedan en el teléfono. */
     fun syncable(url: String): Boolean = url.startsWith("https://", true) || url.startsWith("http://", true)
 
-    /** La sincronización se detuvo para no cerrar ni borrar pestañas por un fallo de lectura. */
-    class Unsafe(message: String) : Exception(message)
+    /**
+     * Resultado del freno: las operaciones que sí se hacen y las que quedaron frenadas esperando a que el
+     * usuario las confirme. Lo demás (traer lo nuevo, subir lo no frenado) sigue funcionando.
+     */
+    data class Guarded(
+        val ops: List<Op>,
+        /** Cierres en el teléfono frenados (faltan en Zen). */
+        val heldCloses: Int = 0,
+        /** Borrados en Zen frenados (faltan en el teléfono). */
+        val heldDeletes: Int = 0,
+        /** Los cierres frenados son solo "muchos de golpe" (la cuenta no llegó vacía): los puede levantar [Stability]. */
+        val closesAutoAcceptable: Boolean = false,
+    ) {
+        val blocked: Boolean get() = heldCloses > 0 || heldDeletes > 0
+    }
 
     /**
-     * Freno de seguridad sobre el plan, antes de tocar nada (vale para los dos sentidos):
+     * Freno de seguridad sobre el plan, antes de tocar nada:
      *  - si hubo registros que no se pudieron descifrar, no se cierra ni se borra nada (lo que "falta"
-     *    puede estar en ellos), ni se vuelven a subir las que parecen haber desaparecido. Esto no se
-     *    salta nunca, ni con [force];
-     *  - si la cuenta llega vacía, o el teléfono se quedó sin ninguna, habiendo pestañas sincronizadas;
-     *  - si se cerrarían aquí, o se borrarían en Zen, más del 30 % de las sincronizadas (y más de 3).
-     * En los dos últimos casos se lanza [Unsafe] con la explicación, salvo con [force] (el usuario lo
-     * confirmó, o la misma lectura se repitió estable: ver [Stability]).
+     *    puede estar en ellos), ni se vuelven a subir las que parecen haber desaparecido. Nunca se salta;
+     *  - cierres aquí: si la cuenta llega vacía, o se cerrarían más del 30 % (y más de 3), se frenan.
+     *    Los "muchos de golpe" (no la cuenta vacía) se pueden aceptar solos con [Stability] ([autoClose]);
+     *    la cuenta vacía solo con confirmación del usuario ([confirmClose]);
+     *  - borrados en Zen: si se borrarían más del 30 % (y más de 3), o el teléfono se quedó sin ninguna
+     *    teniendo más de ese límite, se frenan y solo los confirma el usuario ([confirmDelete]).
+     * Las retenidas ([held]: avisos de "Deshacer" a la vista) no cuentan.
      */
     fun guard(
         ops: List<Op>,
         base: Map<String, State>,
         remote: Map<String, Remote>,
         decryptFailures: Int,
-        force: Boolean = false,
         localLinked: Int = -1,
-    ): List<Op> {
-        var out = ops
+        held: Set<String> = emptySet(),
+        autoClose: Boolean = false,
+        confirmClose: Boolean = false,
+        confirmDelete: Boolean = false,
+    ): Guarded {
+        var out = withoutHeld(ops, held)
         if (decryptFailures > 0) {
-            val unlinked = ops.filterIsInstance<Op.Unlink>().map { it.tabId }.toSet()
-            out = ops.filterNot {
+            val unlinked = out.filterIsInstance<Op.Unlink>().map { it.tabId }.toSet()
+            out = out.filterNot {
                 it is Op.CloseLocal || it is Op.DeleteRemote || it is Op.Unlink || (it is Op.CreateRemote && it.tabId in unlinked)
             }
         }
-        if (force || base.isEmpty()) return out
-        val hint = " Si fue a propósito, se aplicará sola en la próxima sincronización (pasado un minuto) " +
-            "o ya mismo con «Aplicar cambios del escritorio» en Ajustes."
-        if (remote.isEmpty()) {
-            throw Unsafe("En Zen ya no hay ninguna de tus ${base.size} pestañas fijadas sincronizadas; no se cerró nada aquí.$hint")
+        val synced = base.keys.count { it !in held }
+        if (synced == 0) return Guarded(out)
+        val limit = maxOf(3, (synced * 0.3).toInt())
+
+        val closes = out.count { it is Op.CloseLocal }
+        val remoteEmpty = remote.isEmpty()
+        val closesBlocked = closes > 0 && !confirmClose && (remoteEmpty || (closes > limit && !autoClose))
+        val deletes = out.count { it is Op.DeleteRemote }
+        val deletesBlocked = deletes > 0 && !confirmDelete && (deletes > limit || (localLinked == 0 && synced > limit))
+
+        if (closesBlocked) out = out.filterNot { it is Op.CloseLocal }
+        if (deletesBlocked) out = out.filterNot { it is Op.DeleteRemote }
+        return Guarded(
+            ops = out,
+            heldCloses = if (closesBlocked) closes else 0,
+            heldDeletes = if (deletesBlocked) deletes else 0,
+            closesAutoAcceptable = closesBlocked && !remoteEmpty,
+        )
+    }
+
+    /** Aviso para el usuario cuando el freno retuvo cambios. */
+    fun explain(g: Guarded): String? {
+        if (!g.blocked) return null
+        val parts = buildList {
+            if (g.heldCloses > 0) add("faltan en Zen ${g.heldCloses} fijadas que aquí no se cerraron")
+            if (g.heldDeletes > 0) add("faltan aquí ${g.heldDeletes} fijadas que no se borraron en Zen")
         }
-        val limit = maxOf(3, (base.size * 0.3).toInt())
-        val closing = out.count { it is Op.CloseLocal }
-        if (closing > limit) {
-            throw Unsafe("En Zen faltan $closing de tus ${base.size} pestañas fijadas sincronizadas; no se cerró nada aquí.$hint")
-        }
-        val deleting = out.count { it is Op.DeleteRemote }
-        if (localLinked == 0 || deleting > limit) {
-            throw Unsafe(
-                "En este teléfono faltan $deleting de tus ${base.size} pestañas fijadas sincronizadas; no se borró nada en Zen." +
-                    " Si fue a propósito, se aplicará en la próxima sincronización (pasado un minuto) o con «Aplicar cambios del escritorio» en Ajustes.",
-            )
-        }
-        return out
+        return "Sincronización en pausa por seguridad: " + parts.joinToString(" y ") +
+            ". Lo demás sigue sincronizándose. Revísalo en Ajustes › Cuenta y sincronización."
     }
 
     /**
@@ -116,8 +143,10 @@ object TabSyncPlanner {
     }
 
     /**
-     * Para no quedar frenada para siempre: si el freno salta y la misma situación (mismo conjunto de ids en
-     * la cuenta y en el teléfono) se repite en una sincronización al menos un minuto después, se acepta.
+     * Para que unos cierres "muchos de golpe" no queden frenados para siempre: si la misma situación (mismo
+     * conjunto de ids en la cuenta y en el teléfono) se repite en una sincronización al menos un minuto
+     * después, se aceptan. Solo vale para cierres en el teléfono (recuperables desde el escritorio); nunca
+     * para borrar en Zen ni con la cuenta vacía.
      */
     object Stability {
         const val MIN_GAP_MS = 60_000L

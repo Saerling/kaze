@@ -7,7 +7,6 @@ import app.kaze.browser.zsync.TabSyncPlanner.Remote
 import app.kaze.browser.zsync.TabSyncPlanner.State
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -93,34 +92,6 @@ class TabSyncPlannerTest {
         assertEquals(listOf(Op.Keep("z1", trabajo)), ops)
     }
 
-    @Test fun registrosIlegiblesNoCierranNiBorran() {
-        val base = mapOf("z1" to raiz, "z2" to raiz)
-        val remote = mapOf("z2" to Remote("z2", raiz, "https://b.com", "B"))
-        val local = listOf(Local("t1", "z1", raiz, "https://a.com"), Local("t2", "z2", raiz, "https://b.com"))
-        val ops = TabSyncPlanner.plan(base, remote, local)
-        assertTrue(ops.any { it is Op.CloseLocal })
-        val safe = TabSyncPlanner.guard(ops, base, remote, decryptFailures = 1)
-        assertTrue(safe.none { it is Op.CloseLocal || it is Op.DeleteRemote || it is Op.Unlink || it is Op.CreateRemote })
-    }
-
-    @Test fun cuentaVaciaNoCierraNada() {
-        val base = mapOf("z1" to raiz)
-        val ops = TabSyncPlanner.plan(base, emptyMap(), listOf(Local("t1", "z1", raiz, "https://a.com")))
-        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(ops, base, emptyMap(), 0) }
-    }
-
-    @Test fun cierreMasivoSeDetiene() {
-        val base = (1..10).associate { "z$it" to raiz }
-        val remote = (1..5).associate { "z$it" to Remote("z$it", raiz, "https://s$it.com", "") }
-        val local = (1..10).map { Local("t$it", "z$it", raiz, "https://s$it.com") }
-        val ops = TabSyncPlanner.plan(base, remote, local)
-        assertEquals(5, ops.count { it is Op.CloseLocal })
-        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(ops, base, remote, 0) }
-        // Pocas (hasta 3) sí se aplican.
-        val pocas = (1..8).associate { "z$it" to Remote("z$it", raiz, "https://s$it.com", "") }
-        assertEquals(2, TabSyncPlanner.guard(TabSyncPlanner.plan(base, pocas, local), base, pocas, 0).count { it is Op.CloseLocal })
-    }
-
     @Test fun soloPaginasWebSeSincronizan() {
         assertTrue(TabSyncPlanner.syncable("https://a.com/"))
         assertTrue(TabSyncPlanner.syncable("http://a.com/"))
@@ -139,18 +110,48 @@ class TabSyncPlannerTest {
         assertEquals(listOf(Op.Link("t1", "z1", raiz)), same)
     }
 
-    @Test fun frenoSeLevantaSiLaLecturaSeRepiteEstable() {
-        val base = (1..10).associate { "z$it" to raiz }
-        val local = (1..10).map { Local("t$it", "z$it", raiz, "https://s$it.com") }
+    @Test fun registrosIlegiblesNoCierranNiBorran() {
+        val base = mapOf("z1" to raiz, "z2" to raiz)
+        val remote = mapOf("z2" to Remote("z2", raiz, "https://b.com", "B"))
+        val local = listOf(Local("t1", "z1", raiz, "https://a.com"), Local("t2", "z2", raiz, "https://b.com"))
+        val ops = TabSyncPlanner.plan(base, remote, local)
+        assertTrue(ops.any { it is Op.CloseLocal })
+        // Ni confirmándolo: lo que "falta" puede estar en los registros ilegibles.
+        val safe = TabSyncPlanner.guard(ops, base, remote, decryptFailures = 1, confirmClose = true, confirmDelete = true).ops
+        assertTrue(safe.none { it is Op.CloseLocal || it is Op.DeleteRemote || it is Op.Unlink || it is Op.CreateRemote })
+    }
+
+    @Test fun cuentaVaciaSoloConConfirmacion() {
+        val base = mapOf("z1" to raiz)
+        val local = listOf(Local("t1", "z1", raiz, "https://a.com"), Local("t2", null, raiz, "https://n.com"))
         val ops = TabSyncPlanner.plan(base, emptyMap(), local)
-        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(ops, base, emptyMap(), 0) }
-        // Confirmado por el usuario ("Aplicar cambios del escritorio"): se aplica.
-        assertEquals(10, TabSyncPlanner.guard(ops, base, emptyMap(), 0, force = true).count { it is Op.CloseLocal })
-        // Pero nunca con registros ilegibles.
-        assertTrue(TabSyncPlanner.guard(ops, base, emptyMap(), 1, force = true).none { it is Op.CloseLocal })
-        // Misma situación dos veces, separadas al menos un minuto → se acepta; otra situación → vuelve a contar.
+        val g = TabSyncPlanner.guard(ops, base, emptyMap(), 0, localLinked = 1)
+        assertEquals(1, g.heldCloses)
+        assertFalse(g.closesAutoAcceptable) // la estabilidad no lo levanta
+        assertTrue(g.ops.none { it is Op.CloseLocal })
+        // El resto sigue: la nueva de aquí se sube igual.
+        assertTrue(g.ops.any { it is Op.CreateRemote })
+        assertTrue(TabSyncPlanner.guard(ops, base, emptyMap(), 0, localLinked = 1, autoClose = true).ops.none { it is Op.CloseLocal })
+        assertEquals(1, TabSyncPlanner.guard(ops, base, emptyMap(), 0, localLinked = 1, confirmClose = true).ops.count { it is Op.CloseLocal })
+    }
+
+    @Test fun cierreMasivoSeFrenaYLaEstabilidadLoLevanta() {
+        val base = (1..10).associate { "z$it" to raiz }
+        val remote = (1..5).associate { "z$it" to Remote("z$it", raiz, "https://s$it.com", "") }
+        val local = (1..10).map { Local("t$it", "z$it", raiz, "https://s$it.com") }
+        val ops = TabSyncPlanner.plan(base, remote, local)
+        val g = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 10)
+        assertEquals(5, g.heldCloses)
+        assertTrue(g.closesAutoAcceptable)
+        assertEquals(5, TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 10, autoClose = true).ops.count { it is Op.CloseLocal })
+        // Pocas (hasta 3) se aplican sin más.
+        val pocas = (1..8).associate { "z$it" to Remote("z$it", raiz, "https://s$it.com", "") }
+        val g2 = TabSyncPlanner.guard(TabSyncPlanner.plan(base, pocas, local), base, pocas, 0, localLinked = 10)
+        assertEquals(2, g2.ops.count { it is Op.CloseLocal })
+        assertFalse(g2.blocked)
+        // Estabilidad: la misma situación un minuto después.
         val st = TabSyncPlanner.Stability
-        val fp = st.fingerprint(emptyList(), base.keys)
+        val fp = st.fingerprint(remote.keys, base.keys)
         val (a1, seen) = st.accept(null, fp, 1_000)
         assertFalse(a1)
         assertFalse(st.accept(seen, fp, 30_000).first)
@@ -158,20 +159,34 @@ class TabSyncPlannerTest {
         assertFalse(st.accept(seen, st.fingerprint(listOf("z1"), base.keys), 200_000).first)
     }
 
-    @Test fun borradoMasivoEnZenSeDetiene() {
+    @Test fun borradoMasivoEnZenSoloConConfirmacion() {
         val base = (1..10).associate { "z$it" to raiz }
         val remote = base.keys.associateWith { Remote(it, raiz, "https://$it.com", "") }
-        // El teléfono perdió 5 de 10: no se borran en Zen de golpe.
+        // El teléfono perdió 5 de 10 (p. ej. se borró su base de datos): no se borran en Zen.
         val local = (1..5).map { Local("t$it", "z$it", raiz, "https://z$it.com") }
         val ops = TabSyncPlanner.plan(base, remote, local)
-        assertEquals(5, ops.count { it is Op.DeleteRemote })
-        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5) }
-        // Se quedó sin ninguna (aunque sean pocas): tampoco.
-        val small = mapOf("z1" to raiz)
-        val smallOps = TabSyncPlanner.plan(small, mapOf("z1" to Remote("z1", raiz, "https://a.com", "")), emptyList())
-        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(smallOps, small, mapOf("z1" to Remote("z1", raiz, "https://a.com", "")), 0, localLinked = 0) }
-        // Con registros ilegibles no se borra nada en Zen.
-        assertTrue(TabSyncPlanner.guard(ops, base, remote, 2, force = true).none { it is Op.DeleteRemote })
+        val g = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5, autoClose = true)
+        assertEquals(5, g.heldDeletes)
+        assertTrue(g.ops.none { it is Op.DeleteRemote })
+        assertEquals(5, TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5, confirmDelete = true).ops.count { it is Op.DeleteRemote })
+        // Sin ninguna aquí y más del límite: frenado aunque fueran pocas por vez.
+        val none = TabSyncPlanner.plan(base, remote, emptyList())
+        assertEquals(10, TabSyncPlanner.guard(none, base, remote, 0, localLinked = 0).heldDeletes)
+    }
+
+    @Test fun cerrarTuUnicaFijadaNoFrena() {
+        val base = mapOf("z1" to raiz)
+        val remote = mapOf("z1" to Remote("z1", raiz, "https://a.com", ""))
+        val ops = TabSyncPlanner.plan(base, remote, emptyList())
+        val g = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 0)
+        assertFalse(g.blocked)
+        assertEquals(listOf(Op.DeleteRemote("z1", null)), g.ops)
+        // Y las retenidas (aviso de "Deshacer" a la vista) no cuentan ni se suben.
+        val base4 = (1..4).associate { "z$it" to raiz }
+        val remote4 = base4.keys.associateWith { Remote(it, raiz, "https://$it.com", "") }
+        val g4 = TabSyncPlanner.guard(TabSyncPlanner.plan(base4, remote4, emptyList()), base4, remote4, 0, localLinked = 0, held = setOf("z1"))
+        assertFalse(g4.blocked)
+        assertEquals(3, g4.ops.count { it is Op.DeleteRemote })
     }
 
     @Test fun lasRetenidasNoSeSuben() {

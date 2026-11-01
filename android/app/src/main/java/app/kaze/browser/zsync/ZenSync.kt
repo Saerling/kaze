@@ -49,7 +49,7 @@ object ZenSync {
         val p = prefs(context)
         p.edit().apply {
             p.all.keys.filter { it.startsWith("base:") || it.startsWith("moves:") || it.startsWith("discarded:") || it.startsWith("unsafe:") }.forEach(::remove)
-        }.remove("base").remove("discarded").remove("failed").commit()
+        }.remove("base").remove("discarded").remove("failed").remove("pausedCloses").remove("pausedDeletes").apply()
     }
 
     fun lastSync(context: Context): Long = prefs(context).getLong("last", 0)
@@ -66,7 +66,7 @@ object ZenSync {
         val uid = runCatching { AccountStore.load(context)?.uid }.getOrNull() ?: return
         val p = prefs(context)
         val now = p.getStringSet("discarded:$uid", emptySet()).orEmpty() + ids
-        p.edit().putStringSet("discarded:$uid", now).commit()
+        p.edit().putStringSet("discarded:$uid", now).apply()
     }
 
     private fun discarded(context: Context, uid: String): Set<String> =
@@ -81,11 +81,22 @@ object ZenSync {
     /** "Volver a traer espacios descartados": la próxima sincronización los trae de nuevo. */
     fun restoreDiscarded(context: Context) {
         val uid = runCatching { AccountStore.load(context)?.uid }.getOrNull() ?: return
-        prefs(context).edit().remove("discarded:$uid").commit()
+        prefs(context).edit().remove("discarded:$uid").apply()
     }
 
     private fun clearState(context: Context, uid: String) {
         prefs(context).edit().remove("base:$uid").remove("moves:$uid").remove("discarded:$uid").remove("unsafe:$uid").remove("base").commit()
+    }
+
+    /** Pestañas nuevas del escritorio y, si el freno retuvo algo nuevo, el aviso para el usuario. */
+    data class Outcome(val added: Int, val problem: String?)
+
+    /** Cambios frenados por seguridad (cierres aquí, borrados en Zen) que esperan confirmación en Ajustes. */
+    fun paused(context: Context): Pair<Int, Int> =
+        prefs(context).getInt("pausedCloses", 0) to prefs(context).getInt("pausedDeletes", 0)
+
+    private fun setPaused(context: Context, closes: Int, deletes: Int) {
+        prefs(context).edit().putInt("pausedCloses", closes).putInt("pausedDeletes", deletes).apply()
     }
 
     private data class Pending(val index: Int, val op: TabSyncPlanner.Op, val title: String)
@@ -103,11 +114,12 @@ object ZenSync {
         context: Context,
         store: Store,
         closeTab: (Tab) -> Unit,
-        force: Boolean = false,
+        confirmClose: Boolean = false,
+        confirmDelete: Boolean = false,
         held: Set<String> = emptySet(),
-    ): Int {
+    ): Outcome {
         val generation = AccountStore.currentGeneration
-        val uid = withContext(Dispatchers.IO) { AccountStore.load(context)?.uid } ?: return 0
+        val uid = withContext(Dispatchers.IO) { AccountStore.load(context)?.uid } ?: return Outcome(0, null)
         val snap = SpacesSyncService.refresh(context)
         val readOnly = AccountStore.isDemo(context)
         val dropped = discarded(context, uid)
@@ -138,10 +150,11 @@ object ZenSync {
         }
         snap.essentials.values.flatten().forEach { put(it, TabSyncPlanner.State.essential()) }
 
-        val base = loadBase(context, uid)
+        val base = withContext(Dispatchers.IO) { loadBase(context, uid) }
         dropped.forEach { base.remove(it) }
         val moves = loadMoves(context, uid)
         var added = 0
+        var problem: String? = null
         val pending = mutableListOf<Pending>()
         val applied = withContext(Dispatchers.Main) {
             if (!AccountStore.isCurrent(generation)) return@withContext false
@@ -176,18 +189,29 @@ object ZenSync {
                 val locals = store.tabs.filter { !it.isPrivate && (it.zenId != null || store.spaceById(it.spaceId)?.profileId == profile) }
                     .map { TabSyncPlanner.Local(it.id, it.zenId, stateOf(it), it.pinnedUrl ?: it.url) }
                     .filter { it.state != null || it.zenId != null }
-                val planned = TabSyncPlanner.withoutHeld(TabSyncPlanner.plan(base, remote, locals), held)
+                val planned = TabSyncPlanner.plan(base, remote, locals)
                 val linked = locals.count { it.zenId != null }
-                val ops = try {
-                    TabSyncPlanner.guard(planned, base, remote, snap.decryptFailures, force, linked)
-                } catch (e: TabSyncPlanner.Unsafe) {
-                    // Si la misma situación se repite estable (un minuto después), fue a propósito: se acepta.
+                fun guard(autoClose: Boolean) = TabSyncPlanner.guard(
+                    planned, base, remote, snap.decryptFailures, linked, held,
+                    autoClose = autoClose, confirmClose = confirmClose, confirmDelete = confirmDelete,
+                )
+                var guarded = guard(autoClose = false)
+                if (guarded.closesAutoAcceptable) {
+                    // Cierres "muchos de golpe": si la misma situación se repite un minuto después, fue a propósito.
                     val fp = TabSyncPlanner.Stability.fingerprint(remote.keys, locals.mapNotNull { it.zenId })
                     val (ok, seen) = TabSyncPlanner.Stability.accept(loadSeen(context, uid), fp, System.currentTimeMillis())
                     saveSeen(context, uid, seen)
-                    if (!ok) throw e
-                    TabSyncPlanner.guard(planned, base, remote, snap.decryptFailures, force = true, localLinked = linked)
+                    if (ok) guarded = guard(autoClose = true)
+                } else {
+                    prefs(context).edit().remove("unsafe:$uid").apply()
                 }
+                // Lo frenado espera a que el usuario lo confirme en Ajustes; todo lo demás sigue.
+                val before = paused(context)
+                setPaused(context, guarded.heldCloses, guarded.heldDeletes)
+                if (guarded.blocked && before != (guarded.heldCloses to guarded.heldDeletes)) {
+                    TabSyncPlanner.explain(guarded)?.let { problem = it }
+                }
+                val ops = guarded.ops
 
                 fun apply(t: Tab, st: TabSyncPlanner.State) {
                     if (st.essential) {
@@ -248,7 +272,7 @@ object ZenSync {
             }
             true
         }
-        if (!applied) return 0
+        if (!applied) return Outcome(0, null)
 
         // Subida. Cada cambio va por separado: si uno falla, su base no cambia y se reintenta la próxima vez.
         val links = mutableListOf<Pair<String, String?>>() // pestaña de Fyx → id nuevo de Zen (null = soltar)
@@ -269,15 +293,17 @@ object ZenSync {
             quiet(store) { links.forEach { (tabId, zenId) -> store.tabById(tabId)?.let { store.link(it, zenId) } } }
             true
         }
-        if (!stillCurrent) return 0
+        if (!stillCurrent) return Outcome(0, null)
         // La base solo se guarda cuando los enlaces ya están en la base de datos: si la app se cierra en
         // medio, nunca queda una base que diga "enlazada" de una pestaña que en disco no lo está.
-        withContext(Dispatchers.IO) { store.awaitWrites() }
-        if (!AccountStore.isCurrent(generation)) return 0
-        saveBase(context, uid, base)
-        saveMoves(context, uid, moves)
-        prefs(context).edit().putLong("last", System.currentTimeMillis()).putInt("failed", failed).remove("unsafe:$uid").commit()
-        return added
+        withContext(Dispatchers.IO) {
+            store.awaitWrites()
+            if (!AccountStore.isCurrent(generation)) return@withContext
+            saveBase(context, uid, base)
+            saveMoves(context, uid, moves)
+            prefs(context).edit().putLong("last", System.currentTimeMillis()).putInt("failed", failed).commit()
+        }
+        return Outcome(added, problem)
     }
 
     /** Sube los cambios con una sola sesión de escritura. Devuelve cuántos fallaron. */
@@ -428,8 +454,8 @@ object ZenSync {
         val p = prefs(context)
         // Versión anterior: una sola base sin cuenta. Se pasa a la de la cuenta con sesión y se borra.
         p.getString("base", null)?.let { old ->
-            if (!p.contains("base:$uid")) p.edit().putString("base:$uid", old).remove("base").commit()
-            else p.edit().remove("base").commit()
+            if (!p.contains("base:$uid")) p.edit().putString("base:$uid", old).remove("base").apply()
+            else p.edit().remove("base").apply()
         }
         val raw = p.getString("base:$uid", null) ?: return out
         runCatching {
@@ -454,7 +480,7 @@ object ZenSync {
     }
 
     private fun saveSeen(context: Context, uid: String, seen: TabSyncPlanner.Stability.Seen) {
-        prefs(context).edit().putString("unsafe:$uid", JSONArray().put(seen.fingerprint).put(seen.since).toString()).commit()
+        prefs(context).edit().putString("unsafe:$uid", JSONArray().put(seen.fingerprint).put(seen.since).toString()).apply()
     }
 
     private fun loadMoves(context: Context, uid: String): MutableMap<String, PendingMove> {
@@ -517,7 +543,7 @@ class ZenTabSync(
     private var lastRun = 0L
     /** Pestañas de Zen retenidas (id → hasta cuándo) mientras se ve su aviso de "Deshacer". */
     private val held = HashMap<String, Long>()
-    private var release: Job? = null
+    private var releaseJob: Job? = null
 
     /** Avisa cuando llegan pestañas nuevas del escritorio (para mostrar un aviso). */
     var onNews: ((Int) -> Unit)? = null
@@ -539,15 +565,26 @@ class ZenTabSync(
     }
 
     /**
-     * Retiene los cambios de la pestaña [zenId] durante [millis] (lo que se ve el aviso con "Deshacer" de un
-     * cierre o un desfijado), en cualquier sincronización: la subida en cola, al volver a la app o el botón
-     * Sincronizar. Aunque otro aviso tape al de "Deshacer", la retención dura hasta que vence; entonces se sube.
+     * Retiene los cambios de la pestaña [zenId] mientras se ve su aviso de "Deshacer", en cualquier
+     * sincronización (la subida en cola, al volver a la app, el botón Sincronizar). Devuelve la función
+     * que la suelta: llamarla cuando el aviso desaparece; la retención dura al menos 5 s, y como mucho
+     * un minuto aunque nunca se suelte.
      */
-    fun hold(zenId: String, millis: Long) {
-        held[zenId] = System.currentTimeMillis() + millis
-        release?.cancel()
-        release = scope.launch {
-            delay(millis + 100)
+    fun hold(zenId: String): () -> Unit {
+        val start = System.currentTimeMillis()
+        held[zenId] = start + MAX_HOLD_MS
+        schedulePushAt(start + MAX_HOLD_MS)
+        return {
+            val until = maxOf(start + UNDO_HOLD_MS, System.currentTimeMillis())
+            if ((held[zenId] ?: 0L) > until) held[zenId] = until
+            schedulePushAt(until)
+        }
+    }
+
+    private fun schedulePushAt(at: Long) {
+        releaseJob?.cancel()
+        releaseJob = scope.launch {
+            delay(at - System.currentTimeMillis() + 100)
             onLocalChange()
         }
     }
@@ -567,8 +604,11 @@ class ZenTabSync(
     /** "Sincronizar" en Ajustes: ahora mismo, y con el error a la vista. */
     suspend fun syncNow(): Int = run()
 
-    /** "Aplicar cambios del escritorio": una vez, sin el freno de cierres o borrados masivos. */
-    suspend fun syncForced(): Int = run(force = true)
+    /** Confirmado en Ajustes: cerrar aquí las fijadas que faltan en el escritorio. */
+    suspend fun confirmCloses(): Int = run(confirmClose = true)
+
+    /** Confirmado en Ajustes: borrar en el escritorio las fijadas que se quitaron aquí. */
+    suspend fun confirmDeletes(): Int = run(confirmDelete = true)
 
     private suspend fun runQuietly() {
         try {
@@ -576,24 +616,26 @@ class ZenTabSync(
             if (n > 0) onNews?.invoke(n)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: TabSyncPlanner.Unsafe) {
-            onProblem?.invoke(e.message.orEmpty())
         } catch (e: Exception) {
             android.util.Log.w("Fyx", "Sincronización de pestañas", e)
         }
     }
 
-    private suspend fun run(force: Boolean = false): Int = mutex.withLock {
+    private suspend fun run(confirmClose: Boolean = false, confirmDelete: Boolean = false): Int = mutex.withLock {
         val signedIn = withContext(Dispatchers.IO) { runCatching { ZenSync.email(context) }.getOrNull() } != null
         if (!signedIn) return 0
         lastRun = System.currentTimeMillis()
-        ZenSync.syncTabs(context, store, closeTab, force, heldNow())
+        val out = ZenSync.syncTabs(context, store, closeTab, confirmClose, confirmDelete, heldNow())
+        out.problem?.let { onProblem?.invoke(it) }
+        out.added
     }
 
     companion object {
         const val PUSH_DELAY_MS = 3_000L
         const val PULL_INTERVAL_MS = 5 * 60_000L
-        /** Lo que dura el aviso con "Deshacer", y un poco más. */
+        /** Retención mínima de un cierre o desfijado con "Deshacer" (lo que dura el aviso, y un poco más). */
         const val UNDO_HOLD_MS = 5_000L
+        /** Retención máxima, por si el aviso nunca avisa de que desapareció. */
+        const val MAX_HOLD_MS = 60_000L
     }
 }

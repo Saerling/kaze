@@ -70,8 +70,26 @@ class BrowserUi {
     var findCurrent by mutableIntStateOf(0)
     var findTotal by mutableIntStateOf(0)
 
-    fun show(message: String, action: String? = null, onAction: (() -> Unit)? = null) {
+    private var toastDismiss: (() -> Unit)? = null
+
+    /**
+     * Muestra un aviso. [onDismiss] se llama cuando el aviso desaparece (se acaba su tiempo, se toca su
+     * acción u otro aviso lo reemplaza).
+     */
+    fun show(message: String, action: String? = null, onAction: (() -> Unit)? = null, onDismiss: (() -> Unit)? = null) {
+        val previous = toastDismiss
+        toastDismiss = onDismiss
+        previous?.invoke()
         toastAction = if (action != null && onAction != null) action to onAction else null
         toast = message
+    }
+
+    /** El aviso desapareció. */
+    fun dismissToast() {
+        toast = null
+        toastAction = null
+        val done = toastDismiss
+        toastDismiss = null
+        done?.invoke()
     }
 }

@@ -27,6 +27,19 @@
     return e;
   };
 
+  // Temas conocidos, en orden de prioridad. Si no encaja ninguno, el tema es el nombre del sitio.
+  const TOPICS = [
+    ["Búsquedas", /google\.[a-z.]+\/search|bing\.com\/search|duckduckgo\.com\/\?|search\.brave/],
+    ["Correo y trabajo", /mail\.|outlook|proton\.me|calendar|docs\.google|drive\.google|notion\.|slack\.|teams\.|trello|asana|office\.com|sharepoint/],
+    ["Desarrollo", /github|gitlab|bitbucket|stackoverflow|stackexchange|developer\.mozilla|mdn|npmjs|pypi|crates\.io|docs\.rs|codepen|jsfiddle|vercel|netlify|localhost/],
+    ["Vídeo y música", /youtube|youtu\.be|twitch|netflix|vimeo|primevideo|disneyplus|hbomax|max\.com|crunchyroll|spotify|soundcloud|music\./],
+    ["Redes sociales", /twitter|x\.com|facebook|instagram|tiktok|reddit|linkedin|threads\.net|bsky|mastodon|discord|whatsapp|telegram/],
+    ["Compras", /amazon\.|ebay|aliexpress|mercadolibre|mercadolivre|temu|shein|etsy|walmart|bestbuy|falabella|carrito|\bcart\b|checkout|tienda|shop/],
+    ["Noticias", /news|noticias|elpais|elmundo|bbc\.|cnn\.|nytimes|theguardian|reuters|eltiempo|elespectador|clarin|infobae|semana\.com|xataka|theverge|wired/],
+    ["Referencia", /wikipedia|wiktionary|rae\.es|wordreference|deepl|translate\.|maps\.|scholar\.|arxiv/],
+    ["IA", /chatgpt|openai|claude\.ai|gemini\.google|perplexity|copilot\.microsoft|huggingface/],
+  ];
+
   const FyxTabs = {
     thumbs: new WeakMap(),
 
@@ -69,23 +82,62 @@
       gBrowser.selectedBrowser.focus();
     },
 
+    /** Tema de una pestaña (como "Organizar por temas" de Safari 27), sin red: por sitio y palabras. */
+    topic(tab) {
+      const url = tab.linkedBrowser?.currentURI?.spec || "";
+      const h = this.host(tab);
+      const text = (h + " " + url + " " + tab.label).toLowerCase();
+      for (const [name, re] of TOPICS) if (re.test(text)) return name;
+      if (!h || !/^https?:/.test(url)) return "Otras";
+      const parts = h.split(".");
+      const name = parts.length > 1 ? parts.at(-2) : parts[0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    },
+
+    host(tab) {
+      try { return new URL(tab.linkedBrowser.currentURI.spec).hostname.replace(/^www\./, ""); } catch { return ""; }
+    },
+
+    /** Secciones por tema; los temas de una sola pestaña se juntan en "Otras". */
+    groups(tabs) {
+      const map = new Map();
+      for (const t of tabs) {
+        const k = this.topic(t);
+        if (!map.has(k)) map.set(k, []);
+        map.get(k).push(t);
+      }
+      const out = [], rest = [];
+      for (const [name, list] of map) (list.length > 1 && name != "Otras" ? out.push({ name, tabs: list }) : rest.push(...list));
+      out.sort((a, b) => b.tabs.length - a.tabs.length);
+      if (rest.length) out.push({ name: "Otras", tabs: rest, other: true });
+      return out;
+    },
+
     render() {
       const q = (this.query || "").toLowerCase();
-      const tabs = gBrowser.visibleTabs.filter(t => !t.closing && (!q || t.label.toLowerCase().includes(q) ||
+      const tabs = gBrowser.visibleTabs.filter(t => !t.closing && !t.hasAttribute("zen-empty-tab") &&
+        (!q || t.label.toLowerCase().includes(q) ||
         (t.linkedBrowser?.currentURI?.spec || "").toLowerCase().includes(q)));
-      const card = (tab, i) => {
+      let i = 0;
+      const card = tab => {
         const thumb = this.thumbs.get(tab);
         const icon = tab.getAttribute("image") || "chrome://global/skin/icons/defaultFavicon.svg";
         return h("div", {
-          class: "pyx-card", selected: tab.selected, style: `--i:${i}`,
+          class: "pyx-card", selected: tab.selected, style: `--i:${i++}`, tabindex: "0", role: "button",
+          title: tab.label,
           onclick: () => { gBrowser.selectedTab = tab; this.close(); },
+          onkeydown: e => { if (e.key == "Enter" || e.key == " ") { e.preventDefault(); gBrowser.selectedTab = tab; this.close(); } },
         },
         h("div", { class: "pyx-thumb" },
           thumb ? h("img", { src: thumb, alt: "" }) : h("img", { class: "pyx-icon", src: icon, alt: "" }),
-          h("button", { class: "pyx-close", title: "Cerrar", text: "×", onclick: e => {
+          h("button", { class: "pyx-close", title: "Cerrar pestaña", text: "✕", onclick: e => {
             e.stopPropagation();
-            gBrowser.removeTab(tab, { animate: false });
-            setTimeout(() => this.el && this.render(), 40);
+            const c = e.target.closest(".pyx-card");
+            c.setAttribute("closing", "true");
+            setTimeout(() => {
+              gBrowser.removeTab(tab, { animate: false });
+              this.el && this.render();
+            }, 160);
           } })),
         h("div", { class: "pyx-title" }, h("img", { src: icon, alt: "" }), h("span", { text: tab.label })));
       };
@@ -97,28 +149,66 @@
         s.focus();
         s.setSelectionRange(s.value.length, s.value.length);
       });
+      const byTopic = this.byTopic;
+      let body;
+      if (!tabs.length) {
+        body = h("div", { class: "pyx-empty", text: q ? "Ninguna pestaña coincide." : "No hay pestañas abiertas. Pulsa + para abrir una." });
+      } else if (byTopic) {
+        const groups = this.groups(tabs);
+        const folders = window.gZenFolders && groups.some(g => !g.other);
+        body = h("div", { class: "pyx-scroll" },
+          folders ? h("div", { class: "pyx-hint" },
+            h("span", { text: "Pestañas agrupadas por tema." }),
+            h("button", { class: "pyx-link", text: "Crear carpetas con estos temas", onclick: () => this.makeFolders(groups) }))
+            : null,
+          ...groups.map(g => h("section", { class: "pyx-section" },
+            h("h3", { class: "pyx-heading" }, h("span", { text: g.name }), h("span", { class: "pyx-n", text: String(g.tabs.length) })),
+            h("div", { class: "pyx-grid" }, ...g.tabs.map(card)))));
+      } else {
+        body = h("div", { class: "pyx-scroll" }, h("div", { class: "pyx-grid" }, ...tabs.map(card)));
+      }
+      const n = gBrowser.visibleTabs.filter(t => !t.hasAttribute("zen-empty-tab")).length;
       this.el.replaceChildren(h("div", { class: "pyx-panel" },
         h("div", { class: "pyx-top" },
-          h("span", { class: "pyx-count", text: `${gBrowser.visibleTabs.length} pestañas` }),
+          h("span", { class: "pyx-count", text: n == 1 ? "1 pestaña" : `${n} pestañas` }),
           search,
-          h("button", { class: "pyx-new", title: "Organizar pestañas por sitio", text: "✦", onclick: () => { this.organize(); this.render(); } }),
+          h("div", { class: "pyx-seg", role: "tablist" },
+            h("button", { role: "tab", "aria-selected": !byTopic ? "true" : "false", text: "Todas",
+              onclick: () => { this.byTopic = false; this.render(); } }),
+            h("button", { role: "tab", "aria-selected": byTopic ? "true" : "false", text: "Por temas",
+              title: "Organizar por temas", onclick: () => { this.byTopic = true; try { this.organize(); } catch (e) { console.warn("[Fyx] organizar", e); } this.render(); } })),
           h("button", { class: "pyx-new", title: "Pestaña nueva", text: "+", onclick: () => { this.close(); BrowserCommands.openTab(); } }),
           h("button", { class: "pyx-done", text: "Listo", onclick: () => this.close() })),
-        tabs.length ? h("div", { class: "pyx-grid" }, ...tabs.map(card))
-          : h("div", { class: "pyx-empty", text: q ? "Ninguna pestaña coincide." : "No hay pestañas abiertas. Pulsa + para abrir una." })));
+        body));
     },
 
-    /** Organizar pestañas (como Safari en iPadOS 27): junta las del mismo sitio, en el orden en que aparecen. */
+    /** Organizar (como Safari 27): junta en la barra lateral las pestañas del mismo tema. */
     organize() {
-      const host = t => { try { return new URL(t.linkedBrowser.currentURI.spec).hostname.replace(/^www\./, ""); } catch { return ""; } };
-      const tabs = gBrowser.visibleTabs.filter(t => !t.pinned && !t.hasAttribute("zen-essential"));
+      const tabs = gBrowser.visibleTabs.filter(t => !t.pinned && !t.hasAttribute("zen-essential") && !t.group);
       if (tabs.length < 3) return;
-      const order = [...new Set(tabs.map(host))];
-      const sorted = [...tabs].sort((a, b) => order.indexOf(host(a)) - order.indexOf(host(b)));
-      const start = tabs[0]._tPos;
-      sorted.forEach((t, i) => {
-        try { gBrowser.moveTabTo(t, { tabIndex: start + i }); } catch { gBrowser.moveTabTo(t, start + i); }
+      const order = this.groups(tabs).flatMap(g => g.tabs);
+      const start = Math.min(...tabs.map(t => t._tPos));
+      order.forEach((t, i) => {
+        try { gBrowser.moveTabTo(t, { tabIndex: start + i }); } catch { try { gBrowser.moveTabTo(t, start + i); } catch {} }
       });
+    },
+
+    /** Carpetas de Zen a partir de los temas (las carpetas de Zen viven entre las fijadas). */
+    makeFolders(groups) {
+      let made = 0;
+      for (const g of groups) {
+        if (g.other) continue;
+        const tabs = g.tabs.filter(t => !t.pinned && !t.hasAttribute("zen-essential") && !t.group);
+        if (tabs.length < 2) continue;
+        try {
+          gZenFolders.createFolder(tabs, { label: g.name });
+          made++;
+        } catch (e) {
+          console.warn("[Fyx] carpeta", e);
+        }
+      }
+      window.FyxExtras?.toast(made ? (made == 1 ? "1 carpeta creada" : `${made} carpetas creadas`) : "No hay pestañas sueltas que agrupar");
+      this.render();
     },
 
     layout() {
@@ -147,6 +237,7 @@
   };
 
   window.FyxTabs = FyxTabs;
+  FyxTabs.byTopic = false;
   FyxTabs.layout();
   gBrowser.tabContainer.addEventListener("TabSelect", e => {
     const prev = e.detail?.previousTab;

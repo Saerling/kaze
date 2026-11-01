@@ -153,7 +153,7 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
   .pyx-card .pyx-thumb, .tabbrowser-tab .tab-background { transform: none !important; }
 }
 
-/* ── Todas las pestañas (como Safari): la página se aleja y aparecen las miniaturas ── */
+/* ── Todas las pestañas (como Safari 27): la página se aleja y aparecen las miniaturas ── */
 
 #pyx-overview-button {
   list-style-image: url("chrome://kaze/content/iconos/pestanas-pyx.svg");
@@ -161,25 +161,34 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
 :root[pyx-overview] #tabbrowser-tabbox {
   /* Sin desenfoque: difuminar toda la página en cada cuadro es caro para la GPU; escala y opacidad bastan. */
   transform: scale(0.96);
-  opacity: 0.35;
-  transition: transform 300ms var(--pyx-ease), opacity 240ms var(--pyx-ease);
+  opacity: 0.3;
+  transition: transform 340ms var(--pyx-ease), opacity 260ms var(--pyx-ease);
 }
 #tabbrowser-tabbox {
-  transition: transform 220ms var(--pyx-ease), opacity 180ms var(--pyx-ease);
+  transition: transform 240ms var(--pyx-ease), opacity 200ms var(--pyx-ease);
 }
 #pyx-overview {
+  --pyx-ov-bg: color-mix(in srgb, #F2F2F7 97%, transparent);
+  --pyx-ov-field: rgb(0 0 0 / 0.06);
+  --pyx-ov-soft: rgb(0 0 0 / 0.55);
+  @media (prefers-color-scheme: dark) {
+    --pyx-ov-bg: color-mix(in srgb, #161618 97%, transparent);
+    --pyx-ov-field: rgb(255 255 255 / 0.09);
+    --pyx-ov-soft: rgb(255 255 255 / 0.6);
+  }
   position: fixed;
   inset: 0;
   z-index: 1000;
   display: flex;
-  background: color-mix(in srgb, Canvas 90%, transparent);
+  background: var(--pyx-ov-bg);
   font-family: system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
   color: CanvasText;
   outline: none;
-  animation: pyx-fade 200ms var(--pyx-ease);
+  animation: pyx-fade 220ms var(--pyx-ease);
 }
 #pyx-overview[closing] {
   animation: pyx-fade-out 180ms var(--pyx-ease) forwards;
+  & .pyx-card { animation: pyx-card-out 180ms var(--pyx-ease) forwards; }
 }
 @keyframes pyx-fade { from { opacity: 0; } }
 @keyframes pyx-fade-out { to { opacity: 0; } }
@@ -187,48 +196,99 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 22px 36px 30px;
-  gap: 20px;
+  padding: 20px 0 0;
+  gap: 18px;
   min-height: 0;
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
 }
 .pyx-top {
   display: flex;
   align-items: center;
   gap: 10px;
-  & .pyx-count { font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
+  padding-inline: 36px;
+  & .pyx-count { font-weight: 700; font-size: 20px; letter-spacing: -0.4px; min-width: 120px; }
   & input {
     margin-inline-start: auto;
-    flex: 0 1 300px;
+    flex: 0 1 320px;
     border: 0;
-    border-radius: 10px;
-    padding: 8px 12px;
-    background: var(--pyx-field);
+    border-radius: 999px;
+    padding: 8px 14px;
+    background: var(--pyx-ov-field);
     color: inherit;
     font: 13px system-ui, "Segoe UI", sans-serif;
     outline: none;
+    transition: box-shadow 200ms var(--pyx-ease);
   }
-  & input:focus { outline: 3px solid color-mix(in srgb, var(--pyx-accent) 45%, transparent); }
+  & input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--pyx-accent) 45%, transparent); }
   & button {
     appearance: none;
     border: 0;
-    border-radius: 9px;
-    padding: 8px 14px;
-    background: var(--pyx-field);
+    border-radius: 999px;
+    padding: 7px 14px;
+    background: var(--pyx-ov-field);
     color: inherit;
     font: 13px system-ui, "Segoe UI", sans-serif;
     cursor: pointer;
+    transition: background 150ms, transform 160ms var(--pyx-ease);
   }
-  & .pyx-new { font-size: 18px; line-height: 1; padding: 6px 12px; }
+  & button:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+  & button:active { transform: scale(0.96); }
+  & .pyx-new { font-size: 18px; line-height: 1; padding: 5px 12px; }
   & .pyx-done { background: var(--pyx-accent); color: white; font-weight: 600; }
+  & .pyx-done:hover { background: color-mix(in srgb, var(--pyx-accent) 88%, black); }
 }
-.pyx-grid {
+/* Selector Todas / Por temas, como el control segmentado de macOS */
+.pyx-seg {
+  display: flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--pyx-ov-field);
+  & button { background: transparent !important; padding: 5px 13px !important; }
+  & button[aria-selected="true"] {
+    background: light-dark(white, rgb(255 255 255 / 0.18)) !important;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 0 0 0.5px rgb(0 0 0 / 0.06);
+    font-weight: 600;
+  }
+}
+.pyx-scroll {
   flex: 1;
   overflow-y: auto;
+  padding: 4px 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.pyx-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--pyx-ov-soft);
+  margin-bottom: -10px;
+  & .pyx-link {
+    appearance: none; border: 0; background: none; padding: 0;
+    color: var(--pyx-accent); font: inherit; font-weight: 600; cursor: pointer;
+  }
+  & .pyx-link:hover { text-decoration: underline; }
+}
+.pyx-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px 2px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  & .pyx-n { font-size: 12px; font-weight: 600; color: var(--pyx-ov-soft); }
+}
+.pyx-section { animation: pyx-card-in 420ms var(--pyx-ease) both; }
+.pyx-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   align-content: start;
-  gap: 26px 20px;
-  padding: 4px;
+  gap: 24px 20px;
 }
 .pyx-card {
   cursor: pointer;
@@ -236,37 +296,47 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
   flex-direction: column;
   gap: 9px;
   min-width: 0;
-  animation: pyx-card-in 340ms var(--pyx-ease) both;
-  animation-delay: calc(min(var(--i), 10) * 30ms);
+  outline: none;
+  animation: pyx-card-in 420ms var(--pyx-ease) both;
+  animation-delay: calc(min(var(--i), 12) * 28ms);
   & .pyx-thumb {
     position: relative;
     aspect-ratio: 16 / 10;
-    border-radius: 12px;
+    border-radius: 14px;
     overflow: hidden;
     background: var(--pyx-card);
     box-shadow: var(--pyx-shadow-2);
     display: grid;
     place-items: center;
-    transition: transform 180ms var(--pyx-ease), box-shadow 180ms var(--pyx-ease);
+    transition: transform 260ms var(--pyx-ease), box-shadow 260ms var(--pyx-ease);
   }
   & .pyx-thumb > img:not(.pyx-icon) { width: 100%; height: 100%; object-fit: cover; object-position: top; }
-  & .pyx-icon { width: 42px; height: 42px; }
-  &:hover .pyx-thumb { transform: translateY(-2px); box-shadow: var(--pyx-shadow-3); }
+  & .pyx-icon { width: 40px; height: 40px; }
+  &:hover .pyx-thumb { transform: translateY(-3px); box-shadow: var(--pyx-shadow-3); }
   &:active .pyx-thumb { transform: scale(0.97); transition-duration: 90ms; }
-  &[selected] .pyx-thumb { box-shadow: 0 0 0 3px var(--pyx-accent), 0 10px 30px rgb(0 0 0 / 0.14); }
+  &:focus-visible .pyx-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--pyx-accent) 55%, transparent), var(--pyx-shadow-2); }
+  &[selected] .pyx-thumb { box-shadow: 0 0 0 3px var(--pyx-accent), 0 12px 34px rgb(0 0 0 / 0.16); }
+  &[selected] .pyx-title span { font-weight: 600; }
+  &[closing] { animation: pyx-card-out 160ms var(--pyx-ease) forwards; pointer-events: none; }
   & .pyx-close {
-    position: absolute; top: 7px; inset-inline-start: 7px;
-    width: 22px; height: 22px; border-radius: 50%; border: 0;
-    background: rgb(0 0 0 / 0.55); color: white; font-size: 15px; line-height: 1;
-    cursor: pointer; opacity: 0; transition: opacity 150ms;
+    position: absolute; top: 8px; inset-inline-start: 8px;
+    width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0;
+    background: rgb(30 30 32 / 0.62); color: white; font-size: 10px; line-height: 22px; font-weight: 700;
+    box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.25);
+    cursor: pointer; opacity: 0; transform: scale(0.85);
+    transition: opacity 150ms, transform 200ms var(--pyx-ease), background 150ms;
   }
-  &:hover .pyx-close { opacity: 1; }
-  & .pyx-title { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding-inline: 2px; min-width: 0; }
+  &:hover .pyx-close, &:focus-within .pyx-close { opacity: 1; transform: none; }
+  & .pyx-close:hover { background: rgb(0 0 0 / 0.82); }
+  & .pyx-title { display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12.5px; padding-inline: 4px; min-width: 0; }
   & .pyx-title img { width: 16px; height: 16px; flex: none; }
   & .pyx-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 @keyframes pyx-card-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+@keyframes pyx-card-out {
+  to { opacity: 0; transform: scale(0.94); }
 }
 .pyx-empty { margin: auto; opacity: 0.6; }
 
@@ -357,3 +427,27 @@ menupopup, panel { --panel-border-radius: 14px; --panel-padding: 6px; }
 :root[pyx-tinted="dark"] #nav-bar { --pyx-glass: rgb(255 255 255 / 0.12); --pyx-glass-strong: rgb(255 255 255 / 0.2); }
 :root[pyx-tinted="light"] #urlbar { color: #1d1d1f !important; --urlbar-box-text-color: #1d1d1f; }
 :root[pyx-tinted="dark"] #urlbar { color: #f5f5f7 !important; --urlbar-box-text-color: #f5f5f7; }
+
+/* ── Aviso breve de Fyx (lista de lectura, carpetas) ──────────────────── */
+#pyx-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 1100;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, Canvas 86%, transparent);
+  color: CanvasText;
+  font: 600 13px system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  box-shadow: var(--pyx-shadow-3);
+  pointer-events: none;
+  animation: pyx-toast-in 320ms var(--pyx-ease);
+  &[closing] { animation: pyx-toast-out 200ms var(--pyx-ease) forwards; }
+}
+@keyframes pyx-toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@keyframes pyx-toast-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes pyx-toast-in { from { opacity: 0; } }
+  @keyframes pyx-card-out { to { opacity: 0; } }
+}

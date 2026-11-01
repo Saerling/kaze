@@ -3,9 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * Regulador de memoria de Fyx: cada 30 s mira cuánta RAM usa todo el navegador (todos sus
- * procesos). Si pasa del límite, duerme las pestañas que llevan más tiempo sin usarse (no la
- * visible, ni las que suenan, ni las de vídeo flotante). Al volver a una, se recarga sola.
+ * Regulador de memoria de Fyx: mira cuánta RAM usa todo el navegador (todos sus procesos).
+ * Si pasa del límite, duerme las pestañas que llevan más tiempo sin usarse, de todas las
+ * ventanas (no la visible de cada ventana, ni las que suenan, ni las de vídeo flotante ni las
+ * que comparten cámara o pantalla). Al volver a una, se recarga sola.
+ *
+ * Para no gastar CPU: solo mide una ventana (la primera que siga abierta), y el intervalo se
+ * adapta: cada 20 s cerca del límite, cada 90 s si va holgado.
  */
 
 "use strict";
@@ -31,32 +35,52 @@
       return bytes / 1048576;
     },
 
+    /** Pestañas que se pueden dormir, de todas las ventanas, de la más vieja a la más nueva. */
     candidates() {
-      return gBrowser.tabs
-        .filter(t => !t.selected && !t.closing && t.linkedPanel && !t.hasAttribute("pending") &&
-          !t.soundPlaying && !t.pictureinpicture && !t.multiselected &&
-          !t.hasAttribute("zen-split") && !t.hasAttribute("split-view") &&
-          !t.linkedBrowser?._sharingState?.webRTC?.sharing)
-        .sort((a, b) => a.lastAccessed - b.lastAccessed);
+      const out = [];
+      for (const w of Services.wm.getEnumerator("navigator:browser")) {
+        if (w.closed || !w.gBrowser) continue;
+        for (const t of w.gBrowser.tabs) {
+          if (!t.selected && !t.closing && t.linkedPanel && !t.hasAttribute("pending") &&
+            !t.soundPlaying && !t.pictureinpicture && !t.multiselected &&
+            !t.hasAttribute("zen-split") && !t.hasAttribute("split-view") &&
+            !t.hasAttribute("zen-empty-tab") &&
+            !t.linkedBrowser?._sharingState?.webRTC?.sharing) out.push(t);
+        }
+      }
+      return out.sort((a, b) => a.lastAccessed - b.lastAccessed);
+    },
+
+    /** La ventana que mide: la primera abierta (si se cierra, la siguiente toma el relevo). */
+    isLeader() {
+      for (const w of Services.wm.getEnumerator("navigator:browser")) {
+        if (!w.closed && w.FyxMemory) return w == window;
+      }
+      return true;
     },
 
     async tick() {
-      if (!Services.prefs.getBoolPref("pyx.memory.enabled", true)) return;
-      // Solo una ventana mide (la de arriba); cada ventana duerme sus propias pestañas.
+      if (!Services.prefs.getBoolPref("pyx.memory.enabled", true) || !this.isLeader()) return 90_000;
       const used = await this.usedMB().catch(() => 0);
       const limit = this.limitMB();
-      if (used < limit) return;
+      if (used < limit) return used < limit * 0.7 ? 90_000 : 20_000;
       // Cuanto más se pasa, más pestañas duerme de una vez (máximo 4 por vuelta).
       const n = Math.min(4, 1 + Math.floor((used - limit) / 300));
       for (const tab of this.candidates().slice(0, n)) {
         try {
-          gBrowser.discardBrowser(tab);
+          tab.ownerGlobal.gBrowser.discardBrowser(tab);
         } catch {}
       }
+      return 20_000;
     },
   };
 
   window.FyxMemory = FyxMemory;
-  const timer = setInterval(() => FyxMemory.tick(), 30_000);
-  window.addEventListener("unload", () => clearInterval(timer), { once: true });
+  let timer;
+  const loop = async () => {
+    const next = await FyxMemory.tick().catch(() => 60_000);
+    if (!window.closed) timer = setTimeout(loop, next);
+  };
+  timer = setTimeout(loop, 30_000);
+  window.addEventListener("unload", () => clearTimeout(timer), { once: true });
 })();

@@ -73,6 +73,36 @@ class StoreTest {
         assertEquals("{\"estado\":1}", r.sessionState)
     }
 
+    @Test fun gruposDeFijadasYEnlaceConZen() {
+        val sid = store.currentSpaceId
+        val a = store.newTab("https://a.com").also { store.setKind(it, TabKind.PINNED) }
+        val b = store.newTab("https://b.com").also { store.setKind(it, TabKind.PINNED) }
+        val n = store.newTab("https://n.com")
+        var cambios = 0
+        store.onSyncChange = { cambios++ }
+        store.setFolder(listOf(a, b), store.newFolderName(sid, TabKind.PINNED))
+        assertEquals(listOf("Grupo"), store.folders(sid, TabKind.PINNED))
+        assertTrue(store.folders(sid).isEmpty()) // los grupos de normales son aparte
+        store.setFolder(listOf(n), "Grupo")
+        assertEquals(listOf(a, b), store.folderTabs(sid, "Grupo", TabKind.PINNED))
+        store.renameFolder(sid, "Grupo", "Trabajo", TabKind.PINNED)
+        assertEquals(listOf("Trabajo"), store.folders(sid, TabKind.PINNED))
+        assertEquals("Grupo", n.folder)
+        assertTrue(cambios >= 2) // mover fijadas avisa a la sincronización
+        val antes = cambios
+        store.setFolder(listOf(n), "Otro") // las normales no viajan a Zen
+        assertEquals(antes, cambios)
+        // Al desfijar sale de su grupo; el enlace con Zen se guarda en la base de datos.
+        store.link(a, "zen-a")
+        store.setKind(b, TabKind.NORMAL)
+        assertEquals("", b.folder)
+        store.flush(); waitDb()
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val again = Store(db, Settings(ctx)).apply { load() }
+        assertEquals("zen-a", again.tabById(a.id)!!.zenId)
+        assertEquals("Trabajo", again.tabById(a.id)!!.folder)
+    }
+
     @Test fun borrarEspacioCierraSusPestanas() {
         val other = store.spaces[1]
         val t = store.newTab("https://a.com", spaceId = other.id)

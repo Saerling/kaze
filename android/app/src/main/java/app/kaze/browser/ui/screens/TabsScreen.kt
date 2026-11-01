@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import app.kaze.browser.data.TabKind
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
@@ -289,7 +292,7 @@ fun TabsScreen(
             }
             if (pinned.isNotEmpty() && query.isBlank()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "pinned") {
-                    Column { PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu) }
+                    Column(Modifier.zIndex(1f)) { PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu) }
                 }
             }
             // Pestañas sueltas y carpetas (una carpeta ocupa el lugar de su primera pestaña).
@@ -427,67 +430,7 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
         modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
     )
     if (!essential) {
-        // Fijadas: píldoras con ícono y nombre (como la lista de Zen). Las que están en un grupo van bajo su
-        // etiqueta de color, que se pliega o despliega al tocarla (grupos de fijadas, como las carpetas de Zen).
-        val loose = tabs.filter { it.folder.isEmpty() }
-        val groups = tabs.filter { it.folder.isNotEmpty() }.groupBy { it.folder }
-        val open = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
-        androidx.compose.foundation.layout.BoxWithConstraints {
-            val cols = maxOf(2, ((maxWidth + 8.dp) / 220.dp).toInt())
-            @Composable
-            fun Chips(list: List<Tab>) = Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                list.chunked(cols).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { t ->
-                            Row(
-                                Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(50))
-                                    .background(if (t.id == selectedId) k.accent.copy(alpha = 0.18f) else k.card)
-                                    .tap({ onOpen(t) }, { onMenu(t) }).padding(horizontal = 12.dp)
-                                    .semantics { contentDescription = t.displayTitle },
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Favicon(t.pinnedUrl ?: t.url, 18.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text(t.displayTitle, style = KazeType.subhead, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            }
-                        }
-                        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (loose.isNotEmpty()) Chips(loose)
-                groups.forEach { (name, list) ->
-                    val c = folderColor(name)
-                    val expanded = open[name] ?: (list.any { it.id == selectedId })
-                    Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(c.copy(alpha = if (k.isDark) 0.14f else 0.10f))
-                            .animateContentSize(spring(0.9f, 500f)).padding(6.dp),
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).tap({ open[name] = !expanded }, { open[name] = !expanded })
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                                .semantics { contentDescription = "Grupo $name, ${list.size} pestañas" },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(c), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Outlined.Folder, null, tint = Color.White, modifier = Modifier.size(15.dp))
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Text(name, style = KazeType.body.copy(fontWeight = FontWeight.SemiBold), color = k.ink, maxLines = 1, modifier = Modifier.weight(1f))
-                            // Vista previa: los íconos del grupo cuando está plegado.
-                            if (!expanded) list.take(4).forEach { Favicon(it.pinnedUrl ?: it.url, 16.dp, Modifier.padding(start = 4.dp)) }
-                            Text("  ${list.size}", style = KazeType.footnote, color = k.ink55)
-                            Icon(
-                                Icons.Outlined.KeyboardArrowDown, null, tint = k.ink55,
-                                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (expanded) 180f else 0f },
-                            )
-                        }
-                        if (expanded) { Spacer(Modifier.height(4.dp)); Chips(list) }
-                    }
-                }
-            }
-        }
+        PinnedGroups(tabs, selectedId, onOpen, onMenu)
         return
     }
     // Columnas según el ancho (4 en teléfono, más en tableta): los íconos no quedan perdidos en columnas enormes.
@@ -516,6 +459,215 @@ private fun PinnedStrip(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> U
         }
     }
     }
+}
+
+/**
+ * Fijadas del espacio: píldoras con ícono y nombre (como la lista de Zen). Las que están en un grupo van
+ * dentro de su tarjeta de color, que se pliega o despliega al tocar la etiqueta (son las carpetas de Zen).
+ *
+ * Mantener y arrastrar una fijada: encima de otra fijada (un momento, hasta que vibra) crea un grupo con las
+ * dos o la mete en el grupo de la otra; encima de un grupo la añade; fuera de los grupos la saca del suyo.
+ * Mantener sin mover abre su menú. Funciona igual en las tres vistas (tarjetas, compacta y lista).
+ */
+@Composable
+private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> Unit, onMenu: (Tab) -> Unit) {
+    val k = LocalKaze.current
+    val store = LocalApp.current.store
+    val haptics = LocalHapticFeedback.current
+    val loose = tabs.filter { it.folder.isEmpty() }
+    val groups = tabs.filter { it.folder.isNotEmpty() }.groupBy { it.folder }
+    val open = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+
+    // Arrastre: dónde está cada píldora y cada grupo en la pantalla, y qué hay bajo el dedo.
+    val bounds = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    var dragId by remember { mutableStateOf<String?>(null) }
+    var dragStart by remember { mutableStateOf(Offset.Zero) }
+    var grab by remember { mutableStateOf(Offset.Zero) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var hover by remember { mutableStateOf<String?>(null) }
+    var ready by remember { mutableStateOf(false) }
+    LaunchedEffect(hover) {
+        ready = false
+        val h = hover ?: return@LaunchedEffect
+        // Sobre un grupo se suelta al instante; sobre otra fijada hay que esperar un momento (como las carpetas de iOS).
+        if (!h.startsWith("t:")) { ready = true; return@LaunchedEffect }
+        delay(450)
+        ready = true
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+    }
+    fun targetAt(p: Offset, self: Tab): String? {
+        val hit = bounds.entries.filter { it.value.contains(p) }.map { it.key }
+        return hit.firstOrNull { it.startsWith("t:") && it != "t:${self.id}" }
+            ?: hit.firstOrNull { it.startsWith("g:") && it != "g:${self.folder}" }
+            ?: hit.firstOrNull { it == "loose" && self.folder.isNotEmpty() }
+    }
+    fun reset() { dragId = null; hover = null; ready = false; dragOffset = Offset.Zero }
+    fun drop(t: Tab) {
+        val target = hover
+        when {
+            dragOffset.getDistance() < 24f -> onMenu(t)
+            target == null -> Unit
+            target == "loose" -> store.setFolder(listOf(t), "")
+            target.startsWith("g:") -> store.setFolder(listOf(t), target.removePrefix("g:"))
+            else -> store.tabById(target.removePrefix("t:"))?.let { other ->
+                if (ready) {
+                    store.setFolder(listOf(other, t), other.folder.ifEmpty { store.newFolderName(other.spaceId, TabKind.PINNED) })
+                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                } else {
+                    // Soltar sin esperar: se pone en su lugar (y en su grupo, si la otra está en uno).
+                    if (t.folder != other.folder) store.setFolder(listOf(t), other.folder)
+                    store.moveBefore(t, other)
+                }
+            }
+        }
+        reset()
+    }
+
+    androidx.compose.foundation.layout.BoxWithConstraints {
+        val cols = maxOf(2, ((maxWidth + 8.dp) / 220.dp).toInt())
+
+        @Composable
+        fun Chip(t: Tab, modifier: Modifier) {
+            val key = "t:${t.id}"
+            val dragging = dragId == t.id
+            val merge = hover == key && ready
+            val scale by animateFloatAsState(if (merge) 0.92f else 1f, spring(0.55f, 500f), label = "fijada")
+            val bg = when {
+                merge -> k.accent.copy(alpha = 0.26f)
+                t.id == selectedId -> k.accent.copy(alpha = 0.18f)
+                else -> k.card
+            }
+            Row(
+                modifier.height(44.dp)
+                    .onGloballyPositioned { bounds[key] = it.boundsInRoot() }
+                    .then(
+                        if (dragging) Modifier.zIndex(10f).graphicsLayer {
+                            // Sigue al dedo aunque el resto se acomode mientras tanto (sin saltos).
+                            val now = bounds[key]?.topLeft ?: (dragStart - grab)
+                            val at = dragStart + dragOffset - grab - now
+                            translationX = at.x; translationY = at.y
+                            scaleX = 1.06f; scaleY = 1.06f; shadowElevation = 22f; alpha = 0.96f
+                            shape = RoundedCornerShape(50); clip = true
+                        } else Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+                    )
+                    .clip(RoundedCornerShape(50))
+                    .background(bg)
+                    .then(if (merge) Modifier.border(1.5.dp, k.accent, RoundedCornerShape(50)) else Modifier)
+                    .clickable { onOpen(t) }
+                    .pointerInput(t.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { local ->
+                                grab = local
+                                dragStart = (bounds[key]?.topLeft ?: Offset.Zero) + local
+                                dragOffset = Offset.Zero
+                                dragId = t.id
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            onDrag = { change, d ->
+                                change.consume()
+                                dragOffset += d
+                                hover = targetAt(dragStart + dragOffset, t)
+                            },
+                            onDragEnd = { drop(t) },
+                            onDragCancel = { reset() },
+                        )
+                    }
+                    .padding(horizontal = 12.dp)
+                    .semantics { contentDescription = t.displayTitle },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Favicon(t.pinnedUrl ?: t.url, 18.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(t.displayTitle, style = KazeType.subhead, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+        }
+
+        @Composable
+        fun Chips(list: List<Tab>) = Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            list.chunked(cols).forEach { row ->
+                Row(
+                    Modifier.zIndex(if (row.any { it.id == dragId }) 1f else 0f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    row.forEach { t -> androidx.compose.runtime.key(t.id) { Chip(t, Modifier.weight(1f)) } }
+                    repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+
+        Column {
+            // Zona de las sueltas: soltar aquí una fijada de un grupo la saca del grupo.
+            val looseTarget = hover == "loose"
+            val fromGroup = tabs.firstOrNull { it.id == dragId }?.folder?.isNotEmpty() == true
+            val looseBg by androidx.compose.animation.animateColorAsState(
+                if (looseTarget) k.accent.copy(alpha = 0.12f) else Color.Transparent, spring(stiffness = 500f), label = "sueltas",
+            )
+            Box(
+                Modifier.fillMaxWidth().zIndex(if (loose.any { it.id == dragId }) 1f else 0f)
+                    .onGloballyPositioned { bounds["loose"] = it.boundsInRoot() }
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(looseBg),
+            ) {
+                if (loose.isNotEmpty()) Chips(loose)
+                // Sin sueltas, al arrastrar desde un grupo aparece (con un resorte) un sitio para sacarla.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = loose.isEmpty() && fromGroup,
+                    enter = androidx.compose.animation.expandVertically(spring(0.9f, 500f)) + fadeIn(tween(160)),
+                    exit = androidx.compose.animation.shrinkVertically(spring(0.9f, 500f)) + fadeOut(tween(120)),
+                ) {
+                    Box(
+                        Modifier.padding(bottom = 8.dp).fillMaxWidth().height(44.dp).border(1.dp, k.ink.copy(alpha = 0.18f), RoundedCornerShape(22.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("Suelta aquí para sacarla del grupo", style = KazeType.footnote, color = k.ink55) }
+                }
+            }
+            groups.entries.forEachIndexed { gi, (name, list) ->
+                androidx.compose.runtime.key("g:$name") {
+                    val c = folderColor(name)
+                    val gk = "g:$name"
+                    val target = hover == gk || list.any { hover == "t:${it.id}" && ready }
+                    val expanded = open[name] ?: (list.any { it.id == selectedId })
+                    val tint by androidx.compose.animation.animateColorAsState(
+                        c.copy(alpha = if (target) 0.26f else if (k.isDark) 0.14f else 0.10f), spring(stiffness = 500f), label = "grupo",
+                    )
+                    Column(
+                        Modifier.padding(top = if (gi == 0 && loose.isEmpty()) 0.dp else 8.dp)
+                            .fillMaxWidth().zIndex(if (list.any { it.id == dragId }) 1f else 0f)
+                            .onGloballyPositioned { bounds[gk] = it.boundsInRoot() }
+                            .clip(RoundedCornerShape(18.dp)).background(tint)
+                            .then(if (target) Modifier.border(1.5.dp, c, RoundedCornerShape(18.dp)) else Modifier)
+                            .animateContentSize(spring(0.9f, 500f)).padding(6.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).tap({ open[name] = !expanded }, { open[name] = !expanded })
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .semantics { contentDescription = "Grupo $name, ${list.size} pestañas" },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(c), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Outlined.Folder, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Text(name, style = KazeType.body.copy(fontWeight = FontWeight.SemiBold), color = k.ink, maxLines = 1, modifier = Modifier.weight(1f))
+                            // Vista previa: los íconos del grupo cuando está plegado.
+                            if (!expanded) list.take(4).forEach { Favicon(it.pinnedUrl ?: it.url, 16.dp, Modifier.padding(start = 4.dp)) }
+                            Text("  ${list.size}", style = KazeType.footnote, color = k.ink55)
+                            val turn by animateFloatAsState(if (expanded) 180f else 0f, spring(0.8f, 400f), label = "flecha")
+                            Icon(
+                                Icons.Outlined.KeyboardArrowDown, null, tint = k.ink55,
+                                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = turn },
+                            )
+                        }
+                        if (expanded) { Spacer(Modifier.height(4.dp)); Chips(list) }
+                    }
+                }
+            }
+        }
+    }
+    // Lo que ya no se ve (cerradas, grupos plegados o que desaparecieron) no puede ser destino.
+    val alive = (loose + groups.filter { (name, list) -> open[name] ?: list.any { it.id == selectedId } }.values.flatten())
+        .map { "t:${it.id}" }.toSet() + groups.keys.map { "g:$it" } + "loose"
+    androidx.compose.runtime.SideEffect { bounds.keys.filter { it !in alive }.forEach { bounds.remove(it) } }
 }
 
 @Composable

@@ -34,6 +34,7 @@ import app.kaze.browser.ui.screens.StartPage
 import app.kaze.browser.ui.screens.ZenPanel
 import app.kaze.browser.ui.screens.TabsScreen
 import app.kaze.browser.ui.sheets.GroupsSheet
+import app.kaze.browser.ui.sheets.GroupPicker
 import app.kaze.browser.ui.theme.KazeTheme
 import app.kaze.browser.ui.theme.LocalKaze
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -180,6 +181,22 @@ class ScreenshotTest {
         compose.setContent { Themed(true) { CompositionLocalProvider(LocalApp provides app) { Box(Modifier.fillMaxSize()) { Tabs() } } } }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-fijadas-grupo.png")
+    }
+
+    /** "Añadir a un grupo…" del menú de una fijada: grupos existentes y "Nuevo grupo". */
+    @Test fun fijadas_grupo_menu() {
+        val pinned = app.store.pinned(app.store.currentSpaceId)
+        app.store.setFolder(pinned.take(2), "Trabajo")
+        val tab = pinned.last()
+        compose.setContent {
+            Themed(true) {
+                Column(Modifier.fillMaxSize().background(LocalKaze.current.paper).padding(top = 24.dp)) {
+                    GroupPicker(tab, {}, {}, {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-fijadas-grupo-menu.png")
     }
 
     @Test fun material_you() {

@@ -436,8 +436,8 @@ private fun ZenSyncSection() {
     fun pull() {
         busy = true
         scope.launch {
-            runCatching { ZenSync.pull(context, app.store) + 0 * runCatching { ZenSync.syncPasswords(context, app.logins) }.getOrDefault(0) }
-                .onSuccess { app.ui.show(if (it == 0) "Todo al día con el escritorio" else "$it pestañas traídas del escritorio") }
+            runCatching { app.tabSync.syncNow().also { runCatching { ZenSync.syncPasswords(context, app.logins) } } }
+                .onSuccess { app.ui.show(if (it == 0) "Todo al día con el escritorio" else if (it == 1) "1 pestaña traída del escritorio" else "$it pestañas traídas del escritorio") }
                 .onFailure { app.ui.show("No se pudo sincronizar: ${it.message ?: it.javaClass.simpleName}") }
             busy = false
         }
@@ -494,7 +494,7 @@ private fun ZenSyncSection() {
             }
             IosRow("Cerrar sesión", titleColor = SystemRed, divider = false) { ZenSync.signOut(context); email = null }
         }
-        Note("Se sincronizan espacios, pestañas, carpetas, Essentials y contraseñas. Las contraseñas viajan cifradas de extremo a extremo, como en Firefox.")
+        Note("Se sincronizan en ambos sentidos los espacios, las pestañas fijadas y sus grupos, las Essentials y las contraseñas (las pestañas normales se quedan en cada dispositivo, como en Zen). Las contraseñas viajan cifradas de extremo a extremo, como en Firefox.")
     }
     if (email == null) IosGroup {
         IosRow("Contraseñas guardadas", trailing = { Text("${app.logins.count}", style = KazeType.body, color = k.ink55) }, chevron = true, divider = false) { passwords = true }

@@ -253,7 +253,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         if (::app.isInitialized && !showTabs) app.pool.resumeVisible()
+        // Al volver al primer plano se traen los cambios del escritorio (la primera vez la lanza el arranque).
+        if (::app.isInitialized && startedOnce) app.tabSync.onForeground()
+        startedOnce = true
     }
+    private var startedOnce = false
 
     override fun onStop() {
         super.onStop()
@@ -637,11 +641,13 @@ class MainActivity : ComponentActivity() {
             permissionLauncher.launch(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS))
         }
 
-        // Sincronización con el escritorio (si hay sesión): trae lo nuevo poco después de abrir, sin frenar el arranque.
+        // Sincronización con el escritorio (si hay sesión): poco después de abrir, sin frenar el arranque.
+        // Luego, cada vez que la app vuelve al primer plano (onStart), como mucho una vez cada 5 minutos.
         LaunchedEffect(Unit) {
+            app.tabSync.onNews = { n -> ui.show(if (n == 1) "1 pestaña nueva del escritorio" else "$n pestañas nuevas del escritorio") }
             if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect
             delay(4000)
-            runCatching { ZenSync.pull(this@MainActivity, store) }.onSuccess { if (it > 0) ui.show("$it pestañas nuevas del escritorio") }
+            app.tabSync.onForeground()
             runCatching { ZenSync.syncPasswords(this@MainActivity, app.logins) }
         }
         val navPx = WindowInsets.navigationBars.getBottom(density)

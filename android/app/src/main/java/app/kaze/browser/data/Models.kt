@@ -68,6 +68,8 @@ class Space(
     var position by mutableIntStateOf(position)
     /** Si es true, el espacio tiene sus propias cookies y sesiones (como un contenedor de Firefox). */
     var isolated by mutableStateOf(isolated)
+    /** Id del espacio de Zen con el que se sincroniza (null = solo en este teléfono). */
+    var zenId: String? = null
 
     /** Contexto de Gecko propio si el espacio está aislado (dentro de su perfil). */
     fun contextId(profile: Profile?): String? = if (isolated) "kaze-space-$id" else profile?.contextId
@@ -107,6 +109,8 @@ class Tab(
     var position by mutableIntStateOf(position)
     var lastUsed by mutableLongStateOf(lastUsed)
     var pinnedUrl by mutableStateOf(pinnedUrl)
+    /** Id del registro de Zen (Firefox Sync) de esta fijada o Essential; null si aún no se ha subido. */
+    var zenId: String? = null
 
     // Estado efímero (no se guarda)
     var progress by mutableIntStateOf(100)

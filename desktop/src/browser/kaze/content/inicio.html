@@ -16,11 +16,8 @@
 <body>
   <main>
     <header id="saludo">
-      <img src="chrome://kaze/content/iconos/kaze.svg" alt="" width="44" height="44">
-      <div>
-        <h1 id="hola">Hola</h1>
-        <p id="fecha"></p>
-      </div>
+      <p id="fecha"></p>
+      <h1 id="hola">Hola</h1>
     </header>
     <button id="buscar" type="button">
       <span class="lupa"></span>
@@ -29,26 +26,36 @@
 
     <section id="favoritos" hidden>
       <h2>Favoritos</h2>
-      <div class="cuadricula"></div>
+      <div class="panel"><div class="cuadricula"></div></div>
     </section>
 
     <section id="frecuentes" hidden>
       <h2>Visitados con frecuencia</h2>
-      <div class="cuadricula"></div>
+      <div class="filas"></div>
     </section>
 
     <section id="privacidad">
       <h2>Informe de privacidad</h2>
-      <a class="tarjeta privacidad" href="about:protections">
+      <a class="destacada" href="about:protections">
         <span class="escudo"></span>
         <span class="cifra" id="rastreadores">0</span>
         <span class="texto" id="rastreadores-texto">En los últimos siete días, Fyx evitó que los rastreadores te siguieran.</span>
+        <span class="mas">Ver informe</span>
       </a>
+    </section>
+
+    <section id="reanudar" hidden>
+      <h2>Reanudar navegación</h2>
+      <div class="grupo" id="cerradas" hidden>
+        <h3>Cerradas recientemente</h3>
+        <div class="filas"></div>
+      </div>
+      <div id="dispositivos" hidden></div>
     </section>
 
     <section id="lectura" hidden>
       <h2>Lista de lectura</h2>
-      <div class="lista"></div>
+      <div class="filas"></div>
     </section>
 
     <p id="vacio" hidden>Aquí aparecerán tus favoritos, los sitios que más visitas y tu lista de lectura.</p>

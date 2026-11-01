@@ -16,6 +16,12 @@ pref("pyx.glass.opacity", "0.5");
 pref("zen.view.show-clear-tabs-button", true);
 pref("zen.updates.show-update-notification", false);
 pref("zen.welcome-screen.seen", true);
+// Página de inicio de Fyx (favoritos, frecuentes, privacidad, reanudar navegación, lista de lectura).
+pref("pyx.startpage.enabled", true);
+pref("browser.startup.homepage", "chrome://kaze/content/inicio.html");
+// Ctrl+T abre una pestaña con la página de inicio (como Safari), no la dirección flotante de Zen.
+pref("zen.urlbar.replace-newtab", false);
+pref("zen.urlbar.open-on-startup", false);
 #ifdef XP_WIN
 pref("widget.windows.mica", true);
 pref("widget.windows.mica.toplevel-backdrop", 2);
@@ -35,7 +41,8 @@ pref("dom.ipc.processPrelaunch.enabled", false);
 pref("zen.tab-unloader.enabled", true);
 pref("zen.tab-unloader.timeout-minutes", 10);
 pref("browser.tabs.unloadOnLowMemory", true);
-pref("browser.tabs.min_inactive_duration_before_unload", 300000);
+// Con poca memoria, Firefox puede dormir pestañas que lleven 2 min sin usarse (antes 5).
+pref("browser.tabs.min_inactive_duration_before_unload", 120000);
 pref("browser.low_commit_space_threshold_mb", 2048);
 pref("browser.low_commit_space_threshold_percent", 10);
 // Regulador de Fyx: si todo el navegador pasa de este límite, duerme las pestañas más viejas.
@@ -49,6 +56,16 @@ pref("image.mem.surfacecache.max_size_kb", 131072);
 pref("browser.newtab.preload", false);
 pref("network.prefetch-next", false);
 pref("browser.sessionstore.interval", 60000);
+// Sesión más ligera: menos pestañas cerradas guardadas y menos historial por pestaña
+// (se guarda en RAM y se reescribe en disco cada minuto).
+pref("browser.sessionstore.max_tabs_undo", 15);
+pref("browser.sessionstore.max_windows_undo", 2);
+pref("browser.sessionstore.max_serialize_back", 6);
+pref("browser.sessionstore.max_serialize_forward", 2);
+pref("browser.sessionhistory.max_entries", 30);
+// Caché de imágenes decodificadas: se descarta antes lo que no está a la vista.
+pref("image.mem.surfacecache.min_expiration_ms", 30000);
+pref("media.memory_cache_max_size", 16384);
 
 // ── Menos ruido ───────────────────────────────────────────────────────
 pref("extensions.pocket.enabled", false);
@@ -64,6 +81,10 @@ pref("browser.urlbar.quicksuggest.enabled", false);
 pref("browser.topsites.contile.enabled", false);
 pref("network.dns.disablePrefetch", true);
 pref("network.predictor.enabled", false);
+// Sin conexiones anticipadas al pasar el ratón o escribir en la dirección.
+pref("network.http.speculative-parallel-limit", 0);
+pref("browser.urlbar.speculativeConnect.enabled", false);
+pref("browser.places.speculativeConnect.enabled", false);
 // Desplazamiento más fluido: física de inercia como en Safari y rebote al llegar al borde.
 pref("general.smoothScroll.msdPhysics.enabled", true);
 pref("apz.overscroll.enabled", true);

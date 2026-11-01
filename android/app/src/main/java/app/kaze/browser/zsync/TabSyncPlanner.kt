@@ -49,11 +49,48 @@ object TabSyncPlanner {
         data class CreateRemote(val tabId: String, val state: State, val url: String) : Op()
     }
 
+    /**
+     * Misma página para enlazar una pestaña de aquí con una de la cuenta: la URL completa (con su
+     * consulta: dos vídeos de YouTube son distintos), sin el ancla ni la barra final.
+     */
+    fun sameUrl(url: String): String = url.substringBefore('#').trimEnd('/')
+
+    /** Solo se sincronizan páginas web: about:, file:, content:… se quedan en el teléfono. */
+    fun syncable(url: String): Boolean = url.startsWith("https://", true) || url.startsWith("http://", true)
+
+    /** La sincronización se detuvo para no cerrar ni borrar pestañas por un fallo de lectura. */
+    class Unsafe(message: String) : Exception(message)
+
+    /**
+     * Freno de seguridad sobre el plan, antes de tocar nada:
+     *  - si la cuenta llega vacía pero antes había pestañas sincronizadas, no se hace nada;
+     *  - si hubo registros que no se pudieron descifrar, no se cierra ni se borra nada (lo que "falta"
+     *    puede estar en ellos), ni se vuelven a subir las que parecen haber desaparecido;
+     *  - si se cerrarían aquí más del 30 % de las sincronizadas (y más de 3), se detiene y se avisa.
+     */
+    fun guard(ops: List<Op>, base: Map<String, State>, remote: Map<String, Remote>, decryptFailures: Int): List<Op> {
+        if (remote.isEmpty() && base.isNotEmpty()) {
+            throw Unsafe("La cuenta no devolvió ninguna pestaña fijada; por seguridad no se cambió nada.")
+        }
+        var out = ops
+        if (decryptFailures > 0) {
+            val unlinked = ops.filterIsInstance<Op.Unlink>().map { it.tabId }.toSet()
+            out = ops.filterNot {
+                it is Op.CloseLocal || it is Op.DeleteRemote || it is Op.Unlink || (it is Op.CreateRemote && it.tabId in unlinked)
+            }
+        }
+        val closing = out.count { it is Op.CloseLocal }
+        if (closing > maxOf(3, (base.size * 0.3).toInt())) {
+            throw Unsafe("Se iban a cerrar $closing de ${base.size} pestañas sincronizadas; por seguridad no se cambió nada.")
+        }
+        return out
+    }
+
     fun plan(
         base: Map<String, State>,
         remote: Map<String, Remote>,
         local: List<Local>,
-        norm: (String) -> String = { it },
+        norm: (String) -> String = ::sameUrl,
     ): List<Op> {
         val ops = mutableListOf<Op>()
         val byZen = local.filter { it.zenId != null }.associateBy { it.zenId!! }

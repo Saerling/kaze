@@ -4,6 +4,7 @@
 
 package app.kaze.browser
 
+import app.kaze.browser.zsync.ZenTabSync
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.SideEffect
 import app.kaze.browser.ui.screens.HistoryPopup
@@ -422,16 +423,20 @@ class MainActivity : ComponentActivity() {
             val sid = t.spaceId
             val kind = t.kind
             val priv = t.isPrivate
+            val folder = t.folder
+            val zenId = t.zenId
+            val home = t.pinnedUrl
+            // Si está sincronizada con Zen, el cierre no se sube mientras se puede deshacer.
+            if (zenId != null) app.tabSync.hold(ZenTabSync.UNDO_HOLD_MS)
             val next = if (wasSelected) store.nextAfterClose(t) else null
             app.pool.close(t)
             app.thumbnails.delete(t.id)
             store.close(t)
             if (next != null) open(next) else if (store.selectedTab == null) showTabs = true
             // Píldora para deshacer el cierre.
-            ui.show("Pestaña cerrada", "Deshacer") {
+            ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer") {
                 store.recentlyClosed.removeAll { it.first == url }
-                val back = store.newTab(url, spaceId = sid, private = priv, select = wasSelected)
-                if (kind != TabKind.NORMAL) store.setKind(back, kind)
+                val back = store.reopen(url, sid, kind, folder, zenId, home, priv, select = wasSelected)
                 if (wasSelected) open(back)
             }
         }
@@ -645,6 +650,7 @@ class MainActivity : ComponentActivity() {
         // Luego, cada vez que la app vuelve al primer plano (onStart), como mucho una vez cada 5 minutos.
         LaunchedEffect(Unit) {
             app.tabSync.onNews = { n -> ui.show(if (n == 1) "1 pestaña nueva del escritorio" else "$n pestañas nuevas del escritorio") }
+            app.tabSync.onProblem = { ui.show(it) }
             if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect
             delay(4000)
             app.tabSync.onForeground()

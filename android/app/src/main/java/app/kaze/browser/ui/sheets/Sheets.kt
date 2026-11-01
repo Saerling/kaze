@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.sheets
 
+import app.kaze.browser.zsync.ZenTabSync
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
@@ -357,7 +360,7 @@ fun ShareSheet(
                 }
                 when (tab.kind) {
                     TabKind.NORMAL -> IosRow("Fijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.PINNED); onDismiss() }
-                    TabKind.PINNED -> IosRow("Desfijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.NORMAL); onDismiss() }
+                    TabKind.PINNED -> IosRow("Desfijar pestaña", Icons.Outlined.PushPin) { unpinWithUndo(app, tab); onDismiss() }
                     TabKind.ESSENTIAL -> Unit
                 }
                 val home = tab.pinnedUrl
@@ -367,7 +370,7 @@ fun ShareSheet(
                 if (store.profileSpaces.size > 1) IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
             }
             IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
-                app.pool.close(tab); store.close(tab); onDismiss()
+                closeWithUndo(app, tab); onDismiss()
             }
         }
     }
@@ -447,7 +450,10 @@ fun TabMenuSheet(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onMove: ()
                         app.ui.show("Añadida al grupo «$name»")
                         onDismiss()
                     }
-                    "rename" -> GroupName(title = "Renombrar grupo", action = "Guardar", initial = tab.folder, onBack = { page = "menu" }) { name ->
+                    "rename" -> GroupName(
+                        title = "Renombrar grupo", action = "Guardar", initial = tab.folder, onBack = { page = "menu" },
+                        existing = store.folders(tab.spaceId, tab.kind).toSet() - tab.folder,
+                    ) { name ->
                         store.renameFolder(tab.spaceId, tab.folder, name, tab.kind)
                         onDismiss()
                     }
@@ -473,7 +479,7 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
             }
             when (tab.kind) {
                 TabKind.NORMAL -> IosRow("Fijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.PINNED); onDismiss() }
-                TabKind.PINNED -> IosRow("Desfijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.NORMAL); onDismiss() }
+                TabKind.PINNED -> IosRow("Desfijar pestaña", Icons.Outlined.PushPin) { unpinWithUndo(app, tab); onDismiss() }
                 TabKind.ESSENTIAL -> Unit
             }
             if (tab.kind != TabKind.ESSENTIAL) {
@@ -487,7 +493,45 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
             IosRow("Copiar dirección", Icons.Outlined.ContentCopy) { ClipboardBridge.copy?.invoke(tab.url); onDismiss() }
         }
         IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
-            app.pool.close(tab); store.close(tab); app.thumbnails.delete(tab.id); onDismiss()
+            closeWithUndo(app, tab); onDismiss()
+        }
+    }
+}
+
+/**
+ * Cerrar una pestaña desde el menú. Si está sincronizada con Zen, el aviso lo dice, trae "Deshacer" y
+ * la subida espera a que el aviso desaparezca: si se deshace, en Zen no pasa nada.
+ */
+internal fun closeWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
+    val store = app.store
+    val zenId = tab.zenId
+    if (zenId != null) app.tabSync.hold(ZenTabSync.UNDO_HOLD_MS)
+    val url = tab.url
+    val sid = tab.spaceId
+    val kind = tab.kind
+    val folder = tab.folder
+    val home = tab.pinnedUrl
+    val priv = tab.isPrivate
+    app.pool.close(tab); store.close(tab); app.thumbnails.delete(tab.id)
+    if (zenId != null || kind != TabKind.NORMAL) {
+        app.ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer") {
+            store.recentlyClosed.removeAll { it.first == url }
+            store.reopen(url, sid, kind, folder, zenId, home, priv)
+        }
+    }
+}
+
+/** Desfijar con aviso y "Deshacer" si la fijada está en Zen (el cambio se sube cuando el aviso se va). */
+internal fun unpinWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
+    val store = app.store
+    val zenId = tab.zenId
+    val folder = tab.folder
+    if (zenId != null) app.tabSync.hold(ZenTabSync.UNDO_HOLD_MS)
+    store.setKind(tab, TabKind.NORMAL)
+    if (zenId != null) {
+        app.ui.show("Desfijada (también se quitará de Zen)", "Deshacer") {
+            store.setKind(tab, TabKind.PINNED)
+            store.setFolder(listOf(tab), folder)
         }
     }
 }
@@ -528,7 +572,7 @@ internal fun GroupPicker(tab: Tab, onBack: () -> Unit, onNew: () -> Unit, onDone
 
 /** Nombre de un grupo (nuevo o renombrado), con el teclado abierto y "Crear"/"Guardar" arriba. */
 @Composable
-private fun GroupName(title: String, action: String, initial: String, onBack: () -> Unit, onSave: (String) -> Unit) {
+private fun GroupName(title: String, action: String, initial: String, onBack: () -> Unit, existing: Set<String> = emptySet(), onSave: (String) -> Unit) {
     val k = LocalKaze.current
     var name by remember { mutableStateOf(TextFieldValue(initial, TextRange(0, initial.length))) }
     val focus = remember { FocusRequester() }
@@ -537,15 +581,16 @@ private fun GroupName(title: String, action: String, initial: String, onBack: ()
         name.text.trim().takeIf { it.isNotEmpty() }?.let(onSave)
     }
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "Atrás", style = KazeType.body, color = k.accent,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 8.dp),
-        )
+        Box(
+            Modifier.heightIn(min = 44.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack).padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text("Atrás", style = KazeType.body, color = k.accent) }
         Text(title, style = KazeType.headline, color = k.ink, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-        Text(
-            action, style = KazeType.headline, color = if (name.text.isBlank()) k.ink35 else k.accent,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = name.text.isNotBlank()) { save() }.padding(horizontal = 10.dp, vertical = 8.dp),
-        )
+        Box(
+            Modifier.heightIn(min = 44.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(8.dp))
+                .clickable(enabled = name.text.isNotBlank()) { save() }.padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(action, style = KazeType.headline, color = if (name.text.isBlank()) k.ink35 else k.accent) }
     }
     Spacer(Modifier.height(8.dp))
     Row(
@@ -562,6 +607,17 @@ private fun GroupName(title: String, action: String, initial: String, onBack: ()
             keyboardActions = KeyboardActions(onDone = { save() }),
             modifier = Modifier.weight(1f).focusRequester(focus),
             decorationBox = { inner -> if (name.text.isEmpty()) Text("Nombre del grupo", style = KazeType.body, color = k.ink55); inner() },
+        )
+    }
+    // Renombrar a un nombre que ya existe junta los dos grupos: se avisa antes de guardar.
+    androidx.compose.animation.AnimatedVisibility(
+        visible = name.text.trim() in existing,
+        enter = androidx.compose.animation.expandVertically(spring(dampingRatio = 0.9f, stiffness = 500f)) + fadeIn(),
+        exit = androidx.compose.animation.shrinkVertically(spring(dampingRatio = 0.9f, stiffness = 500f)) + fadeOut(),
+    ) {
+        Text(
+            "Ya hay un grupo con ese nombre; se unirán.", style = KazeType.footnote, color = k.ink55,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
         )
     }
     Spacer(Modifier.height(12.dp))

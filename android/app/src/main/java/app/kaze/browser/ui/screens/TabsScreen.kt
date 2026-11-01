@@ -529,6 +529,8 @@ private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> 
         @Composable
         fun Chip(t: Tab, modifier: Modifier) {
             val key = "t:${t.id}"
+            // Una píldora que sale de pantalla (grupo plegado, pestaña cerrada) deja de ser destino.
+            androidx.compose.runtime.DisposableEffect(key) { onDispose { bounds.remove(key) } }
             val dragging = dragId == t.id
             val merge = hover == key && ready
             val scale by animateFloatAsState(if (merge) 0.92f else 1f, spring(0.55f, 500f), label = "fijada")
@@ -625,6 +627,7 @@ private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> 
                 androidx.compose.runtime.key("g:$name") {
                     val c = folderColor(name)
                     val gk = "g:$name"
+                    androidx.compose.runtime.DisposableEffect(gk) { onDispose { bounds.remove(gk) } }
                     val target = hover == gk || list.any { hover == "t:${it.id}" && ready }
                     val expanded = open[name] ?: (list.any { it.id == selectedId })
                     val tint by androidx.compose.animation.animateColorAsState(

@@ -96,6 +96,25 @@ class Db(context: Context) : SQLiteOpenHelper(context, "kaze.db", null, VERSION)
             db.execSQL("DROP TABLE history_v1")
             createV2(db)
         }
+        if (oldVersion < 4) dedupeImported(db)
+    }
+
+    /**
+     * Una sola vez, al pasar a v4 (antes de que exista ninguna pestaña nueva): las versiones anteriores
+     * podían traer de Zen la misma fijada o Essential repetida. Se deja una por dirección **completa**
+     * (con su consulta: dos vídeos distintos no son la misma página), por espacio en las fijadas y por
+     * perfil en las Essentials. Se conserva la más antigua.
+     */
+    private fun dedupeImported(db: SQLiteDatabase) {
+        db.execSQL(
+            """DELETE FROM tabs WHERE kind = 0 AND rowid NOT IN (
+                SELECT MIN(t.rowid) FROM tabs t LEFT JOIN spaces s ON t.space_id = s.id
+                WHERE t.kind = 0 GROUP BY COALESCE(s.profile_id, ''), COALESCE(t.pinned_url, t.url))""",
+        )
+        db.execSQL(
+            """DELETE FROM tabs WHERE kind = 1 AND rowid NOT IN (
+                SELECT MIN(rowid) FROM tabs WHERE kind = 1 GROUP BY space_id, COALESCE(pinned_url, url))""",
+        )
     }
 
     // ── Perfiles ──────────────────────────────────────────────────────

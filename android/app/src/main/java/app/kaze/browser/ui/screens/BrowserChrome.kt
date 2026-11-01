@@ -1064,9 +1064,12 @@ fun TabStrip(
     // Un grupo es su nombre dentro de su tipo: los de fijadas y los de normales no se mezclan (como en Zen).
     fun groupKey(t: Tab) = if (t.folder.isEmpty()) "" else "${t.kind.code}:${t.folder}"
     // Los miembros de cada grupo, juntos donde aparece el primero.
-    val ordered = run {
+    // Se agrupa una vez (O(n)) y solo cuando cambian las pestañas, su grupo o su tipo.
+    val shape = tabs.map { Triple(it.id, it.kind, it.folder) }
+    val ordered = remember(shape) {
+        val byGroup = tabs.groupBy(::groupKey)
         val seen = HashSet<String>()
-        buildList { tabs.forEach { t -> if (t.folder.isEmpty()) add(t) else if (seen.add(groupKey(t))) addAll(tabs.filter { groupKey(it) == groupKey(t) }) } }
+        buildList { tabs.forEach { t -> val g = groupKey(t); if (g.isEmpty()) add(t) else if (seen.add(g)) addAll(byGroup.getValue(g)) } }
     }
     val visible = ordered.filter { it.folder.isEmpty() || folded[groupKey(it)] != true }
     val groups = ordered.map { groupKey(it) }.filter { it.isNotEmpty() }.distinct()
@@ -1090,10 +1093,17 @@ fun TabStrip(
                     item(key = "g:$gk") {
                         val c = folderColor(name)
                         val count = ordered.count { groupKey(it) == gk }
-                        Row(
-                            Modifier.animateItem(placementSpec = spring(0.85f, 420f, IntOffset.VisibilityThreshold)).height(24.dp).clip(RoundedCornerShape(50)).background(c)
-                                .tap { folded[gk] = folded[gk] != true }.padding(horizontal = 10.dp)
+                        // Se toca toda la altura de la fila y al menos 44 dp de ancho (Compose amplía además el
+                        // área táctil hasta el mínimo del sistema); el dibujo sigue siendo la píldora de 24 dp.
+                        Box(
+                            Modifier.animateItem(placementSpec = spring(0.85f, 420f, IntOffset.VisibilityThreshold))
+                                .fillMaxHeight().widthIn(min = 44.dp)
+                                .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { folded[gk] = folded[gk] != true }
                                 .semantics { contentDescription = "Grupo $name, $count pestañas (tocar para plegar o desplegar)" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                        Row(
+                            Modifier.height(24.dp).clip(RoundedCornerShape(50)).background(c).padding(horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Los grupos de fijadas llevan una chincheta (son las carpetas de Zen).
@@ -1102,6 +1112,7 @@ fun TabStrip(
                             }
                             Text(name, style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
                             if (folded[gk] == true) Text("  $count", style = KazeType.footnote, color = Color.White.copy(alpha = 0.85f))
+                        }
                         }
                     }
                 }

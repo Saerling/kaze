@@ -168,6 +168,7 @@ object SpacesSyncService {
             fetchedAtMillis = System.currentTimeMillis(),
             separateEssentialsPref = prefs.separateEssentials,
             normalTabsCapability = capability,
+            decryptFailures = decryptFailures,
         )
     }
 
@@ -1293,7 +1294,7 @@ object SpacesSyncService {
         return trimmed.ifEmpty { null }
     }
 
-    private data class IncomingCleartext(val id: String, val cleartext: JSONObject) {
+    internal data class IncomingCleartext(val id: String, val cleartext: JSONObject) {
         val kind: String get() = cleartext.optString("kind")
         val data: JSONObject get() = cleartext.optJSONObject("data") ?: JSONObject()
     }
@@ -1322,28 +1323,80 @@ object SpacesSyncService {
         return out
     }
 
-    // MARK: - Fyx: carpetas y Essentials (escrituras condicionales, SPEC §7.2)
+    // MARK: - Fyx: sesión de escritura (escrituras condicionales, SPEC §7.2)
 
     /**
-     * Una lectura consistente y un POST condicional con todo el cambio. Si otro dispositivo escribió en
-     * medio (412 o lote parcial), se vuelve a leer y se rehace el plan una vez; si vuelve a fallar es un
-     * conflicto y no se escribe nada a medias. [plan] devuelve null cuando no hay nada que hacer.
+     * Una subida de Fyx: varias escrituras seguidas que comparten una sola lectura de la colección.
+     * Tras cada POST aceptado se aplica el lote a esa lectura y se toma la versión nueva del servidor
+     * (`X-Last-Modified` del propio POST), así que la siguiente escritura condicional sigue siendo segura:
+     * si otro dispositivo escribió en medio, el servidor responde 412 y entonces sí se vuelve a leer.
+     */
+    class WriteSession internal constructor(internal val client: SyncClient) {
+        internal var incoming: List<IncomingCleartext>? = null
+        internal var lastModified: String? = null
+        /** Lecturas completas hechas (para pruebas y registros). */
+        var reads = 0
+            internal set
+    }
+
+    /** Abre una sesión; comprueba una vez que la versión del motor permite escribir (SPEC §7.5). */
+    fun session(client: SyncClient): WriteSession {
+        ensureWritable(client)
+        return WriteSession(client)
+    }
+
+    private fun applyBatch(incoming: List<IncomingCleartext>, batch: List<JSONObject>): List<IncomingCleartext> {
+        val byId = LinkedHashMap<String, IncomingCleartext>()
+        incoming.forEach { byId[it.id] = it }
+        batch.forEach { rec ->
+            val id = rec.optString("id")
+            if ((rec.opt("deleted") as? Boolean) == true) byId.remove(id) else byId[id] = IncomingCleartext(id, rec)
+        }
+        return byId.values.toList()
+    }
+
+    /**
+     * Planea sobre la última lectura de la sesión y escribe con un POST condicional. Si el servidor dice
+     * que la colección cambió (412) o rechaza parte del lote, se vuelve a leer y se rehace el plan una
+     * vez; si vuelve a fallar es un conflicto y no queda nada a medias. [plan] devuelve null si no hay
+     * nada que hacer.
      */
     private fun <T> conditionalWrite(
-        client: SyncClient,
+        session: WriteSession,
         what: String,
         plan: (List<IncomingCleartext>) -> Pair<List<JSONObject>, T>?,
     ): T? {
-        ensureWritable(client)
+        val client = session.client
         var last: PostOutcome = PostOutcome.Applied
         for (attempt in 0 until 2) {
-            val read = client.getCollectionWithMetadata(collection)
-            val incoming = decryptedFrom(client, read.records)
+            val cached = session.incoming
+            val incoming: List<IncomingCleartext>
+            val lastModified: String?
+            if (attempt == 0 && cached != null) {
+                incoming = cached
+                lastModified = session.lastModified
+            } else {
+                val read = client.getCollectionWithMetadata(collection)
+                session.reads++
+                incoming = decryptedFrom(client, read.records)
+                lastModified = read.lastModified
+                session.incoming = incoming
+                session.lastModified = lastModified
+            }
             val (batch, result) = plan(incoming) ?: return null
             if (batch.isEmpty()) return result
-            when (val outcome = client.postRecords(collection, batch, read.lastModified)) {
-                is PostOutcome.Applied -> { AppEvents.emitSnapshotStale(); return result }
-                else -> last = outcome
+            when (val outcome = client.postRecords(collection, batch, lastModified)) {
+                is PostOutcome.Applied -> {
+                    val modified = client.lastPostModified
+                    session.incoming = if (modified != null) applyBatch(incoming, batch) else null
+                    session.lastModified = modified
+                    AppEvents.emitSnapshotStale()
+                    return result
+                }
+                else -> {
+                    last = outcome
+                    session.incoming = null
+                }
             }
         }
         throw SyncError.Conflict("$what: ${failureSummary(last)}")
@@ -1353,12 +1406,46 @@ object SpacesSyncService {
         incoming.firstOrNull { it.kind == "folder" && isTargetFolder(folderId, it.data) }
 
     /**
+     * Sube una fijada con un id elegido por quien llama: repetir la llamada con el mismo id no duplica
+     * (reescribe el mismo registro y la unión de `children` no cambia).
+     */
+    fun addPinned(session: WriteSession, recordId: String, url: String, title: String, spaceId: String, folderId: String?): String =
+        conditionalWrite(session, "add tab") { incoming ->
+            val space = incoming.firstOrNull { it.id == spaceId && it.kind == "space" } ?: throw SyncError.TargetMissing
+            val folder = folderId?.let { fid ->
+                incoming.firstOrNull { it.kind == "folder" && isTargetFolder(fid, it.data) && it.data.optString("workspaceUuid") == spaceId }
+            }
+            val target = AddTarget(spaceId, space.cleartext, folder?.id, folder?.cleartext)
+            listOf(
+                tabCleartext(recordId, url, title, spaceId, target, folderId, SaveKind.PINNED),
+                target.parentWrite(recordId),
+            ) to recordId
+        } ?: recordId
+
+    /** Borra una pestaña: lápida y fuera de todos los `children`, splits y Essentials del diseño. */
+    fun delete(session: WriteSession, id: String): Boolean =
+        conditionalWrite(session, "delete") { incoming ->
+            if (incoming.none { it.id == id }) return@conditionalWrite null
+            tombstoneBatch(id, incoming) to true
+        } ?: false
+
+    /** Mueve una fijada a la raíz del espacio o a una carpeta del mismo espacio. */
+    fun move(session: WriteSession, id: String, spaceId: String, folderId: String?): Boolean =
+        conditionalWrite(session, "move") { incoming ->
+            when (val plan = movePlan(id, normalizeFolderId(folderId), spaceId, incoming)) {
+                is MovePlan.Writes -> plan.records to true
+                MovePlan.Unchanged -> emptyList<JSONObject>() to true
+                MovePlan.Missing -> null
+            }
+        } ?: false
+
+    /**
      * Crea una carpeta (vacía) en la raíz de las fijadas del espacio y devuelve su id. Si ya hay una
      * carpeta con ese nombre en el espacio, devuelve la existente (no se duplican al reintentar).
      */
-    fun createFolder(client: SyncClient, spaceId: String, name: String): String {
+    fun createFolder(session: WriteSession, spaceId: String, name: String): String {
         val newId = ZenSpaces.newTabRecordId()
-        return conditionalWrite(client, "create folder") { incoming ->
+        return conditionalWrite(session, "create folder") { incoming ->
             val space = incoming.firstOrNull { it.id == spaceId && it.kind == "space" } ?: throw SyncError.TargetMissing
             incoming.firstOrNull {
                 it.kind == "folder" && it.data.optString("workspaceUuid") == spaceId &&
@@ -1377,8 +1464,8 @@ object SpacesSyncService {
     }
 
     /** Cambia el nombre de una carpeta; el resto del registro se conserva tal cual. */
-    fun renameFolder(client: SyncClient, folderId: String, name: String): Boolean =
-        conditionalWrite(client, "rename folder") { incoming ->
+    fun renameFolder(session: WriteSession, folderId: String, name: String): Boolean =
+        conditionalWrite(session, "rename folder") { incoming ->
             val rec = folderIn(incoming, folderId) ?: return@conditionalWrite null
             if (rec.data.optString("name") == name) return@conditionalWrite emptyList<JSONObject>() to true
             val data = JSONObject(rec.data.toString()).put("name", name)
@@ -1386,18 +1473,19 @@ object SpacesSyncService {
         } ?: false
 
     /**
-     * Borra la carpeta solo si ya no le queda nada dentro (ni en `children` ni pestañas que apunten a
+     * Borra la carpeta solo si ya no le queda nada dentro (ni en `children` ni registros que apunten a
      * ella). Si alguien le metió algo mientras tanto, no se toca: nunca se pierden pestañas.
      */
-    fun deleteFolderIfEmpty(client: SyncClient, folderId: String): Boolean =
-        conditionalWrite(client, "delete folder") { incoming ->
+    fun deleteFolderIfEmpty(session: WriteSession, folderId: String): Boolean =
+        conditionalWrite(session, "delete folder") { incoming ->
             val rec = folderIn(incoming, folderId) ?: return@conditionalWrite null
             val live = incoming.map { it.id }.toHashSet()
             val children = stringList(rec.data.optJSONArray("children")).filter { it in live }
-            val pointing = incoming.any {
-                it.id != rec.id && (it.kind == "tab" || it.kind == "folder" || it.kind == "split") &&
-                    (ZenSpaces.optStringOrNull(it.data, "folderId") == folderId && it.kind != "folder" ||
-                        ZenSpaces.optStringOrNull(it.data, "parentFolderId") == folderId)
+            val pointing = incoming.any { other ->
+                other.id != rec.id && (
+                    (other.kind != "folder" && ZenSpaces.optStringOrNull(other.data, "folderId") == folderId) ||
+                        ZenSpaces.optStringOrNull(other.data, "parentFolderId") == folderId
+                    )
             }
             if (children.isNotEmpty() || pointing) return@conditionalWrite null
             tombstoneBatch(rec.id, incoming) to true
@@ -1432,8 +1520,8 @@ object SpacesSyncService {
      * Convierte una fijada en Essential (sale de su espacio y su carpeta y entra en la cuadrícula) o al
      * revés (vuelve a la raíz de las fijadas de [spaceId]). Devuelve false si la pestaña ya no existe.
      */
-    fun setEssential(client: SyncClient, id: String, essential: Boolean, spaceId: String?): Boolean =
-        conditionalWrite(client, "set essential") { incoming ->
+    fun setEssential(session: WriteSession, id: String, essential: Boolean, spaceId: String?): Boolean =
+        conditionalWrite(session, "set essential") { incoming ->
             val tab = incoming.firstOrNull { it.id == id && it.kind == "tab" } ?: return@conditionalWrite null
             val space = spaceId?.let { sid -> incoming.firstOrNull { it.id == sid && it.kind == "space" } }
             if (!essential && space == null) throw SyncError.TargetMissing
@@ -1450,21 +1538,18 @@ object SpacesSyncService {
             writes to true
         } ?: false
 
-    /** Sube una Essential nueva (una pestaña con `essential: true` en la cuadrícula del diseño). */
-    fun addEssential(client: SyncClient, url: String, title: String, spaceId: String?): String {
-        val newId = ZenSpaces.newTabRecordId()
-        return conditionalWrite(client, "add essential") { incoming ->
-            if (incoming.any { it.id == newId }) return@conditionalWrite emptyList<JSONObject>() to newId
+    /** Sube una Essential nueva con un id elegido por quien llama (repetir no duplica). */
+    fun addEssential(session: WriteSession, recordId: String, url: String, title: String, spaceId: String?): String =
+        conditionalWrite(session, "add essential") { incoming ->
             val data = JSONObject()
-                .put("tabId", newId).put("url", url).put("title", title).put("icon", JSONObject.NULL)
+                .put("tabId", recordId).put("url", url).put("title", title).put("icon", JSONObject.NULL)
                 .put("essential", true).put("pinned", true)
                 .put("workspaceUuid", spaceId ?: JSONObject.NULL)
                 .put("hasStaticIcon", false).put("folderId", JSONObject.NULL).put("staticLabel", JSONObject.NULL)
                 .put("containerGuid", JSONObject.NULL).put("defaultContainer", true)
-            val tab = JSONObject().put("id", newId).put("kind", "tab").put("data", data)
-            listOfNotNull(tab, layoutWrite(incoming.firstOrNull { it.kind == "layout" }, newId, add = true)) to newId
-        } ?: newId
-    }
+            val tab = JSONObject().put("id", recordId).put("kind", "tab").put("data", data)
+            listOfNotNull(tab, layoutWrite(incoming.firstOrNull { it.kind == "layout" }, recordId, add = true)) to recordId
+        } ?: recordId
 
     // MARK: - Conflict-safe writes (SPEC §7.2)
 

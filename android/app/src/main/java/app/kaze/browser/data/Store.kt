@@ -61,6 +61,33 @@ class Store(private val db: Db, private val settings: Settings) {
      */
     var onSyncChange: (() -> Unit)? = null
 
+    /**
+     * Se llama al borrar un espacio o perfil enlazado con Zen, con los ids de Zen que se sueltan: en la
+     * cuenta no se borra nada (siguen en el escritorio) y la sincronización no los vuelve a traer.
+     */
+    var onUnlinked: ((spaceZenIds: List<String>, tabZenIds: List<String>) -> Unit)? = null
+
+    /** Suelta los enlaces con Zen de unos espacios que se van a borrar (y de sus pestañas que se cierran). */
+    private fun unlinkForDelete(spaceIds: Collection<String>, closing: List<Tab>) {
+        val spaceZen = spaces.filter { it.id in spaceIds }.mapNotNull { it.zenId }
+        val tabZen = closing.mapNotNull { it.zenId }
+        if (spaceZen.isEmpty() && tabZen.isEmpty()) return
+        closing.forEach { it.zenId = null }
+        spaces.filter { it.id in spaceIds }.forEach { it.zenId = null }
+        onUnlinked?.invoke(spaceZen, tabZen)
+    }
+
+    /** Al cerrar sesión: nada queda enlazado con la cuenta anterior. */
+    fun unlinkAll() {
+        tabs.filter { it.zenId != null }.forEach { it.zenId = null; db.saveTab(it) }
+        spaces.filter { it.zenId != null }.forEach { it.zenId = null; db.saveSpace(it) }
+    }
+
+    /** Espera a que todo lo pendiente esté escrito en la base de datos (desde un hilo de fondo). */
+    fun awaitWrites() {
+        db.io.submit {}.get(10, java.util.concurrent.TimeUnit.SECONDS)
+    }
+
     private fun syncChanged(vararg list: Tab) {
         if (list.any { !it.isPrivate && (it.kind != TabKind.NORMAL || it.zenId != null) }) onSyncChange?.invoke()
     }
@@ -131,6 +158,7 @@ class Store(private val db: Db, private val settings: Settings) {
         if (currentProfileId == id) switchProfile(Profile.DEFAULT_ID)
         val ids = spaces.filter { it.profileId == id }.map { it.id }
         val closed = tabs.filter { it.spaceId in ids }
+        unlinkForDelete(ids, closed)
         tabs.removeAll(closed)
         spaces.removeAll { it.id in ids }
         profiles.removeAll { it.id == id }
@@ -182,6 +210,7 @@ class Store(private val db: Db, private val settings: Settings) {
         val heir = profileSpaces.first { it.id != id }
         tabs.filter { it.spaceId == id && it.kind == TabKind.ESSENTIAL }.forEach { it.spaceId = heir.id; db.saveTab(it) }
         val closed = tabs.filter { it.spaceId == id && it.kind != TabKind.ESSENTIAL }
+        unlinkForDelete(listOf(id), closed)
         tabs.removeAll(closed)
         spaces.removeAll { it.id == id }
         db.deleteSpace(id)
@@ -267,6 +296,24 @@ class Store(private val db: Db, private val settings: Settings) {
         persistPositions(t.spaceId, oldKind)
         db.saveTab(t)
         syncChanged(t)
+    }
+
+    /**
+     * Deshacer un cierre: vuelve a abrir la pestaña como estaba (tipo, grupo, página fijada y enlace con
+     * Zen). Si la sincronización aún no subió el cierre, para Zen es como si nunca se hubiera cerrado.
+     */
+    fun reopen(
+        url: String, spaceId: String, kind: TabKind, folder: String = "", zenId: String? = null,
+        pinnedUrl: String? = null, private: Boolean = false, select: Boolean = false,
+    ): Tab {
+        val sid = if (spaceById(spaceId) == null && !private) currentSpaceId else spaceId
+        val t = newTab(url, spaceId = sid, private = private, select = false)
+        if (!private && zenId != null && tabs.none { it.zenId == zenId }) link(t, zenId)
+        if (kind != TabKind.NORMAL) setKind(t, kind)
+        if (pinnedUrl != null && kind != TabKind.NORMAL) { t.pinnedUrl = pinnedUrl; db.saveTab(t) }
+        if (folder.isNotEmpty()) setFolder(listOf(t), folder)
+        if (select) select(t)
+        return t
     }
 
     /** Enlaza la pestaña con su registro de Zen (o lo suelta con null). Lo usa la sincronización. */

@@ -405,6 +405,11 @@ object ZenSpaces {
          * this field existed still decode.
          */
         val normalTabsCapability: NormalTabsCapability = NormalTabsCapability.ABSENT,
+        /**
+         * Registros que no se pudieron descifrar en esta lectura (no se guarda en caché). Si hay alguno,
+         * lo que "falta" puede estar ahí: la sincronización de Fyx no borra ni cierra nada.
+         */
+        val decryptFailures: Int = 0,
     ) {
         constructor(spaces: List<ZenSpace>) :
             this(spaces, emptyMap(), 0L)

@@ -245,11 +245,20 @@ class SyncClient internal constructor(
      * conditioned on the collection timestamp. A 200 response reports the
      * per-record outcome; any requested id missing from `success` is a failure.
      */
+    /**
+     * `X-Last-Modified` of the last applied POST: the collection's new version, so a caller that
+     * applied its own batch to its last read can keep using it for the next conditional write.
+     */
+    @Volatile
+    var lastPostModified: String? = null
+        private set
+
     fun postRecords(
         collection: String,
         records: List<JSONObject>,
         ifUnmodifiedSince: String? = null,
     ): PostOutcome {
+        lastPostModified = null
         val array = JSONArray()
         val requestedIds = mutableListOf<String>()
         for (record in records) {
@@ -288,6 +297,7 @@ class SyncClient internal constructor(
         if (failed.isNotEmpty() || missing.isNotEmpty()) {
             return PostOutcome.PartialFailure(failed = failed, missingIds = missing)
         }
+        lastPostModified = response.header("X-Last-Modified")
         return PostOutcome.Applied
     }
 

@@ -1,8 +1,9 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
-/* Lo oculto se oculta siempre (aunque su clase le dé display: grid/flex). */
-[hidden] { display: none !important; }
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Lo oculto se oculta siempre (aunque su clase le dé display: grid/flex). */
+[hidden] { display: none !important; }
 
 /*
  * Página de inicio como la de Safari 27 (macOS "Golden Gate"): fondo con un tinte suave,

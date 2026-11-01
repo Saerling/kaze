@@ -55,6 +55,16 @@ class Store(private val db: Db, private val settings: Settings) {
         colors = listOf(0xFF3B3355.toInt(), 0xFF5B4B8A.toInt()), position = Int.MAX_VALUE,
     )
 
+    /**
+     * Se llama cuando cambia algo que viaja a la cuenta de Firefox (fijadas, Essentials, sus grupos).
+     * Lo usa la sincronización con Zen para subir los cambios unos segundos después.
+     */
+    var onSyncChange: (() -> Unit)? = null
+
+    private fun syncChanged(vararg list: Tab) {
+        if (list.any { !it.isPrivate && (it.kind != TabKind.NORMAL || it.zenId != null) }) onSyncChange?.invoke()
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private val pendingState = LinkedHashSet<String>()
     private val flushTask = Runnable { flush() }
@@ -228,6 +238,7 @@ class Store(private val db: Db, private val settings: Settings) {
         }
         tabs.remove(t)
         db.deleteTab(t.id)
+        syncChanged(t)
         if (selectedTabId == t.id) selectedTabId = null
         if (t.isPrivate && tabs.none { it.isPrivate } && currentSpaceId == Space.PRIVATE_ID) {
             selectSpace(profileSpaces.first().id)
@@ -243,6 +254,8 @@ class Store(private val db: Db, private val settings: Settings) {
         if (t.isPrivate || t.kind == kind) return
         val oldKind = t.kind
         t.kind = kind
+        // Los grupos de fijadas y de normales son distintos (como en Zen): al cambiar de tipo sale del suyo.
+        t.folder = ""
         t.pinnedUrl = if (kind == TabKind.NORMAL) null else (t.pinnedUrl ?: t.url)
         // Al fijar, va al final de los fijados; al desfijar, arriba de las normales.
         t.position = when (kind) {
@@ -253,6 +266,14 @@ class Store(private val db: Db, private val settings: Settings) {
         persistPositions(t.spaceId, kind)
         persistPositions(t.spaceId, oldKind)
         db.saveTab(t)
+        syncChanged(t)
+    }
+
+    /** Enlaza la pestaña con su registro de Zen (o lo suelta con null). Lo usa la sincronización. */
+    fun link(t: Tab, zenId: String?) {
+        if (t.isPrivate || t.zenId == zenId) return
+        t.zenId = zenId
+        db.saveTab(t)
     }
 
     fun moveToSpace(t: Tab, spaceId: String) {
@@ -262,14 +283,17 @@ class Store(private val db: Db, private val settings: Settings) {
         t.position = -1
         persistPositions(spaceId, t.kind)
         db.saveTab(t)
+        syncChanged(t)
+    }
+
+    private fun siblings(t: Tab): List<Tab> = when (t.kind) {
+        TabKind.ESSENTIAL -> essentials()
+        TabKind.PINNED -> pinned(t.spaceId)
+        TabKind.NORMAL -> normal(t.spaceId)
     }
 
     fun reorder(t: Tab, delta: Int) {
-        val siblings = when (t.kind) {
-            TabKind.ESSENTIAL -> essentials()
-            TabKind.PINNED -> pinned(t.spaceId)
-            TabKind.NORMAL -> normal(t.spaceId)
-        }.toMutableList()
+        val siblings = siblings(t).toMutableList()
         val i = siblings.indexOf(t)
         val j = i + delta
         if (i < 0 || j !in siblings.indices) return
@@ -286,25 +310,34 @@ class Store(private val db: Db, private val settings: Settings) {
 
     // ── Carpetas y orden de las pestañas ──────────────────────────────
 
-    /** Carpetas del espacio, en el orden de su primera pestaña. */
-    fun folders(spaceId: String): List<String> = normal(spaceId).map { it.folder }.filter { it.isNotEmpty() }.distinct()
+    private fun ofKind(spaceId: String, kind: TabKind) = if (kind == TabKind.PINNED) pinned(spaceId) else normal(spaceId)
 
-    fun folderTabs(spaceId: String, name: String): List<Tab> = normal(spaceId).filter { it.folder == name }
+    /**
+     * Carpetas (grupos) del espacio, en el orden de su primera pestaña. Las normales y las fijadas tienen
+     * grupos separados, como en Zen (los de fijadas son las carpetas que se sincronizan con el escritorio).
+     */
+    fun folders(spaceId: String, kind: TabKind = TabKind.NORMAL): List<String> =
+        ofKind(spaceId, kind).map { it.folder }.filter { it.isNotEmpty() }.distinct()
 
-    /** Mete pestañas en una carpeta (la crea si no existe). */
+    fun folderTabs(spaceId: String, name: String, kind: TabKind = TabKind.NORMAL): List<Tab> =
+        ofKind(spaceId, kind).filter { it.folder == name }
+
+    /** Mete pestañas en una carpeta (la crea si no existe). Las Essentials no van en carpetas. */
     fun setFolder(list: List<Tab>, name: String) {
-        list.filter { !it.isPrivate }.forEach { it.folder = name; db.saveTab(it) }
+        val changed = list.filter { !it.isPrivate && it.kind != TabKind.ESSENTIAL && it.folder != name }
+        changed.forEach { it.folder = name; db.saveTab(it) }
+        syncChanged(*changed.toTypedArray())
     }
 
-    /** Nombre libre para una carpeta nueva: "Carpeta", "Carpeta 2"… */
-    fun newFolderName(spaceId: String): String {
-        val used = folders(spaceId).toSet()
-        return generateSequence(1) { it + 1 }.map { if (it == 1) "Carpeta" else "Carpeta $it" }.first { it !in used }
+    /** Nombre libre para una carpeta nueva: "Grupo", "Grupo 2"… */
+    fun newFolderName(spaceId: String, kind: TabKind = TabKind.NORMAL): String {
+        val used = folders(spaceId, kind).toSet()
+        return generateSequence(1) { it + 1 }.map { if (it == 1) "Grupo" else "Grupo $it" }.first { it !in used }
     }
 
-    fun renameFolder(spaceId: String, old: String, new: String) {
+    fun renameFolder(spaceId: String, old: String, new: String, kind: TabKind = TabKind.NORMAL) {
         val name = new.trim().ifEmpty { return }
-        setFolder(folderTabs(spaceId, old), name)
+        setFolder(folderTabs(spaceId, old, kind), name)
     }
 
     /** Organizar pestañas: las sueltas del mismo sitio (2 o más) van a una carpeta con su nombre. */
@@ -322,12 +355,13 @@ class Store(private val db: Db, private val settings: Settings) {
         return core.replaceFirstChar { it.uppercase() }
     }
 
-    fun ungroup(spaceId: String, name: String) = setFolder(folderTabs(spaceId, name), "")
+    fun ungroup(spaceId: String, name: String, kind: TabKind = TabKind.NORMAL) = setFolder(folderTabs(spaceId, name, kind), "")
 
-    /** Arrastrar y soltar: pone la pestaña [moved] en el lugar de [target] (las demás se corren). */
+    /** Arrastrar y soltar: pone la pestaña [moved] en el lugar de [target] (las demás se corren). Mismo tipo. */
     fun moveBefore(moved: Tab, target: Tab) {
-        if (moved.id == target.id || moved.spaceId != target.spaceId) return
-        val list = normal(moved.spaceId).toMutableList()
+        if (moved.id == target.id || moved.kind != target.kind) return
+        if (moved.kind != TabKind.ESSENTIAL && moved.spaceId != target.spaceId) return
+        val list = siblings(moved).toMutableList()
         val from = list.indexOf(moved)
         val to = list.indexOf(target)
         if (from < 0 || to < 0) return

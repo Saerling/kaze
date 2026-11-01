@@ -90,6 +90,12 @@ class Kaze private constructor(context: Context) {
 
     val thumbnails = Thumbnails(context)
 
+    /** Fijadas, sus grupos y Essentials con la cuenta de Firefox (Zen), en ambos sentidos. */
+    val tabSync = app.kaze.browser.zsync.ZenTabSync(context.applicationContext, store) { t ->
+        if (engineStarted) pool.close(t)
+        thumbnails.delete(t.id)
+    }.also { sync -> store.onSyncChange = sync::onLocalChange }
+
     /** Extensión interna (modo Lector). Va dentro del APK y se instala/actualiza sola. */
     /** Instala un complemento (desde Ajustes o un enlace .xpi) y dice por qué falló, si falla. */
     fun installAddon(url: String, name: String = "el complemento") {

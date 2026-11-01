@@ -4,6 +4,29 @@
 
 package app.kaze.browser.ui.sheets
 
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import app.kaze.browser.ui.screens.folderColor
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.foundation.background
@@ -341,7 +364,7 @@ fun ShareSheet(
                 if (home != null && home != tab.url) {
                     IosRow("Volver a la página fijada", Icons.Outlined.Home) { app.pool.ensure(tab).loadUri(home); onDismiss() }
                 }
-                if (store.profileSpaces.size > 1) IosRow("Mover a otro grupo", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
+                if (store.profileSpaces.size > 1) IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
             }
             IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
                 app.pool.close(tab); store.close(tab); onDismiss()
@@ -390,43 +413,165 @@ fun TabsQuickSheet(
 
 // ── Mantener presionada una pestaña o un favorito ─────────────────────
 
+/**
+ * Menú de una pestaña (mantener presionada). Además de lo básico, maneja sus grupos: añadirla a uno
+ * existente o a uno nuevo, renombrar el suyo o sacarla. Las páginas del menú cambian dentro de la
+ * misma hoja con un resorte suave (sin cerrar y abrir otra).
+ */
 @Composable
-fun TabMenuSheet(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onMove: () -> Unit) {
+fun TabMenuSheet(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onMove: () -> Unit, startPage: String = "menu") {
     val app = LocalApp.current
     val store = app.store
+    var page by remember { mutableStateOf(startPage) }
     KazeSheet(onDismiss) {
-        PageHeader(tab)
-        IosGroup {
-            IosRow("Abrir", Icons.AutoMirrored.Outlined.OpenInNew) { onDismiss(); onOpen() }
-            if (!tab.isPrivate && !tab.isStart) {
-                if (tab.kind == TabKind.ESSENTIAL) {
-                    IosRow("Quitar de Favoritos", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
-                } else {
-                    IosRow("Añadir a Favoritos", Icons.Outlined.Star) { store.setKind(tab, TabKind.ESSENTIAL); onDismiss() }
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val forward = targetState != "menu"
+                val slide = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 420f)
+                (fadeIn(tween(180, 60)) + slideInHorizontally(slide) { w -> if (forward) w / 5 else -w / 5 }) togetherWith
+                    (fadeOut(tween(120)) + slideOutHorizontally(slide) { w -> if (forward) -w / 5 else w / 5 }) using
+                    SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 0.9f, stiffness = 420f) }
+            },
+            label = "menu",
+        ) { p ->
+            Column {
+                when (p) {
+                    "groups" -> GroupPicker(tab, onBack = { page = "menu" }, onNew = { page = "new" }, onDone = onDismiss)
+                    "new" -> GroupName(
+                        title = "Nuevo grupo", action = "Crear",
+                        initial = store.newFolderName(tab.spaceId, tab.kind),
+                        onBack = { page = if (startPage == "new") "menu" else "groups" },
+                    ) { name ->
+                        store.setFolder(listOf(tab), name)
+                        app.ui.show("Añadida al grupo «$name»")
+                        onDismiss()
+                    }
+                    "rename" -> GroupName(title = "Renombrar grupo", action = "Guardar", initial = tab.folder, onBack = { page = "menu" }) { name ->
+                        store.renameFolder(tab.spaceId, tab.folder, name, tab.kind)
+                        onDismiss()
+                    }
+                    else -> TabMenuMain(tab, onDismiss, onOpen, onMove, onGroups = { page = "groups" }, onRename = { page = "rename" })
                 }
-                when (tab.kind) {
-                    TabKind.NORMAL -> IosRow("Fijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.PINNED); onDismiss() }
-                    TabKind.PINNED -> IosRow("Desfijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.NORMAL); onDismiss() }
-                    TabKind.ESSENTIAL -> Unit
-                }
-                if (store.profileSpaces.size > 1) IosRow("Mover a otro grupo", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
-                IosRow("Copiar dirección", Icons.Outlined.ContentCopy) { ClipboardBridge.copy?.invoke(tab.url); onDismiss() }
-                if (tab.folder.isNotEmpty()) {
-                    IosRow("Sacar de la carpeta «${tab.folder}»", Icons.Outlined.FolderOff) { store.setFolder(listOf(tab), ""); onDismiss() }
-                }
-            }
-            IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
-                app.pool.close(tab); store.close(tab); app.thumbnails.delete(tab.id); onDismiss()
             }
         }
     }
 }
 
 @Composable
+private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onMove: () -> Unit, onGroups: () -> Unit, onRename: () -> Unit) {
+    val app = LocalApp.current
+    val store = app.store
+    PageHeader(tab)
+    IosGroup {
+        IosRow("Abrir", Icons.AutoMirrored.Outlined.OpenInNew) { onDismiss(); onOpen() }
+        if (!tab.isPrivate && !tab.isStart) {
+            if (tab.kind == TabKind.ESSENTIAL) {
+                IosRow("Quitar de Favoritos", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
+            } else {
+                IosRow("Añadir a Favoritos", Icons.Outlined.Star) { store.setKind(tab, TabKind.ESSENTIAL); onDismiss() }
+            }
+            when (tab.kind) {
+                TabKind.NORMAL -> IosRow("Fijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.PINNED); onDismiss() }
+                TabKind.PINNED -> IosRow("Desfijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.NORMAL); onDismiss() }
+                TabKind.ESSENTIAL -> Unit
+            }
+            if (tab.kind != TabKind.ESSENTIAL) {
+                IosRow("Añadir a un grupo…", Icons.Outlined.CreateNewFolder, chevron = true, onClick = onGroups)
+                if (tab.folder.isNotEmpty()) {
+                    IosRow("Renombrar grupo «${tab.folder}»", Icons.Outlined.DriveFileRenameOutline, onClick = onRename)
+                    IosRow("Sacar del grupo", Icons.Outlined.FolderOff) { store.setFolder(listOf(tab), ""); onDismiss() }
+                }
+            }
+            if (store.profileSpaces.size > 1) IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
+            IosRow("Copiar dirección", Icons.Outlined.ContentCopy) { ClipboardBridge.copy?.invoke(tab.url); onDismiss() }
+        }
+        IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
+            app.pool.close(tab); store.close(tab); app.thumbnails.delete(tab.id); onDismiss()
+        }
+    }
+}
+
+/** "Añadir a un grupo": los grupos del espacio (de fijadas o de normales, según la pestaña) y "Nuevo grupo". */
+@Composable
+internal fun GroupPicker(tab: Tab, onBack: () -> Unit, onNew: () -> Unit, onDone: () -> Unit) {
+    val app = LocalApp.current
+    val k = LocalKaze.current
+    val store = app.store
+    SheetTitle("Añadir a un grupo", "Atrás", onBack)
+    Text(
+        if (tab.kind == TabKind.PINNED) "Grupos de fijadas de este espacio. Se sincronizan como carpetas de Zen." else "Grupos de pestañas de este espacio.",
+        style = KazeType.footnote, color = k.ink55, modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+    )
+    val groups = store.folders(tab.spaceId, tab.kind)
+    IosGroup {
+        groups.forEach { name ->
+            val count = store.folderTabs(tab.spaceId, name, tab.kind).size
+            val current = name == tab.folder
+            IosRow(
+                name, subtitle = if (count == 1) "1 pestaña" else "$count pestañas", enabled = !current,
+                leading = {
+                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(folderColor(name)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Folder, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    }
+                },
+                trailing = { if (current) Icon(Icons.Outlined.Check, null, tint = k.accent) },
+            ) {
+                store.setFolder(listOf(tab), name)
+                app.ui.show("Añadida al grupo «$name»")
+                onDone()
+            }
+        }
+        IosRow("Nuevo grupo…", Icons.Outlined.Add, titleColor = k.accent, iconTint = k.accent, divider = false, onClick = onNew)
+    }
+}
+
+/** Nombre de un grupo (nuevo o renombrado), con el teclado abierto y "Crear"/"Guardar" arriba. */
+@Composable
+private fun GroupName(title: String, action: String, initial: String, onBack: () -> Unit, onSave: (String) -> Unit) {
+    val k = LocalKaze.current
+    var name by remember { mutableStateOf(TextFieldValue(initial, TextRange(0, initial.length))) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    fun save() {
+        name.text.trim().takeIf { it.isNotEmpty() }?.let(onSave)
+    }
+    Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Atrás", style = KazeType.body, color = k.accent,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 8.dp),
+        )
+        Text(title, style = KazeType.headline, color = k.ink, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+        Text(
+            action, style = KazeType.headline, color = if (name.text.isBlank()) k.ink35 else k.accent,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = name.text.isNotBlank()) { save() }.padding(horizontal = 10.dp, vertical = 8.dp),
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(52.dp).card(RoundedCornerShape(12.dp)).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val tint by animateColorAsState(folderColor(name.text.trim()), spring(stiffness = 300f), label = "color")
+        Icon(Icons.Outlined.Folder, null, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
+        BasicTextField(
+            value = name, onValueChange = { if (it.text.length <= 40) name = it }, singleLine = true,
+            textStyle = KazeType.body.copy(color = k.ink), cursorBrush = SolidColor(k.accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { save() }),
+            modifier = Modifier.weight(1f).focusRequester(focus),
+            decorationBox = { inner -> if (name.text.isEmpty()) Text("Nombre del grupo", style = KazeType.body, color = k.ink55); inner() },
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+@Composable
 fun MoveToSpaceSheet(tab: Tab, onDismiss: () -> Unit) {
     val app = LocalApp.current
     KazeSheet(onDismiss) {
-        SheetTitle("Mover a grupo")
+        SheetTitle("Mover a otro espacio")
         Spacer(Modifier.height(8.dp))
         IosGroup {
             val list = app.store.profileSpaces.sortedBy { it.position }

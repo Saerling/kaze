@@ -45,6 +45,8 @@ import app.kaze.browser.data.Space
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -1059,13 +1061,15 @@ fun TabStrip(
     val density = androidx.compose.ui.platform.LocalDensity.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val folded = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    // Un grupo es su nombre dentro de su tipo: los de fijadas y los de normales no se mezclan (como en Zen).
+    fun groupKey(t: Tab) = if (t.folder.isEmpty()) "" else "${t.kind.code}:${t.folder}"
     // Los miembros de cada grupo, juntos donde aparece el primero.
     val ordered = run {
         val seen = HashSet<String>()
-        buildList { tabs.forEach { t -> if (t.folder.isEmpty()) add(t) else if (seen.add(t.folder)) addAll(tabs.filter { it.folder == t.folder }) } }
+        buildList { tabs.forEach { t -> if (t.folder.isEmpty()) add(t) else if (seen.add(groupKey(t))) addAll(tabs.filter { groupKey(it) == groupKey(t) }) } }
     }
-    val visible = ordered.filter { it.folder.isEmpty() || folded[it.folder] != true }
-    val groups = ordered.map { it.folder }.filter { it.isNotEmpty() }.distinct()
+    val visible = ordered.filter { it.folder.isEmpty() || folded[groupKey(it)] != true }
+    val groups = ordered.map { groupKey(it) }.filter { it.isNotEmpty() }.distinct()
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(30.dp)) {
         val n = visible.size.coerceAtLeast(1)
         val w = ((maxWidth - 4.dp * (n - 1) - 74.dp * groups.size) / n).coerceIn(minTab, maxTab)
@@ -1080,19 +1084,24 @@ fun TabStrip(
         androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             // La etiqueta sale aunque el grupo esté plegado (entonces sus pestañas se esconden tras ella).
             ordered.forEachIndexed { oi, t ->
-                if (t.folder.isNotEmpty() && ordered.getOrNull(oi - 1)?.folder != t.folder) {
+                if (t.folder.isNotEmpty() && ordered.getOrNull(oi - 1)?.let(::groupKey) != groupKey(t)) {
                     val name = t.folder
-                    item(key = "g:$name") {
+                    val gk = groupKey(t)
+                    item(key = "g:$gk") {
                         val c = folderColor(name)
-                        val count = ordered.count { it.folder == name }
+                        val count = ordered.count { groupKey(it) == gk }
                         Row(
-                            Modifier.animateItem().height(24.dp).clip(RoundedCornerShape(50)).background(c)
-                                .tap { folded[name] = folded[name] != true }.padding(horizontal = 10.dp)
+                            Modifier.animateItem(placementSpec = spring(0.85f, 420f, IntOffset.VisibilityThreshold)).height(24.dp).clip(RoundedCornerShape(50)).background(c)
+                                .tap { folded[gk] = folded[gk] != true }.padding(horizontal = 10.dp)
                                 .semantics { contentDescription = "Grupo $name, $count pestañas (tocar para plegar o desplegar)" },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // Los grupos de fijadas llevan una chincheta (son las carpetas de Zen).
+                            if (t.kind == TabKind.PINNED) {
+                                Icon(Icons.Outlined.PushPin, null, tint = Color.White, modifier = Modifier.padding(end = 4.dp).size(11.dp))
+                            }
                             Text(name, style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
-                            if (folded[name] == true) Text("  $count", style = KazeType.footnote, color = Color.White.copy(alpha = 0.85f))
+                            if (folded[gk] == true) Text("  $count", style = KazeType.footnote, color = Color.White.copy(alpha = 0.85f))
                         }
                     }
                 }
@@ -1106,9 +1115,10 @@ fun TabStrip(
                                 val slots = dragX / step
                                 val r = kotlin.math.round(slots).toInt()
                                 val target = visible.getOrNull(i + r)
-                                if (target != null && target.id != t.id && t.kind == TabKind.NORMAL && target.kind == TabKind.NORMAL) {
+                                // Normales con normales y fijadas con fijadas (las Essentials no van en grupos).
+                                if (target != null && target.id != t.id && t.kind == target.kind && t.kind != TabKind.ESSENTIAL) {
                                     if (abs(slots - r) < 0.25f) {
-                                        store.setFolder(listOf(target, t), target.folder.ifEmpty { store.newFolderName(t.spaceId) })
+                                        store.setFolder(listOf(target, t), target.folder.ifEmpty { store.newFolderName(t.spaceId, t.kind) })
                                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
                                     } else {
                                         val dest = visible.getOrNull(i + (if (slots > 0) kotlin.math.ceil(slots).toInt() else kotlin.math.floor(slots).toInt()))
@@ -1126,7 +1136,8 @@ fun TabStrip(
                     }
                     TabChip(
                         t, t.id == tab.id, t.folder.takeIf { it.isNotEmpty() }?.let { folderColor(it) },
-                        (if (dragging) Modifier.zIndex(1f).offset { IntOffset(dragX.roundToInt(), 0) }.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f } else Modifier.animateItem())
+                        (if (dragging) Modifier.zIndex(1f).offset { IntOffset(dragX.roundToInt(), 0) }.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f; shadowElevation = 12f }
+                        else Modifier.animateItem(placementSpec = spring(0.85f, 420f, IntOffset.VisibilityThreshold)))
                             .width(w).then(drag),
                         onClose = { onCloseTab(t) },
                     ) { if (t.id != tab.id) onSelectTab(t) }

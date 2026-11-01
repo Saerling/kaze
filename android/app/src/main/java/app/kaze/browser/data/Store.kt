@@ -316,6 +316,17 @@ class Store(private val db: Db, private val settings: Settings) {
         return t
     }
 
+    /** Deshacer un desfijado: vuelve a ser fijada en su grupo, con su página de casa y en su sitio. */
+    fun repin(t: Tab, folder: String, pinnedUrl: String?, position: Int) {
+        if (t.isPrivate || tabById(t.id) == null) return
+        setKind(t, TabKind.PINNED)
+        if (pinnedUrl != null) t.pinnedUrl = pinnedUrl
+        setFolder(listOf(t), folder)
+        val list = pinned(t.spaceId).filter { it.id != t.id }.toMutableList()
+        list.add(position.coerceIn(0, list.size), t)
+        list.forEachIndexed { i, s -> if (s.position != i || s === t) { s.position = i; db.saveTab(s) } }
+    }
+
     /** Enlaza la pestaña con su registro de Zen (o lo suelta con null). Lo usa la sincronización. */
     fun link(t: Tab, zenId: String?) {
         if (t.isPrivate || t.zenId == zenId) return

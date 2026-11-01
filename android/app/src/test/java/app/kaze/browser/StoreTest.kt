@@ -163,6 +163,47 @@ class StoreTest {
         assertEquals("z9", db.loadTabs().first { it.id == t.id }.zenId)
     }
 
+    @Test fun limpiezaRespetaGruposYPrefiereLaEnlazada() {
+        val w = db.writableDatabase
+        val sid = store.currentSpaceId
+        fun put(id: String, folder: String, zen: String?) = w.execSQL(
+            "INSERT INTO tabs(id, space_id, url, title, kind, position, last_used, state, pinned_url, folder, zen_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            arrayOf<Any?>(id, sid, "https://a.com/", "", 1, 0, 1, null, "https://a.com/", folder, zen),
+        )
+        put("g1", "Trabajo", null)
+        put("g2", "Ocio", null) // misma página en otro grupo: se queda
+        put("r1", "", null)
+        put("r2", "", "zen-r2") // repetida en la raíz: se queda la enlazada con Zen
+        db.dedupeImported(w)
+        assertEquals(listOf("g1", "g2", "r2"), db.loadTabs().map { it.id }.sorted())
+    }
+
+    @Test fun deshacerDesfijadoDejaTodoComoEstaba() {
+        val sid = store.currentSpaceId
+        val a = store.newTab("https://a.com").also { store.setKind(it, TabKind.PINNED) }
+        val b = store.newTab("https://b.com").also { store.setKind(it, TabKind.PINNED) }
+        store.setFolder(listOf(a), "G")
+        a.pinnedUrl = "https://a.com/casa"
+        val pos = a.position
+        store.setKind(a, TabKind.NORMAL)
+        store.repin(a, "G", "https://a.com/casa", pos)
+        assertEquals(listOf(a, b), store.pinned(sid))
+        assertEquals("G", a.folder)
+        assertEquals("https://a.com/casa", a.pinnedUrl)
+        store.close(b)
+        store.repin(b, "", null, 0) // ya cerrada: no hace nada
+        assertTrue(store.tabById(b.id) == null)
+    }
+
+    @Test fun laBaseAntiguaPasaALaCuenta() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val p = ctx.getSharedPreferences("zsync", android.content.Context.MODE_PRIVATE)
+        p.edit().putString("base", "{\"z1\":[false,\"s\",\"\"]}").remove("base:uid-v").commit()
+        val base = app.kaze.browser.zsync.ZenSync.loadBase(ctx, "uid-v")
+        assertEquals(setOf("z1"), base.keys)
+        assertTrue(!p.contains("base") && p.contains("base:uid-v"))
+    }
+
     @Test fun borrarEspacioCierraSusPestanas() {
         val other = store.spaces[1]
         val t = store.newTab("https://a.com", spaceId = other.id)

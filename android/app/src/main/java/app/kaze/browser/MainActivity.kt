@@ -427,7 +427,7 @@ class MainActivity : ComponentActivity() {
             val zenId = t.zenId
             val home = t.pinnedUrl
             // Si está sincronizada con Zen, el cierre no se sube mientras se puede deshacer.
-            if (zenId != null) app.tabSync.hold(ZenTabSync.UNDO_HOLD_MS)
+            if (zenId != null) app.tabSync.hold(zenId, ZenTabSync.UNDO_HOLD_MS)
             val next = if (wasSelected) store.nextAfterClose(t) else null
             app.pool.close(t)
             app.thumbnails.delete(t.id)

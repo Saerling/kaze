@@ -498,6 +498,23 @@ private fun ZenSyncSection() {
                         .onSuccess { app.ui.show("Enviada al computador") }.onFailure { app.ui.show("No se pudo enviar: ${it.message}") }
                 }
             }
+            // Si la sincronización se frenó porque faltan muchas fijadas (en Zen o aquí), esto la aplica una vez.
+            IosRow("Aplicar cambios del escritorio", subtitle = "Sin el freno que evita cerrar o borrar muchas fijadas de golpe", enabled = !busy) {
+                busy = true
+                scope.launch {
+                    runCatching { app.tabSync.syncForced() }
+                        .onSuccess { app.ui.show("Cambios del escritorio aplicados") }
+                        .onFailure { app.ui.show("No se pudo sincronizar: ${it.message ?: it.javaClass.simpleName}") }
+                    busy = false
+                    last = ZenSync.lastSync(context)
+                }
+            }
+            var discarded by remember { mutableStateOf(ZenSync.discardedCount(context)) }
+            if (discarded > 0) IosRow("Volver a traer espacios descartados", subtitle = "Los espacios de Zen que borraste aquí vuelven en la próxima sincronización") {
+                ZenSync.restoreDiscarded(context)
+                discarded = 0
+                pull()
+            }
             IosRow("Cerrar sesión", titleColor = SystemRed, divider = false) { ZenSync.signOut(context, app.store); email = null }
         }
         Note("Se sincronizan en ambos sentidos los espacios, las pestañas fijadas y sus grupos, las Essentials y las contraseñas (las pestañas normales se quedan en cada dispositivo, como en Zen). Las contraseñas viajan cifradas de extremo a extremo, como en Firefox.")

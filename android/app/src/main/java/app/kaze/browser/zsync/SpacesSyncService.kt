@@ -1296,7 +1296,11 @@ object SpacesSyncService {
 
     internal data class IncomingCleartext(val id: String, val cleartext: JSONObject) {
         val kind: String get() = cleartext.optString("kind")
-        val data: JSONObject get() = cleartext.optJSONObject("data") ?: JSONObject()
+        /**
+         * Copia de `data`: quien la modifica para escribir (lápidas, `children`, Essentials) nunca toca la
+         * lectura guardada en una [WriteSession], que se reutiliza para la siguiente escritura.
+         */
+        val data: JSONObject get() = JSONObject((cleartext.optJSONObject("data") ?: JSONObject()).toString())
     }
 
     private fun decryptedCollection(client: SyncClient): List<IncomingCleartext> =

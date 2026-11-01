@@ -47,7 +47,9 @@ object ZenSync {
         AccountStore.clear(context)
         store.unlinkAll()
         val p = prefs(context)
-        p.edit().apply { p.all.keys.filter { it.startsWith("base:") || it.startsWith("moves:") }.forEach(::remove) }.remove("base").remove("failed").commit()
+        p.edit().apply {
+            p.all.keys.filter { it.startsWith("base:") || it.startsWith("moves:") || it.startsWith("discarded:") || it.startsWith("unsafe:") }.forEach(::remove)
+        }.remove("base").remove("discarded").remove("failed").commit()
     }
 
     fun lastSync(context: Context): Long = prefs(context).getLong("last", 0)
@@ -55,18 +57,35 @@ object ZenSync {
     /** Cambios del teléfono que no se pudieron subir en el último intento (se reintentan solos). */
     fun failedChanges(context: Context): Int = prefs(context).getInt("failed", 0)
 
-    /** Ids de Zen que se soltaron al borrar un espacio aquí: no se borran allá ni se vuelven a traer. */
+    /**
+     * Ids de Zen (de esta cuenta) que se soltaron al borrar un espacio aquí: no se borran allá ni se
+     * vuelven a traer, hasta que el usuario pida "Volver a traer espacios descartados".
+     */
     internal fun discard(context: Context, ids: Collection<String>) {
         if (ids.isEmpty()) return
+        val uid = runCatching { AccountStore.load(context)?.uid }.getOrNull() ?: return
         val p = prefs(context)
-        val now = p.getStringSet("discarded", emptySet()).orEmpty() + ids
-        p.edit().putStringSet("discarded", now).commit()
+        val now = p.getStringSet("discarded:$uid", emptySet()).orEmpty() + ids
+        p.edit().putStringSet("discarded:$uid", now).commit()
     }
 
-    private fun discarded(context: Context): Set<String> = prefs(context).getStringSet("discarded", emptySet()).orEmpty()
+    private fun discarded(context: Context, uid: String): Set<String> =
+        prefs(context).getStringSet("discarded:$uid", emptySet()).orEmpty()
+
+    /** Cuántos espacios y pestañas de Zen están descartados en esta cuenta (para Ajustes). */
+    fun discardedCount(context: Context): Int {
+        val uid = runCatching { AccountStore.load(context)?.uid }.getOrNull() ?: return 0
+        return discarded(context, uid).size
+    }
+
+    /** "Volver a traer espacios descartados": la próxima sincronización los trae de nuevo. */
+    fun restoreDiscarded(context: Context) {
+        val uid = runCatching { AccountStore.load(context)?.uid }.getOrNull() ?: return
+        prefs(context).edit().remove("discarded:$uid").commit()
+    }
 
     private fun clearState(context: Context, uid: String) {
-        prefs(context).edit().remove("base:$uid").remove("moves:$uid").remove("base").commit()
+        prefs(context).edit().remove("base:$uid").remove("moves:$uid").remove("discarded:$uid").remove("unsafe:$uid").remove("base").commit()
     }
 
     private data class Pending(val index: Int, val op: TabSyncPlanner.Op, val title: String)
@@ -80,12 +99,18 @@ object ZenSync {
      * aplica aquí lo que cambió allá y sube lo que cambió aquí con escrituras condicionales.
      * Devuelve cuántas pestañas nuevas llegaron del escritorio. Las pestañas normales no viajan.
      */
-    suspend fun syncTabs(context: Context, store: Store, closeTab: (Tab) -> Unit): Int {
+    suspend fun syncTabs(
+        context: Context,
+        store: Store,
+        closeTab: (Tab) -> Unit,
+        force: Boolean = false,
+        held: Set<String> = emptySet(),
+    ): Int {
         val generation = AccountStore.currentGeneration
         val uid = withContext(Dispatchers.IO) { AccountStore.load(context)?.uid } ?: return 0
         val snap = SpacesSyncService.refresh(context)
         val readOnly = AccountStore.isDemo(context)
-        val dropped = discarded(context)
+        val dropped = discarded(context, uid)
 
         // Lo que hay en la cuenta. Las carpetas se comparan por nombre (así las ve Fyx); las subcarpetas
         // se aplanan en su carpeta principal y las carpetas "en vivo" (RSS…) no se tocan.
@@ -151,7 +176,18 @@ object ZenSync {
                 val locals = store.tabs.filter { !it.isPrivate && (it.zenId != null || store.spaceById(it.spaceId)?.profileId == profile) }
                     .map { TabSyncPlanner.Local(it.id, it.zenId, stateOf(it), it.pinnedUrl ?: it.url) }
                     .filter { it.state != null || it.zenId != null }
-                val ops = TabSyncPlanner.guard(TabSyncPlanner.plan(base, remote, locals), base, remote, snap.decryptFailures)
+                val planned = TabSyncPlanner.withoutHeld(TabSyncPlanner.plan(base, remote, locals), held)
+                val linked = locals.count { it.zenId != null }
+                val ops = try {
+                    TabSyncPlanner.guard(planned, base, remote, snap.decryptFailures, force, linked)
+                } catch (e: TabSyncPlanner.Unsafe) {
+                    // Si la misma situación se repite estable (un minuto después), fue a propósito: se acepta.
+                    val fp = TabSyncPlanner.Stability.fingerprint(remote.keys, locals.mapNotNull { it.zenId })
+                    val (ok, seen) = TabSyncPlanner.Stability.accept(loadSeen(context, uid), fp, System.currentTimeMillis())
+                    saveSeen(context, uid, seen)
+                    if (!ok) throw e
+                    TabSyncPlanner.guard(planned, base, remote, snap.decryptFailures, force = true, localLinked = linked)
+                }
 
                 fun apply(t: Tab, st: TabSyncPlanner.State) {
                     if (st.essential) {
@@ -240,7 +276,7 @@ object ZenSync {
         if (!AccountStore.isCurrent(generation)) return 0
         saveBase(context, uid, base)
         saveMoves(context, uid, moves)
-        prefs(context).edit().putLong("last", System.currentTimeMillis()).putInt("failed", failed).commit()
+        prefs(context).edit().putLong("last", System.currentTimeMillis()).putInt("failed", failed).remove("unsafe:$uid").commit()
         return added
     }
 
@@ -361,7 +397,18 @@ object ZenSync {
         }
 
         // Carpetas que se quedaron vacías por lo que se movió aquí: se quitan, solo si de verdad están vacías.
-        emptied.forEach { folderId -> attempt(Int.MIN_VALUE + folderId.hashCode().and(0xffff)) { SpacesSyncService.deleteFolderIfEmpty(session, folderId) } }
+        // No cuenta como cambio fallido: es limpieza, y la carpeta vacía no molesta.
+        emptied.forEach { folderId ->
+            try {
+                SpacesSyncService.deleteFolderIfEmpty(session, folderId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SyncError.Unauthorized) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("Fyx", "No se pudo quitar una carpeta vacía de Zen", e)
+            }
+        }
         android.util.Log.i("Fyx", "Sincronización de pestañas: ${pending.size} cambios, ${session.reads} lecturas, $failed fallidos")
         failed
     }
@@ -378,7 +425,13 @@ object ZenSync {
     /** Base de la última sincronización correcta de esa cuenta: id de Zen → dónde estaba la pestaña. */
     internal fun loadBase(context: Context, uid: String): MutableMap<String, TabSyncPlanner.State> {
         val out = HashMap<String, TabSyncPlanner.State>()
-        val raw = prefs(context).getString("base:$uid", null) ?: return out
+        val p = prefs(context)
+        // Versión anterior: una sola base sin cuenta. Se pasa a la de la cuenta con sesión y se borra.
+        p.getString("base", null)?.let { old ->
+            if (!p.contains("base:$uid")) p.edit().putString("base:$uid", old).remove("base").commit()
+            else p.edit().remove("base").commit()
+        }
+        val raw = p.getString("base:$uid", null) ?: return out
         runCatching {
             val o = JSONObject(raw)
             o.keys().forEach { k ->
@@ -393,6 +446,15 @@ object ZenSync {
         val o = JSONObject()
         base.forEach { (k, s) -> o.put(k, JSONArray().put(s.essential).put(s.space).put(s.folder)) }
         prefs(context).edit().putString("base:$uid", o.toString()).commit()
+    }
+
+    private fun loadSeen(context: Context, uid: String): TabSyncPlanner.Stability.Seen? {
+        val raw = prefs(context).getString("unsafe:$uid", null) ?: return null
+        return runCatching { JSONArray(raw).let { TabSyncPlanner.Stability.Seen(it.getString(0), it.getLong(1)) } }.getOrNull()
+    }
+
+    private fun saveSeen(context: Context, uid: String, seen: TabSyncPlanner.Stability.Seen) {
+        prefs(context).edit().putString("unsafe:$uid", JSONArray().put(seen.fingerprint).put(seen.since).toString()).commit()
     }
 
     private fun loadMoves(context: Context, uid: String): MutableMap<String, PendingMove> {
@@ -453,7 +515,9 @@ class ZenTabSync(
     private val mutex = Mutex()
     private var pendingPush: Job? = null
     private var lastRun = 0L
-    private var holdUntil = 0L
+    /** Pestañas de Zen retenidas (id → hasta cuándo) mientras se ve su aviso de "Deshacer". */
+    private val held = HashMap<String, Long>()
+    private var release: Job? = null
 
     /** Avisa cuando llegan pestañas nuevas del escritorio (para mostrar un aviso). */
     var onNews: ((Int) -> Unit)? = null
@@ -469,18 +533,29 @@ class ZenTabSync(
     fun onLocalChange() {
         pendingPush?.cancel()
         pendingPush = scope.launch {
-            delay(maxOf(PUSH_DELAY_MS, holdUntil - System.currentTimeMillis()))
+            delay(PUSH_DELAY_MS)
             runQuietly()
         }
     }
 
     /**
-     * No subir nada durante [millis] (mientras se ve el aviso con "Deshacer" de un cierre o un desfijado):
-     * si se deshace a tiempo, para Zen no pasó nada.
+     * Retiene los cambios de la pestaña [zenId] durante [millis] (lo que se ve el aviso con "Deshacer" de un
+     * cierre o un desfijado), en cualquier sincronización: la subida en cola, al volver a la app o el botón
+     * Sincronizar. Aunque otro aviso tape al de "Deshacer", la retención dura hasta que vence; entonces se sube.
      */
-    fun hold(millis: Long) {
-        holdUntil = System.currentTimeMillis() + millis
-        if (pendingPush?.isActive == true) onLocalChange()
+    fun hold(zenId: String, millis: Long) {
+        held[zenId] = System.currentTimeMillis() + millis
+        release?.cancel()
+        release = scope.launch {
+            delay(millis + 100)
+            onLocalChange()
+        }
+    }
+
+    private fun heldNow(): Set<String> {
+        val now = System.currentTimeMillis()
+        held.entries.removeAll { it.value <= now }
+        return held.keys.toSet()
     }
 
     /** La app se abrió o volvió al primer plano. */
@@ -491,6 +566,9 @@ class ZenTabSync(
 
     /** "Sincronizar" en Ajustes: ahora mismo, y con el error a la vista. */
     suspend fun syncNow(): Int = run()
+
+    /** "Aplicar cambios del escritorio": una vez, sin el freno de cierres o borrados masivos. */
+    suspend fun syncForced(): Int = run(force = true)
 
     private suspend fun runQuietly() {
         try {
@@ -505,11 +583,11 @@ class ZenTabSync(
         }
     }
 
-    private suspend fun run(): Int = mutex.withLock {
+    private suspend fun run(force: Boolean = false): Int = mutex.withLock {
         val signedIn = withContext(Dispatchers.IO) { runCatching { ZenSync.email(context) }.getOrNull() } != null
         if (!signedIn) return 0
         lastRun = System.currentTimeMillis()
-        ZenSync.syncTabs(context, store, closeTab)
+        ZenSync.syncTabs(context, store, closeTab, force, heldNow())
     }
 
     companion object {

@@ -505,7 +505,7 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
 internal fun closeWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
     val store = app.store
     val zenId = tab.zenId
-    if (zenId != null) app.tabSync.hold(ZenTabSync.UNDO_HOLD_MS)
+    if (zenId != null) app.tabSync.hold(zenId, ZenTabSync.UNDO_HOLD_MS)
     val url = tab.url
     val sid = tab.spaceId
     val kind = tab.kind
@@ -526,12 +526,15 @@ internal fun unpinWithUndo(app: app.kaze.browser.Kaze, tab: Tab) {
     val store = app.store
     val zenId = tab.zenId
     val folder = tab.folder
-    if (zenId != null) app.tabSync.hold(ZenTabSync.UNDO_HOLD_MS)
+    val home = tab.pinnedUrl
+    val position = tab.position
+    if (zenId != null) app.tabSync.hold(zenId, ZenTabSync.UNDO_HOLD_MS)
     store.setKind(tab, TabKind.NORMAL)
     if (zenId != null) {
         app.ui.show("Desfijada (también se quitará de Zen)", "Deshacer") {
-            store.setKind(tab, TabKind.PINNED)
-            store.setFolder(listOf(tab), folder)
+            // Si mientras tanto se cerró, no hay nada que deshacer.
+            val t = store.tabById(tab.id) ?: return@show
+            store.repin(t, folder, home, position)
         }
     }
 }

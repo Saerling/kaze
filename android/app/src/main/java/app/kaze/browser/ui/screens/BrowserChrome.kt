@@ -1071,8 +1071,11 @@ fun TabStrip(
         val seen = HashSet<String>()
         buildList { tabs.forEach { t -> val g = groupKey(t); if (g.isEmpty()) add(t) else if (seen.add(g)) addAll(byGroup.getValue(g)) } }
     }
+    val counts = remember(ordered) { ordered.groupingBy(::groupKey).eachCount() }
+    val groups = counts.keys.filter { it.isNotEmpty() }
     val visible = ordered.filter { it.folder.isEmpty() || folded[groupKey(it)] != true }
-    val groups = ordered.map { groupKey(it) }.filter { it.isNotEmpty() }.distinct()
+    // Posición de cada pestaña visible, calculada una vez (no un indexOf por pestaña).
+    val visibleIndex = HashMap<String, Int>(visible.size).apply { visible.forEachIndexed { i, t -> put(t.id, i) } }
     androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(30.dp)) {
         val n = visible.size.coerceAtLeast(1)
         val w = ((maxWidth - 4.dp * (n - 1) - 74.dp * groups.size) / n).coerceIn(minTab, maxTab)
@@ -1092,7 +1095,7 @@ fun TabStrip(
                     val gk = groupKey(t)
                     item(key = "g:$gk") {
                         val c = folderColor(name)
-                        val count = ordered.count { groupKey(it) == gk }
+                        val count = counts[gk] ?: 0
                         // Se toca toda la altura de la fila y al menos 44 dp de ancho (Compose amplía además el
                         // área táctil hasta el mínimo del sistema); el dibujo sigue siendo la píldora de 24 dp.
                         Box(
@@ -1116,7 +1119,7 @@ fun TabStrip(
                         }
                     }
                 }
-                val i = visible.indexOf(t)
+                val i = visibleIndex[t.id] ?: -1
                 if (i >= 0) item(key = t.id) {
                     val dragging = dragId == t.id
                     val drag = Modifier.pointerInput(t.id, visible.size) {

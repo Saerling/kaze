@@ -62,16 +62,23 @@ object TabSyncPlanner {
     class Unsafe(message: String) : Exception(message)
 
     /**
-     * Freno de seguridad sobre el plan, antes de tocar nada:
-     *  - si la cuenta llega vacía pero antes había pestañas sincronizadas, no se hace nada;
+     * Freno de seguridad sobre el plan, antes de tocar nada (vale para los dos sentidos):
      *  - si hubo registros que no se pudieron descifrar, no se cierra ni se borra nada (lo que "falta"
-     *    puede estar en ellos), ni se vuelven a subir las que parecen haber desaparecido;
-     *  - si se cerrarían aquí más del 30 % de las sincronizadas (y más de 3), se detiene y se avisa.
+     *    puede estar en ellos), ni se vuelven a subir las que parecen haber desaparecido. Esto no se
+     *    salta nunca, ni con [force];
+     *  - si la cuenta llega vacía, o el teléfono se quedó sin ninguna, habiendo pestañas sincronizadas;
+     *  - si se cerrarían aquí, o se borrarían en Zen, más del 30 % de las sincronizadas (y más de 3).
+     * En los dos últimos casos se lanza [Unsafe] con la explicación, salvo con [force] (el usuario lo
+     * confirmó, o la misma lectura se repitió estable: ver [Stability]).
      */
-    fun guard(ops: List<Op>, base: Map<String, State>, remote: Map<String, Remote>, decryptFailures: Int): List<Op> {
-        if (remote.isEmpty() && base.isNotEmpty()) {
-            throw Unsafe("La cuenta no devolvió ninguna pestaña fijada; por seguridad no se cambió nada.")
-        }
+    fun guard(
+        ops: List<Op>,
+        base: Map<String, State>,
+        remote: Map<String, Remote>,
+        decryptFailures: Int,
+        force: Boolean = false,
+        localLinked: Int = -1,
+    ): List<Op> {
         var out = ops
         if (decryptFailures > 0) {
             val unlinked = ops.filterIsInstance<Op.Unlink>().map { it.tabId }.toSet()
@@ -79,11 +86,55 @@ object TabSyncPlanner {
                 it is Op.CloseLocal || it is Op.DeleteRemote || it is Op.Unlink || (it is Op.CreateRemote && it.tabId in unlinked)
             }
         }
+        if (force || base.isEmpty()) return out
+        val hint = " Si fue a propósito, se aplicará sola en la próxima sincronización (pasado un minuto) " +
+            "o ya mismo con «Aplicar cambios del escritorio» en Ajustes."
+        if (remote.isEmpty()) {
+            throw Unsafe("En Zen ya no hay ninguna de tus ${base.size} pestañas fijadas sincronizadas; no se cerró nada aquí.$hint")
+        }
+        val limit = maxOf(3, (base.size * 0.3).toInt())
         val closing = out.count { it is Op.CloseLocal }
-        if (closing > maxOf(3, (base.size * 0.3).toInt())) {
-            throw Unsafe("Se iban a cerrar $closing de ${base.size} pestañas sincronizadas; por seguridad no se cambió nada.")
+        if (closing > limit) {
+            throw Unsafe("En Zen faltan $closing de tus ${base.size} pestañas fijadas sincronizadas; no se cerró nada aquí.$hint")
+        }
+        val deleting = out.count { it is Op.DeleteRemote }
+        if (localLinked == 0 || deleting > limit) {
+            throw Unsafe(
+                "En este teléfono faltan $deleting de tus ${base.size} pestañas fijadas sincronizadas; no se borró nada en Zen." +
+                    " Si fue a propósito, se aplicará en la próxima sincronización (pasado un minuto) o con «Aplicar cambios del escritorio» en Ajustes.",
+            )
         }
         return out
+    }
+
+    /**
+     * Quita las operaciones de pestañas retenidas (cerradas o desfijadas con un aviso de "Deshacer" a la
+     * vista): ni se borran en Zen ni se tocan; su base no cambia y se suben cuando vence la retención.
+     */
+    fun withoutHeld(ops: List<Op>, held: Set<String>): List<Op> = if (held.isEmpty()) ops else ops.filterNot {
+        (it is Op.DeleteRemote && it.zenId in held) || (it is Op.UpdateRemote && it.zenId in held)
+    }
+
+    /**
+     * Para no quedar frenada para siempre: si el freno salta y la misma situación (mismo conjunto de ids en
+     * la cuenta y en el teléfono) se repite en una sincronización al menos un minuto después, se acepta.
+     */
+    object Stability {
+        const val MIN_GAP_MS = 60_000L
+
+        data class Seen(val fingerprint: String, val since: Long)
+
+        fun fingerprint(remoteIds: Collection<String>, localIds: Collection<String>): String =
+            (remoteIds.sorted().joinToString(",") + "|" + localIds.sorted().joinToString(",")).hashCode().toString(16) +
+                ":" + remoteIds.size + ":" + localIds.size
+
+        /** ¿Se acepta ahora? Y lo que hay que recordar para la próxima vez. */
+        fun accept(previous: Seen?, fingerprint: String, now: Long): Pair<Boolean, Seen> =
+            if (previous != null && previous.fingerprint == fingerprint) {
+                (now - previous.since >= MIN_GAP_MS) to previous
+            } else {
+                false to Seen(fingerprint, now)
+            }
     }
 
     fun plan(

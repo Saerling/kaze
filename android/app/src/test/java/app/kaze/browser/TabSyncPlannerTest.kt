@@ -138,4 +138,45 @@ class TabSyncPlannerTest {
         val same = plan(emptyMap(), listOf(Remote("z1", raiz, "https://a.com/x/", "A")), listOf(Local("t1", null, raiz, "https://a.com/x#top")))
         assertEquals(listOf(Op.Link("t1", "z1", raiz)), same)
     }
+
+    @Test fun frenoSeLevantaSiLaLecturaSeRepiteEstable() {
+        val base = (1..10).associate { "z$it" to raiz }
+        val local = (1..10).map { Local("t$it", "z$it", raiz, "https://s$it.com") }
+        val ops = TabSyncPlanner.plan(base, emptyMap(), local)
+        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(ops, base, emptyMap(), 0) }
+        // Confirmado por el usuario ("Aplicar cambios del escritorio"): se aplica.
+        assertEquals(10, TabSyncPlanner.guard(ops, base, emptyMap(), 0, force = true).count { it is Op.CloseLocal })
+        // Pero nunca con registros ilegibles.
+        assertTrue(TabSyncPlanner.guard(ops, base, emptyMap(), 1, force = true).none { it is Op.CloseLocal })
+        // Misma situación dos veces, separadas al menos un minuto → se acepta; otra situación → vuelve a contar.
+        val st = TabSyncPlanner.Stability
+        val fp = st.fingerprint(emptyList(), base.keys)
+        val (a1, seen) = st.accept(null, fp, 1_000)
+        assertFalse(a1)
+        assertFalse(st.accept(seen, fp, 30_000).first)
+        assertTrue(st.accept(seen, fp, 61_000).first)
+        assertFalse(st.accept(seen, st.fingerprint(listOf("z1"), base.keys), 200_000).first)
+    }
+
+    @Test fun borradoMasivoEnZenSeDetiene() {
+        val base = (1..10).associate { "z$it" to raiz }
+        val remote = base.keys.associateWith { Remote(it, raiz, "https://$it.com", "") }
+        // El teléfono perdió 5 de 10: no se borran en Zen de golpe.
+        val local = (1..5).map { Local("t$it", "z$it", raiz, "https://z$it.com") }
+        val ops = TabSyncPlanner.plan(base, remote, local)
+        assertEquals(5, ops.count { it is Op.DeleteRemote })
+        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5) }
+        // Se quedó sin ninguna (aunque sean pocas): tampoco.
+        val small = mapOf("z1" to raiz)
+        val smallOps = TabSyncPlanner.plan(small, mapOf("z1" to Remote("z1", raiz, "https://a.com", "")), emptyList())
+        assertThrows(TabSyncPlanner.Unsafe::class.java) { TabSyncPlanner.guard(smallOps, small, mapOf("z1" to Remote("z1", raiz, "https://a.com", "")), 0, localLinked = 0) }
+        // Con registros ilegibles no se borra nada en Zen.
+        assertTrue(TabSyncPlanner.guard(ops, base, remote, 2, force = true).none { it is Op.DeleteRemote })
+    }
+
+    @Test fun lasRetenidasNoSeSuben() {
+        val ops = listOf(Op.DeleteRemote("z1", "t1"), Op.UpdateRemote("t2", "z2", raiz, trabajo, "https://b.com"), Op.DeleteRemote("z3", null))
+        assertEquals(listOf(Op.DeleteRemote("z3", null)), TabSyncPlanner.withoutHeld(ops, setOf("z1", "z2")))
+        assertEquals(ops, TabSyncPlanner.withoutHeld(ops, emptySet()))
+    }
 }

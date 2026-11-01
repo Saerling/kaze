@@ -105,6 +105,7 @@ class StoreTest {
 
     @Test fun alPasarAV4SeQuitanSoloLasRepetidasExactas() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        waitDb() // que ninguna escritura pendiente del arranque vuelva a crear la base después de borrarla
         db.close()
         ctx.deleteDatabase("kaze.db")
         val path = ctx.getDatabasePath("kaze.db")

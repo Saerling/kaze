@@ -117,7 +117,7 @@ class TabSyncPlannerTest {
         val ops = TabSyncPlanner.plan(base, remote, local)
         assertTrue(ops.any { it is Op.CloseLocal })
         // Ni confirmándolo: lo que "falta" puede estar en los registros ilegibles.
-        val safe = TabSyncPlanner.guard(ops, base, remote, decryptFailures = 1, confirmClose = true, confirmDelete = true).ops
+        val safe = TabSyncPlanner.guard(ops, base, remote, decryptFailures = 1, confirmedCloses = setOf("z1"), confirmedDeletes = setOf("z1")).ops
         assertTrue(safe.none { it is Op.CloseLocal || it is Op.DeleteRemote || it is Op.Unlink || it is Op.CreateRemote })
     }
 
@@ -132,7 +132,7 @@ class TabSyncPlannerTest {
         // El resto sigue: la nueva de aquí se sube igual.
         assertTrue(g.ops.any { it is Op.CreateRemote })
         assertTrue(TabSyncPlanner.guard(ops, base, emptyMap(), 0, localLinked = 1, autoClose = true).ops.none { it is Op.CloseLocal })
-        assertEquals(1, TabSyncPlanner.guard(ops, base, emptyMap(), 0, localLinked = 1, confirmClose = true).ops.count { it is Op.CloseLocal })
+        assertEquals(1, TabSyncPlanner.guard(ops, base, emptyMap(), 0, localLinked = 1, confirmedCloses = setOf("z1")).ops.count { it is Op.CloseLocal })
     }
 
     @Test fun cierreMasivoSeFrenaYLaEstabilidadLoLevanta() {
@@ -168,7 +168,7 @@ class TabSyncPlannerTest {
         val g = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5, autoClose = true)
         assertEquals(5, g.heldDeletes)
         assertTrue(g.ops.none { it is Op.DeleteRemote })
-        assertEquals(5, TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5, confirmDelete = true).ops.count { it is Op.DeleteRemote })
+        assertEquals(5, TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5, confirmedDeletes = g.heldDeleteIds).ops.count { it is Op.DeleteRemote })
         // Sin ninguna aquí y más del límite: frenado aunque fueran pocas por vez.
         val none = TabSyncPlanner.plan(base, remote, emptyList())
         assertEquals(10, TabSyncPlanner.guard(none, base, remote, 0, localLinked = 0).heldDeletes)
@@ -187,6 +187,40 @@ class TabSyncPlannerTest {
         val g4 = TabSyncPlanner.guard(TabSyncPlanner.plan(base4, remote4, emptyList()), base4, remote4, 0, localLinked = 0, held = setOf("z1"))
         assertFalse(g4.blocked)
         assertEquals(3, g4.ops.count { it is Op.DeleteRemote })
+    }
+
+    @Test fun soloSeConfirmaLoQueSeVio() {
+        val base = (1..10).associate { "z$it" to raiz }
+        val remote = base.keys.associateWith { Remote(it, raiz, "https://$it.com", "") }
+        val local = (1..5).map { Local("t$it", "z$it", raiz, "https://z$it.com") }
+        val ops = TabSyncPlanner.plan(base, remote, local)
+        val visto = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5).heldDeleteIds
+        assertEquals((6..10).map { "z$it" }.toSet(), visto)
+        // Se confirma justo ese conjunto: se aplica.
+        val ok = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 5, confirmedDeletes = visto)
+        assertEquals(visto, ok.ops.filterIsInstance<Op.DeleteRemote>().map { it.zenId }.toSet())
+        assertFalse(ok.confirmMismatch)
+        // Mientras tanto faltó otra más: el conjunto ya no es el que se vio → no se borra nada y se avisa.
+        val opsDespues = TabSyncPlanner.plan(base, remote, local.drop(1))
+        val cambio = TabSyncPlanner.guard(opsDespues, base, remote, 0, localLinked = 4, confirmedDeletes = visto)
+        assertTrue(cambio.confirmMismatch)
+        assertTrue(cambio.ops.none { it is Op.DeleteRemote })
+        assertEquals(6, cambio.heldDeletes)
+    }
+
+    @Test fun cuentaSinNingunaDeLasSincronizadasEsComoVacia() {
+        // La cuenta trae registros, pero ninguno de los que ya estaban sincronizados (p. ej. otra cuenta).
+        val base = (1..4).associate { "z$it" to raiz }
+        val remote = mapOf("otro" to Remote("otro", raiz, "https://otro.com", ""))
+        val local = (1..4).map { Local("t$it", "z$it", raiz, "https://z$it.com") }
+        val ops = TabSyncPlanner.plan(base, remote, local)
+        val g = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 4)
+        assertEquals(4, g.heldCloses)
+        assertFalse(g.closesAutoAcceptable) // la estabilidad no lo levanta
+        assertTrue(TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 4, autoClose = true).ops.none { it is Op.CloseLocal })
+        // Solo con la confirmación del conjunto exacto.
+        val ok = TabSyncPlanner.guard(ops, base, remote, 0, localLinked = 4, confirmedCloses = g.heldCloseIds)
+        assertEquals(4, ok.ops.count { it is Op.CloseLocal })
     }
 
     @Test fun lasRetenidasNoSeSuben() {

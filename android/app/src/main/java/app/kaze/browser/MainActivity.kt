@@ -4,6 +4,7 @@
 
 package app.kaze.browser
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.SideEffect
 import app.kaze.browser.ui.screens.HistoryPopup
@@ -1020,17 +1021,24 @@ private fun Toast(message: String?, action: Pair<String, () -> Unit>?, onGone: (
         ) {
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.92f))
-                    .padding(start = 18.dp, end = if (action != null) 6.dp else 18.dp, top = 6.dp, bottom = 6.dp),
+                    .padding(start = 18.dp, end = if (action != null) 6.dp else 18.dp, top = if (action != null) 0.dp else 6.dp, bottom = if (action != null) 0.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(message.orEmpty(), style = KazeType.small, color = k.paper, modifier = Modifier.padding(vertical = 4.dp))
                 if (action != null) {
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        action.first, style = KazeType.small.copy(fontWeight = FontWeight.SemiBold), color = k.paper,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent)
-                            .clickable { action.second(); onGone() }.padding(horizontal = 14.dp, vertical = 8.dp),
-                    )
+                    // Área táctil de 44 dp de alto; el botón se dibuja igual que antes.
+                    Box(
+                        Modifier.heightIn(min = 44.dp).clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null,
+                        ) { action.second(); onGone() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            action.first, style = KazeType.small.copy(fontWeight = FontWeight.SemiBold), color = k.paper,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent).padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             }
         }

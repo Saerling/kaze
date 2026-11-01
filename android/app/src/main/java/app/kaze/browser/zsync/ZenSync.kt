@@ -49,7 +49,7 @@ object ZenSync {
         val p = prefs(context)
         p.edit().apply {
             p.all.keys.filter { it.startsWith("base:") || it.startsWith("moves:") || it.startsWith("discarded:") || it.startsWith("unsafe:") }.forEach(::remove)
-        }.remove("base").remove("discarded").remove("failed").remove("pausedCloses").remove("pausedDeletes").apply()
+        }.remove("base").remove("discarded").remove("failed").remove("pausedCloseIds").remove("pausedDeleteIds").apply()
     }
 
     fun lastSync(context: Context): Long = prefs(context).getLong("last", 0)
@@ -88,15 +88,22 @@ object ZenSync {
         prefs(context).edit().remove("base:$uid").remove("moves:$uid").remove("discarded:$uid").remove("unsafe:$uid").remove("base").commit()
     }
 
-    /** Pestañas nuevas del escritorio y, si el freno retuvo algo nuevo, el aviso para el usuario. */
-    data class Outcome(val added: Int, val problem: String?)
+    /**
+     * Pestañas nuevas del escritorio; si el freno retuvo algo nuevo, el aviso para el usuario; y si se pidió
+     * confirmar un conjunto que ya no es el frenado ([mismatch]: no se aplicó nada de eso).
+     */
+    data class Outcome(val added: Int, val problem: String?, val mismatch: Boolean = false)
 
-    /** Cambios frenados por seguridad (cierres aquí, borrados en Zen) que esperan confirmación en Ajustes. */
-    fun paused(context: Context): Pair<Int, Int> =
-        prefs(context).getInt("pausedCloses", 0) to prefs(context).getInt("pausedDeletes", 0)
+    /** Lo frenado por seguridad que espera confirmación en Ajustes: los ids exactos de Zen. */
+    data class Paused(val closeIds: Set<String> = emptySet(), val deleteIds: Set<String> = emptySet())
 
-    private fun setPaused(context: Context, closes: Int, deletes: Int) {
-        prefs(context).edit().putInt("pausedCloses", closes).putInt("pausedDeletes", deletes).apply()
+    fun paused(context: Context): Paused = Paused(
+        prefs(context).getStringSet("pausedCloseIds", emptySet()).orEmpty().toSet(),
+        prefs(context).getStringSet("pausedDeleteIds", emptySet()).orEmpty().toSet(),
+    )
+
+    private fun setPaused(context: Context, paused: Paused) {
+        prefs(context).edit().putStringSet("pausedCloseIds", paused.closeIds).putStringSet("pausedDeleteIds", paused.deleteIds).apply()
     }
 
     private data class Pending(val index: Int, val op: TabSyncPlanner.Op, val title: String)
@@ -114,8 +121,8 @@ object ZenSync {
         context: Context,
         store: Store,
         closeTab: (Tab) -> Unit,
-        confirmClose: Boolean = false,
-        confirmDelete: Boolean = false,
+        confirmedCloses: Set<String>? = null,
+        confirmedDeletes: Set<String>? = null,
         held: Set<String> = emptySet(),
     ): Outcome {
         val generation = AccountStore.currentGeneration
@@ -155,6 +162,7 @@ object ZenSync {
         val moves = loadMoves(context, uid)
         var added = 0
         var problem: String? = null
+        var mismatch = false
         val pending = mutableListOf<Pending>()
         val applied = withContext(Dispatchers.Main) {
             if (!AccountStore.isCurrent(generation)) return@withContext false
@@ -193,7 +201,7 @@ object ZenSync {
                 val linked = locals.count { it.zenId != null }
                 fun guard(autoClose: Boolean) = TabSyncPlanner.guard(
                     planned, base, remote, snap.decryptFailures, linked, held,
-                    autoClose = autoClose, confirmClose = confirmClose, confirmDelete = confirmDelete,
+                    autoClose = autoClose, confirmedCloses = confirmedCloses, confirmedDeletes = confirmedDeletes,
                 )
                 var guarded = guard(autoClose = false)
                 if (guarded.closesAutoAcceptable) {
@@ -207,8 +215,10 @@ object ZenSync {
                 }
                 // Lo frenado espera a que el usuario lo confirme en Ajustes; todo lo demás sigue.
                 val before = paused(context)
-                setPaused(context, guarded.heldCloses, guarded.heldDeletes)
-                if (guarded.blocked && before != (guarded.heldCloses to guarded.heldDeletes)) {
+                val now = Paused(guarded.heldCloseIds, guarded.heldDeleteIds)
+                setPaused(context, now)
+                mismatch = guarded.confirmMismatch
+                if (guarded.blocked && before != now && !mismatch) {
                     TabSyncPlanner.explain(guarded)?.let { problem = it }
                 }
                 val ops = guarded.ops
@@ -303,7 +313,7 @@ object ZenSync {
             saveMoves(context, uid, moves)
             prefs(context).edit().putLong("last", System.currentTimeMillis()).putInt("failed", failed).commit()
         }
-        return Outcome(added, problem)
+        return Outcome(added, problem, mismatch)
     }
 
     /** Sube los cambios con una sola sesión de escritura. Devuelve cuántos fallaron. */
@@ -543,7 +553,13 @@ class ZenTabSync(
     private var lastRun = 0L
     /** Pestañas de Zen retenidas (id → hasta cuándo) mientras se ve su aviso de "Deshacer". */
     private val held = HashMap<String, Long>()
-    private var releaseJob: Job? = null
+    /** Un empuje programado por pestaña retenida (cada una vence a su hora). */
+    private val releaseJobs = HashMap<String, Job>()
+
+    private val pausedState = kotlinx.coroutines.flow.MutableStateFlow(runCatching { ZenSync.paused(context) }.getOrDefault(ZenSync.Paused()))
+
+    /** Lo frenado por seguridad, en vivo (Ajustes lo muestra y lo confirma tal cual). */
+    val paused: kotlinx.coroutines.flow.StateFlow<ZenSync.Paused> = pausedState
 
     /** Avisa cuando llegan pestañas nuevas del escritorio (para mostrar un aviso). */
     var onNews: ((Int) -> Unit)? = null
@@ -573,18 +589,19 @@ class ZenTabSync(
     fun hold(zenId: String): () -> Unit {
         val start = System.currentTimeMillis()
         held[zenId] = start + MAX_HOLD_MS
-        schedulePushAt(start + MAX_HOLD_MS)
+        schedulePushAt(zenId, start + MAX_HOLD_MS)
         return {
             val until = maxOf(start + UNDO_HOLD_MS, System.currentTimeMillis())
             if ((held[zenId] ?: 0L) > until) held[zenId] = until
-            schedulePushAt(until)
+            schedulePushAt(zenId, until)
         }
     }
 
-    private fun schedulePushAt(at: Long) {
-        releaseJob?.cancel()
-        releaseJob = scope.launch {
+    private fun schedulePushAt(zenId: String, at: Long) {
+        releaseJobs.remove(zenId)?.cancel()
+        releaseJobs[zenId] = scope.launch {
             delay(at - System.currentTimeMillis() + 100)
+            releaseJobs.remove(zenId)
             onLocalChange()
         }
     }
@@ -604,11 +621,14 @@ class ZenTabSync(
     /** "Sincronizar" en Ajustes: ahora mismo, y con el error a la vista. */
     suspend fun syncNow(): Int = run()
 
-    /** Confirmado en Ajustes: cerrar aquí las fijadas que faltan en el escritorio. */
-    suspend fun confirmCloses(): Int = run(confirmClose = true)
+    /**
+     * Confirmado en Ajustes: cerrar aquí exactamente las fijadas [ids] que el usuario vio. Devuelve false
+     * (sin aplicar nada de eso) si lo frenado ya es otro conjunto.
+     */
+    suspend fun confirmCloses(ids: Set<String>): Boolean = !runFull(confirmedCloses = ids).mismatch
 
-    /** Confirmado en Ajustes: borrar en el escritorio las fijadas que se quitaron aquí. */
-    suspend fun confirmDeletes(): Int = run(confirmDelete = true)
+    /** Confirmado en Ajustes: borrar en el escritorio exactamente las fijadas [ids] que el usuario vio. */
+    suspend fun confirmDeletes(ids: Set<String>): Boolean = !runFull(confirmedDeletes = ids).mismatch
 
     private suspend fun runQuietly() {
         try {
@@ -621,13 +641,25 @@ class ZenTabSync(
         }
     }
 
-    private suspend fun run(confirmClose: Boolean = false, confirmDelete: Boolean = false): Int = mutex.withLock {
+    /** Vuelve a leer lo frenado (p. ej. tras cerrar sesión, que lo borra). */
+    fun refreshPaused() {
+        pausedState.value = runCatching { ZenSync.paused(context) }.getOrDefault(ZenSync.Paused())
+    }
+
+    private suspend fun run(): Int = runFull().added
+
+    private suspend fun runFull(confirmedCloses: Set<String>? = null, confirmedDeletes: Set<String>? = null): ZenSync.Outcome = mutex.withLock {
         val signedIn = withContext(Dispatchers.IO) { runCatching { ZenSync.email(context) }.getOrNull() } != null
-        if (!signedIn) return 0
+        if (!signedIn) return ZenSync.Outcome(0, null)
         lastRun = System.currentTimeMillis()
-        val out = ZenSync.syncTabs(context, store, closeTab, confirmClose, confirmDelete, heldNow())
-        out.problem?.let { onProblem?.invoke(it) }
-        out.added
+        try {
+            val out = ZenSync.syncTabs(context, store, closeTab, confirmedCloses, confirmedDeletes, heldNow())
+            out.problem?.let { onProblem?.invoke(it) }
+            out
+        } finally {
+            // Tanto en la subida en segundo plano como desde Ajustes: lo frenado se ve al momento.
+            pausedState.value = runCatching { ZenSync.paused(context) }.getOrDefault(ZenSync.Paused())
+        }
     }
 
     companion object {

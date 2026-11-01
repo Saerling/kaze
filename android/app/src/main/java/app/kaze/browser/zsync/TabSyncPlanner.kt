@@ -64,25 +64,31 @@ object TabSyncPlanner {
      */
     data class Guarded(
         val ops: List<Op>,
-        /** Cierres en el teléfono frenados (faltan en Zen). */
-        val heldCloses: Int = 0,
-        /** Borrados en Zen frenados (faltan en el teléfono). */
-        val heldDeletes: Int = 0,
-        /** Los cierres frenados son solo "muchos de golpe" (la cuenta no llegó vacía): los puede levantar [Stability]. */
+        /** Ids de Zen de los cierres en el teléfono frenados (faltan en Zen). */
+        val heldCloseIds: Set<String> = emptySet(),
+        /** Ids de Zen de los borrados en Zen frenados (faltan en el teléfono). */
+        val heldDeleteIds: Set<String> = emptySet(),
+        /** Los cierres frenados son solo "muchos de golpe" (la cuenta trae lo de antes): los puede levantar [Stability]. */
         val closesAutoAcceptable: Boolean = false,
+        /** Se pidió confirmar un conjunto que ya no es el que está frenado: no se aplicó nada de eso. */
+        val confirmMismatch: Boolean = false,
     ) {
-        val blocked: Boolean get() = heldCloses > 0 || heldDeletes > 0
+        val heldCloses: Int get() = heldCloseIds.size
+        val heldDeletes: Int get() = heldDeleteIds.size
+        val blocked: Boolean get() = heldCloseIds.isNotEmpty() || heldDeleteIds.isNotEmpty()
     }
 
     /**
      * Freno de seguridad sobre el plan, antes de tocar nada:
      *  - si hubo registros que no se pudieron descifrar, no se cierra ni se borra nada (lo que "falta"
      *    puede estar en ellos), ni se vuelven a subir las que parecen haber desaparecido. Nunca se salta;
-     *  - cierres aquí: si la cuenta llega vacía, o se cerrarían más del 30 % (y más de 3), se frenan.
-     *    Los "muchos de golpe" (no la cuenta vacía) se pueden aceptar solos con [Stability] ([autoClose]);
-     *    la cuenta vacía solo con confirmación del usuario ([confirmClose]);
+     *  - cierres aquí: si la cuenta no trae ninguna de las ya sincronizadas (vacía o con otras), o se
+     *    cerrarían más del 30 % (y más de 3), se frenan. Los "muchos de golpe" se pueden aceptar solos con
+     *    [Stability] ([autoClose]); lo otro, solo con confirmación del usuario;
      *  - borrados en Zen: si se borrarían más del 30 % (y más de 3), o el teléfono se quedó sin ninguna
-     *    teniendo más de ese límite, se frenan y solo los confirma el usuario ([confirmDelete]).
+     *    teniendo más de ese límite, se frenan y solo los confirma el usuario.
+     * El usuario confirma exactamente el conjunto que vio ([confirmedCloses], [confirmedDeletes]): si el que
+     * está frenado ahora es otro, no se aplica nada de eso y se marca [Guarded.confirmMismatch].
      * Las retenidas ([held]: avisos de "Deshacer" a la vista) no cuentan.
      */
     fun guard(
@@ -93,8 +99,8 @@ object TabSyncPlanner {
         localLinked: Int = -1,
         held: Set<String> = emptySet(),
         autoClose: Boolean = false,
-        confirmClose: Boolean = false,
-        confirmDelete: Boolean = false,
+        confirmedCloses: Set<String>? = null,
+        confirmedDeletes: Set<String>? = null,
     ): Guarded {
         var out = withoutHeld(ops, held)
         if (decryptFailures > 0) {
@@ -107,19 +113,29 @@ object TabSyncPlanner {
         if (synced == 0) return Guarded(out)
         val limit = maxOf(3, (synced * 0.3).toInt())
 
-        val closes = out.count { it is Op.CloseLocal }
-        val remoteEmpty = remote.isEmpty()
-        val closesBlocked = closes > 0 && !confirmClose && (remoteEmpty || (closes > limit && !autoClose))
-        val deletes = out.count { it is Op.DeleteRemote }
-        val deletesBlocked = deletes > 0 && !confirmDelete && (deletes > limit || (localLinked == 0 && synced > limit))
+        val closeIds = out.filterIsInstance<Op.CloseLocal>().map { it.zenId }.toSet()
+        // Ninguna de las ya sincronizadas sigue en la cuenta: tan sospechoso como una cuenta vacía.
+        val noneLeft = remote.isEmpty() || closeIds.size >= synced
+        var closesBlocked = closeIds.isNotEmpty() && (noneLeft || (closeIds.size > limit && !autoClose))
+        val deleteIds = out.filterIsInstance<Op.DeleteRemote>().map { it.zenId }.toSet()
+        var deletesBlocked = deleteIds.isNotEmpty() && (deleteIds.size > limit || (localLinked == 0 && synced > limit))
+
+        var mismatch = false
+        if (closesBlocked && confirmedCloses != null) {
+            if (confirmedCloses == closeIds) closesBlocked = false else mismatch = true
+        }
+        if (deletesBlocked && confirmedDeletes != null) {
+            if (confirmedDeletes == deleteIds) deletesBlocked = false else mismatch = true
+        }
 
         if (closesBlocked) out = out.filterNot { it is Op.CloseLocal }
         if (deletesBlocked) out = out.filterNot { it is Op.DeleteRemote }
         return Guarded(
             ops = out,
-            heldCloses = if (closesBlocked) closes else 0,
-            heldDeletes = if (deletesBlocked) deletes else 0,
-            closesAutoAcceptable = closesBlocked && !remoteEmpty,
+            heldCloseIds = if (closesBlocked) closeIds else emptySet(),
+            heldDeleteIds = if (deletesBlocked) deleteIds else emptySet(),
+            closesAutoAcceptable = closesBlocked && !noneLeft,
+            confirmMismatch = mismatch,
         )
     }
 

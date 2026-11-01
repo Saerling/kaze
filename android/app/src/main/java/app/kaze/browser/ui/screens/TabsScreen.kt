@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.screens
 
+import app.kaze.browser.data.Topics
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import app.kaze.browser.data.TabKind
@@ -64,6 +65,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -151,8 +153,23 @@ fun TabsScreen(
         val i = spaces.indexOfFirst { it.id == space.id }
         spaces.getOrNull(i + delta)?.let { store.selectSpace(it.id) }
     }
-    val normal = store.normal(space.id).let { list ->
+    val allNormal = store.normal(space.id)
+    // Temas (como Safari en iOS 27): píldoras "Todas" + grupos, temas y sitios detectados.
+    // Se recalcula solo cuando cambian las direcciones, títulos o grupos de las pestañas.
+    val topicSig = allNormal.joinToString("\u0001") { it.id + it.url + it.title + it.folder }
+    val topicFilters = remember(topicSig) { Topics.filters(allNormal) }
+    var topicKey by remember(space.id) { mutableStateOf<String?>(null) }
+    val topic = topicFilters.firstOrNull { it.key == topicKey }
+    val normal = allNormal.let { list ->
+        if (topic == null) list else list.filter { it.id in topic.tabIds }
+    }.let { list ->
         if (query.isBlank()) list else list.filter { it.title.contains(query, true) || it.url.contains(query, true) }
+    }
+    val flat = query.isNotBlank() || topic != null
+    fun groupByTopic() {
+        val groups = Topics.groups(allNormal)
+        groups.forEach { (name, list) -> store.setFolder(list, name) }
+        if (groups.isNotEmpty()) { topicKey = null; haptic.performHapticFeedback(HapticFeedbackType.Confirm) }
     }
     // Cada espacio recuerda su propio desplazamiento: cambiar rápido entre espacios no deja la lista a medias.
     val grid = remember(space.id) { LazyGridState() }
@@ -164,7 +181,7 @@ fun TabsScreen(
     LaunchedEffect(space.id) {
         // Mostrar la pestaña actual sin tener que buscarla (solo si está más abajo de lo visible).
         val i = normal.indexOfFirst { it.id == store.selectedTabId }
-        val header = 1 + (if (essentials.isNotEmpty()) 1 else 0) + (if (pinned.isNotEmpty()) 1 else 0)
+        val header = 1 + (if (topicFilters.isNotEmpty()) 1 else 0) + (if (essentials.isNotEmpty()) 1 else 0) + (if (pinned.isNotEmpty()) 1 else 0)
         if (i >= 4) grid.scrollToItem(header + i)
     }
 
@@ -223,7 +240,7 @@ fun TabsScreen(
     }
     @Composable
     fun Modifier.dragVisual(key: String): Modifier {
-        val target by animateFloatAsState(if (hoverKey == key && mergeReady) 0.9f else 1f, spring(0.6f, 500f), label = "merge")
+        val target by animateFloatAsState(if (hoverKey == key && mergeReady) 0.9f else 1f, spring(0.85f, 500f), label = "merge")
         return if (dragId == key) this.zIndex(10f).graphicsLayer {
             translationX = dragOffset.x; translationY = dragOffset.y
             scaleX = 1.07f; scaleY = 1.07f; shadowElevation = 28f; alpha = 0.95f
@@ -265,13 +282,28 @@ fun TabsScreen(
                         decorationBox = { inner -> if (query.isEmpty()) Text("Buscar pestañas", style = KazeType.body, color = k.ink55); inner() },
                     )
                     // Organizar pestañas (como Safari en iPadOS 27): agrupa en carpetas las del mismo sitio.
+                    // ✦ abre un menú: por sitio (lo de antes) o por tema (Compras, Video, Noticias…).
+                    var organizeMenu by remember { mutableStateOf(false) }
                     Box(
-                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable {
-                            if (store.organize(space.id) > 0) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
-                        }
-                            .semantics { contentDescription = "Organizar pestañas por sitio" },
+                        Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable { organizeMenu = true }
+                            .semantics { contentDescription = "Organizar pestañas" },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Outlined.AutoAwesome, null, tint = k.accent, modifier = Modifier.size(19.dp)) }
+                    ) {
+                        Icon(Icons.Outlined.AutoAwesome, null, tint = k.accent, modifier = Modifier.size(19.dp))
+                        androidx.compose.material3.DropdownMenu(organizeMenu, { organizeMenu = false }) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Crear grupos por tema") },
+                                onClick = { organizeMenu = false; groupByTopic() },
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Agrupar por sitio") },
+                                onClick = {
+                                    organizeMenu = false
+                                    if (store.organize(space.id) > 0) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                },
+                            )
+                        }
+                    }
                     // Cambiar la vista: tarjetas → compacta → lista.
                     val (next, icon, label) = when (mode) {
                         "grid" -> Triple("compact", Icons.Outlined.Apps, "Vista compacta")
@@ -285,18 +317,24 @@ fun TabsScreen(
                     ) { Icon(icon, null, tint = k.accent, modifier = Modifier.size(19.dp)) }
                 }
             }
-            if (essentials.isNotEmpty() && query.isBlank()) {
+            if (topicFilters.isNotEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "topics") {
+                    TopicChips(topicFilters, topicKey, allNormal.count { !it.isStart }, onPick = { topicKey = it }, onGroup = ::groupByTopic)
+                }
+            }
+            if (essentials.isNotEmpty() && query.isBlank() && topic == null) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "essentials") {
                     Column { PinnedStrip(essentials, store.selectedTabId, onOpen, onTabMenu, essential = true) }
                 }
             }
-            if (pinned.isNotEmpty() && query.isBlank()) {
+            if (pinned.isNotEmpty() && query.isBlank() && topic == null) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "pinned") {
                     Column(Modifier.zIndex(1f)) { PinnedStrip(pinned, store.selectedTabId, onOpen, onTabMenu) }
                 }
             }
             // Pestañas sueltas y carpetas (una carpeta ocupa el lugar de su primera pestaña).
-            val entries: List<Any> = if (query.isNotBlank()) normal else {
+            // Con búsqueda o tema activo se ven las pestañas sueltas (también las de dentro de grupos).
+            val entries: List<Any> = if (flat) normal else {
                 val seen = mutableSetOf<String>()
                 normal.mapNotNull { t ->
                     when {
@@ -306,12 +344,12 @@ fun TabsScreen(
                     }
                 }
             }
-            items(entries, key = { e -> if (e is Tab) e.id else "f:$e" }) { e ->
+            itemsIndexed(entries, key = { _, e -> if (e is Tab) e.id else "f:$e" }) { index, e ->
                 // Al cerrar, abrir o reordenar pestañas, las demás se acomodan con animación.
                 val key = if (e is Tab) e.id else "f:$e"
                 Box(
-                    Modifier.animateItem(fadeInSpec = tween(220), placementSpec = spring(0.82f, 360f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(160))
-                        .staggerIn(entries.indexOf(e), opening)
+                    Modifier.animateItem(fadeInSpec = tween(220), placementSpec = spring(0.85f, 360f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(160))
+                        .staggerIn(index, opening)
                         .dragVisual(key),
                 ) {
                     if (e is Tab) {
@@ -402,8 +440,8 @@ fun TabsScreen(
         // Carpeta abierta: se abre desde el centro con sus pestañas.
         AnimatedVisibility(
             visible = openFolder != null,
-            enter = fadeIn(tween(180)) + scaleIn(spring(0.8f, 420f), initialScale = 0.85f),
-            exit = fadeOut(tween(150)) + scaleOut(tween(180), targetScale = 0.9f),
+            enter = fadeIn(tween(180)) + scaleIn(spring(0.85f, 420f), initialScale = 0.85f),
+            exit = fadeOut(tween(150)) + scaleOut(spring(1f, 700f), targetScale = 0.9f),
         ) {
             var shown by remember { mutableStateOf(openFolder.orEmpty()) }
             LaunchedEffect(openFolder) { openFolder?.let { shown = it } }
@@ -417,6 +455,57 @@ fun TabsScreen(
                 onUngroup = { store.ungroup(space.id, shown); openFolder = null },
                 onDismiss = { openFolder = null },
             )
+        }
+    }
+}
+
+/**
+ * Fila de píldoras de temas: "Todas" + grupos, temas y sitios. La elegida se rellena con el
+ * color de acento; la cuadrícula de abajo se filtra y las tarjetas se acomodan con resorte.
+ */
+@Composable
+private fun TopicChips(
+    filters: List<Topics.Filter>,
+    selected: String?,
+    total: Int,
+    onPick: (String?) -> Unit,
+    onGroup: () -> Unit,
+) {
+    val k = LocalKaze.current
+    val spec = spring<Color>(dampingRatio = 0.85f, stiffness = 500f)
+    @Composable
+    fun Pill(label: String, count: Int?, on: Boolean, description: String = label, onClick: () -> Unit) {
+        val bg by androidx.compose.animation.animateColorAsState(if (on) k.accent else k.lift, spec, label = "pill")
+        val fg by androidx.compose.animation.animateColorAsState(if (on) Color.White else k.ink, spec, label = "pillText")
+        Row(
+            Modifier.height(34.dp).clip(RoundedCornerShape(50)).background(bg).clickable(onClick = onClick)
+                .semantics { contentDescription = description }.padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = fg, maxLines = 1)
+            if (count != null) Text("  $count", style = KazeType.footnote, color = fg.copy(alpha = 0.75f), maxLines = 1)
+        }
+    }
+    // La píldora elegida siempre queda a la vista (se desliza hasta ella con resorte).
+    val row = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(selected) {
+        val i = filters.indexOfFirst { it.key == selected }
+        row.animateScrollToItem(if (i < 0) 0 else maxOf(0, i))
+    }
+    androidx.compose.foundation.lazy.LazyRow(
+        Modifier.fillMaxWidth(),
+        state = row,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item(key = "all") { Pill("Todas", total, selected == null) { onPick(null) } }
+        items(filters.size, key = { filters[it].key }) { i ->
+            val f = filters[i]
+            Pill("${f.emoji} ${f.label}", f.tabIds.size, f.key == selected, description = "Tema ${f.label}") {
+                onPick(if (f.key == selected) null else f.key)
+            }
+        }
+        item(key = "group") {
+            Pill("✦ Crear grupos por tema", null, false, onClick = onGroup)
         }
     }
 }
@@ -614,8 +703,8 @@ private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> 
                 // Sin sueltas, al arrastrar desde un grupo aparece (con un resorte) un sitio para sacarla.
                 androidx.compose.animation.AnimatedVisibility(
                     visible = loose.isEmpty() && fromGroup,
-                    enter = androidx.compose.animation.expandVertically(spring(0.9f, 500f)) + fadeIn(tween(160)),
-                    exit = androidx.compose.animation.shrinkVertically(spring(0.9f, 500f)) + fadeOut(tween(120)),
+                    enter = androidx.compose.animation.expandVertically(spring(0.85f, 500f)) + fadeIn(tween(160)),
+                    exit = androidx.compose.animation.shrinkVertically(spring(0.85f, 500f)) + fadeOut(tween(120)),
                 ) {
                     Box(
                         Modifier.padding(bottom = 8.dp).fillMaxWidth().height(44.dp).border(1.dp, k.ink.copy(alpha = 0.18f), RoundedCornerShape(22.dp)),
@@ -639,7 +728,7 @@ private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> 
                             .onGloballyPositioned { bounds[gk] = it.boundsInRoot() }
                             .clip(RoundedCornerShape(18.dp)).background(tint)
                             .then(if (target) Modifier.border(1.5.dp, c, RoundedCornerShape(18.dp)) else Modifier)
-                            .animateContentSize(spring(0.9f, 500f)).padding(6.dp),
+                            .animateContentSize(spring(0.85f, 500f)).padding(6.dp),
                     ) {
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).tap({ open[name] = !expanded }, { open[name] = !expanded })
@@ -655,7 +744,7 @@ private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> 
                             // Vista previa: los íconos del grupo cuando está plegado.
                             if (!expanded) list.take(4).forEach { Favicon(it.pinnedUrl ?: it.url, 16.dp, Modifier.padding(start = 4.dp)) }
                             Text("  ${list.size}", style = KazeType.footnote, color = k.ink55)
-                            val turn by animateFloatAsState(if (expanded) 180f else 0f, spring(0.8f, 400f), label = "flecha")
+                            val turn by animateFloatAsState(if (expanded) 180f else 0f, spring(0.85f, 400f), label = "flecha")
                             Icon(
                                 Icons.Outlined.KeyboardArrowDown, null, tint = k.ink55,
                                 modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = turn },

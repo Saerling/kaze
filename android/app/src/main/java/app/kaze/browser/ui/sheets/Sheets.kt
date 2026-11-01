@@ -433,7 +433,7 @@ fun TabMenuSheet(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onMove: ()
                 val slide = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 420f)
                 (fadeIn(tween(180, 60)) + slideInHorizontally(slide) { w -> if (forward) w / 5 else -w / 5 }) togetherWith
                     (fadeOut(tween(120)) + slideOutHorizontally(slide) { w -> if (forward) -w / 5 else w / 5 }) using
-                    SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 0.9f, stiffness = 420f) }
+                    SizeTransform(clip = false) { _, _ -> spring(dampingRatio = 0.85f, stiffness = 420f) }
             },
             label = "menu",
         ) { p ->

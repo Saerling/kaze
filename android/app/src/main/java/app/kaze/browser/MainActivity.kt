@@ -240,7 +240,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val dark = Engine.isDarkTheme(this, app.settings)
-            KazeTheme(dark, app.settings.uiStyle, app.settings.accent) {
+            KazeTheme(dark, app.settings.uiStyle, app.settings.accent, app.settings.glassTransparency) {
                 CompositionLocalProvider(LocalApp provides app) { Root() }
             }
         }
@@ -671,7 +671,7 @@ class MainActivity : ComponentActivity() {
             geckoView.setDynamicToolbarMaxHeight(max)
             // 0 = barra entera a la vista; negativo = cuánto de la barra está escondido.
             val target = if (collapsed) -(max - smallPx).coerceAtLeast(0).toFloat() else 0f
-            clip.animateTo(target, androidx.compose.animation.core.spring(dampingRatio = 0.9f, stiffness = 420f)) {
+            clip.animateTo(target, androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 420f)) {
                 geckoView.setVerticalClipping(value.toInt())
             }
         }
@@ -755,8 +755,8 @@ class MainActivity : ComponentActivity() {
 
             AnimatedVisibility(
                 visible = showTabs,
-                enter = fadeIn(tween(180)) + scaleIn(tween(240), initialScale = 1.04f),
-                exit = fadeOut(tween(160)) + scaleOut(tween(200), targetScale = 1.04f),
+                enter = fadeIn(tween(180)) + scaleIn(spring(0.85f, 420f), initialScale = 1.04f),
+                exit = fadeOut(tween(160)) + scaleOut(spring(1f, 700f), targetScale = 1.04f),
             ) {
                 TabsScreen(
                     onOpen = ::open,
@@ -902,7 +902,7 @@ class MainActivity : ComponentActivity() {
             AnimatedVisibility(
                 visible = zenPanel,
                 enter = fadeIn(tween(160)) + slideInVertically(spring(0.85f, 420f)) { it / 5 },
-                exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 6 },
+                exit = fadeOut(tween(140)) + slideOutVertically(spring(1f, 700f)) { it / 6 },
             ) {
                 ZenPanel(
                     essentials = store.essentials(),
@@ -1016,8 +1016,8 @@ private fun Toast(message: String?, action: Pair<String, () -> Unit>?, onGone: (
     Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 128.dp), contentAlignment = Alignment.BottomCenter) {
         AnimatedVisibility(
             message != null,
-            enter = fadeIn(tween(160)) + slideInVertically(spring(0.8f, 500f)) { it },
-            exit = fadeOut(tween(140)) + slideOutVertically(tween(160)) { it / 2 },
+            enter = fadeIn(tween(160)) + slideInVertically(spring(0.85f, 500f)) { it },
+            exit = fadeOut(tween(140)) + slideOutVertically(spring(1f, 700f)) { it / 2 },
         ) {
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.92f))

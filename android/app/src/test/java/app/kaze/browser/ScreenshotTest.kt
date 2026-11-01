@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -141,6 +143,52 @@ class ScreenshotTest {
         compose.setContent { Themed(false) { StartPage(false, {}, {}, {}, {}) } }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-inicio.png")
+    }
+
+    /** Página de inicio con "Reanudar navegación": cerradas hace poco y pestañas que llegaron de Zen. */
+    @Test fun inicio_reanudar() {
+        val s = app.store
+        s.recentlyClosed.clear()
+        s.recentlyClosed.addAll(
+            listOf(
+                "https://www.macrumors.com/2026/06/09/safari-ios-27/" to "Safari en iOS 27: agrupación de pestañas por tema",
+                "https://www.amazon.com/dp/B0CHX1W1XY" to "Audífonos inalámbricos con cancelación de ruido",
+                "https://es.wikipedia.org/wiki/Aurora_polar" to "Aurora polar - Wikipedia",
+            ),
+        )
+        val pinned = s.pinned(s.currentSpaceId)
+        pinned.take(2).forEach { it.zenId = "zen-" + it.id }
+        try {
+            compose.setContent { Themed(false) { StartPage(false, {}, {}, {}, {}, forceSynced = true) } }
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage("../../docs/capturas/android-inicio-reanudar.png")
+        } finally {
+            pinned.forEach { it.zenId = null }
+            s.recentlyClosed.clear()
+        }
+    }
+
+    /** Temas en la vista de pestañas: píldoras arriba y la cuadrícula filtrada por "Noticias". */
+    @Test fun pestanas_temas() {
+        thumbs()
+        val s = app.store
+        val extra = listOf(
+            "https://www.nytimes.com/2026/11/01/technology/ai.html" to "The New York Times - Technology",
+            "https://www.amazon.com/dp/B0CHX1W1XY" to "Audífonos inalámbricos - Amazon",
+            "https://listado.mercadolibre.com.co/teclado" to "Teclado mecánico | MercadoLibre",
+            "https://www.youtube.com/watch?v=abc" to "Liquid Glass en iOS 27 - YouTube",
+        ).map { (u, t) -> s.newTab(u, select = false).also { it.title = t } }
+        try {
+            compose.setContent { Themed(false) { Tabs() } }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Tema Noticias").performClick()
+            compose.mainClock.advanceTimeBy(1200)
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-temas.png")
+        } finally {
+            extra.forEach { s.close(it) }
+            s.recentlyClosed.clear()
+        }
     }
 
     private fun actions() = ChromeActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})

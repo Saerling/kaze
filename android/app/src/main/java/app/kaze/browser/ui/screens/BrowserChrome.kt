@@ -119,6 +119,7 @@ import app.kaze.browser.ui.components.tap
 import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
 import app.kaze.browser.ui.theme.glass
+import app.kaze.browser.ui.theme.glassFill
 import app.kaze.browser.ui.theme.pressFeedback
 import app.kaze.browser.ui.theme.liftCard
 import kotlinx.coroutines.launch
@@ -179,8 +180,8 @@ fun SafariBottomBar(
     if (split) {
         AnimatedVisibility(
             !collapsed, modifier = modifier,
-            enter = slideInVertically(spring(0.86f, 420f)) { it } + fadeIn(tween(180)),
-            exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(150)),
+            enter = slideInVertically(spring(0.85f, 420f)) { it } + fadeIn(tween(180)),
+            exit = slideOutVertically(spring(1f, 700f)) { it } + fadeOut(tween(150)),
         ) { ExpandedBar(tab, space, tabCount, a, tabs, onSelectTab, showAddress = false, onCloseTab = onCloseTab) }
         return
     }
@@ -196,8 +197,8 @@ fun SafariBottomBar(
         targetState = collapsed,
         // Se funde y crece desde abajo con un resorte suave (sin escalar: no hay saltos ni temblores).
         transitionSpec = {
-            (fadeIn(tween(200, delayMillis = 70)) + slideInVertically(spring(0.86f, 420f)) { it / 3 }) togetherWith
-                fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.86f, 420f) }
+            (fadeIn(tween(200, delayMillis = 70)) + slideInVertically(spring(0.85f, 420f)) { it / 3 }) togetherWith
+                fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.85f, 420f) }
         },
         contentAlignment = if (top) Alignment.TopCenter else Alignment.BottomCenter,
         modifier = modifier,
@@ -226,7 +227,7 @@ private fun CollapsedBar(tab: Tab, space: Space?, onExpand: () -> Unit) {
     val k = LocalKaze.current
     // Píldora mínima pegada abajo (de borde a borde): toda la pantalla queda para la página.
     Column(
-        Modifier.fillMaxWidth().background(k.glass).background(spaceTint(space)).clickable(onClick = onExpand)
+        Modifier.fillMaxWidth().background(k.glassFill()).background(spaceTint(space)).clickable(onClick = onExpand)
             .then(if (LocalBarTop.current) Modifier else Modifier.navigationBarsPadding()),
     ) {
         val progress by animateFloatAsState(tab.progress / 100f, tween(160), label = "progressMini")
@@ -269,7 +270,7 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             .fillMaxWidth()
             .shadow(if (k.material) 0.dp else 14.dp, shape, ambientColor = Color.Black.copy(alpha = 0.2f))
             .clip(shape)
-            .background(k.glass)
+            .background(k.glassFill())
             .then(if (k.material) Modifier else Modifier.background(spaceTint(space)))
             .then(if (top) Modifier.padding(bottom = 6.dp) else Modifier.navigationBarsPadding())
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
@@ -282,8 +283,8 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AnimatedVisibility(tab.canGoBack, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack) }
-            AnimatedVisibility(tab.canGoForward, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward) }
+            AnimatedVisibility(tab.canGoBack, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(spring(1f, 700f))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", enabled = tab.canGoBack, onLong = { a.onHistoryMenu(-1) }, onClick = a.onBack) }
+            AnimatedVisibility(tab.canGoForward, enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)), exit = fadeOut(tween(110)) + shrinkHorizontally(spring(1f, 700f))) { ToolbarIcon(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", enabled = tab.canGoForward, onLong = { a.onHistoryMenu(1) }, onClick = a.onForward) }
             HomeButton(tab.isStart, a.onHome, a.onSpaces)
             ToolbarIcon(Icons.Outlined.MoreHoriz, "Menú", onClick = a.onShare)
             ToolbarIcon(Icons.AutoMirrored.Outlined.MenuBook, "Favoritos, lista de lectura e historial", onClick = a.onLibrary)
@@ -323,7 +324,7 @@ private fun TabsButton(count: Int, onClick: () -> Unit, onLong: () -> Unit, size
         Box(Modifier.offset(3.dp, (-3).dp).size(17.dp).clip(RoundedCornerShape(5.dp)).background(k.accent.copy(alpha = 0.35f)))
         Box(
             Modifier.offset((-2).dp, 2.dp).size(19.dp).clip(RoundedCornerShape(5.dp)).background(k.accent).padding(1.8.dp)
-                .clip(RoundedCornerShape(4.dp)).background(k.glass),
+                .clip(RoundedCornerShape(4.dp)).background(k.glassFill()),
             contentAlignment = Alignment.Center,
         ) {
             Text(if (count > 99) "∞" else count.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = k.accent)
@@ -510,7 +511,7 @@ private fun AddressPill(tab: Tab, a: ChromeActions, swipe: Boolean = true) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
                         val d = drag.value
-                        scope.launch { drag.animateTo(0f, spring(0.8f, 500f)) }
+                        scope.launch { drag.animateTo(0f, spring(0.85f, 500f)) }
                         if (abs(d) > 90) a.onSwipeTab(if (d < 0) 1 else -1)
                     },
                     onDragCancel = { scope.launch { drag.animateTo(0f) } },
@@ -682,7 +683,7 @@ fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () ->
         Column(
             Modifier.navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 120.dp)
                 .widthIn(max = 420.dp).heightIn(max = 420.dp)
-                .clip(RoundedCornerShape(24.dp)).background(k.glass).padding(8.dp)
+                .clip(RoundedCornerShape(24.dp)).background(k.glassFill()).padding(8.dp)
                 .verticalScroll(rememberScrollState(), reverseScrolling = true),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -697,7 +698,7 @@ fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () ->
                 androidx.compose.animation.AnimatedVisibility(
                     shown,
                     enter = fadeIn(tween(160, delayMillis = (indices.size - pos) * 25)) +
-                        slideInVertically(spring(0.8f, 500f)) { it / 2 },
+                        slideInVertically(spring(0.85f, 500f)) { it / 2 },
                 ) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(k.card)
@@ -726,13 +727,13 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
     val k = LocalKaze.current
     val showStrip = LocalApp.current.settings.tabStripPhone && tabs.size > 1
     var menu by remember { mutableStateOf(false) }
-    val height by animateDpAsState(if (collapsed) 36.dp else 50.dp, spring(0.8f, 420f), label = "compactH")
-    val side by animateDpAsState(if (collapsed) 64.dp else 12.dp, spring(0.8f, 420f), label = "compactW")
-    val enter = fadeIn(tween(160)) + scaleIn(spring(0.6f, 520f), initialScale = 0.8f)
-    val exit = fadeOut(tween(110)) + scaleOut(tween(140), targetScale = 0.85f)
+    val height by animateDpAsState(if (collapsed) 36.dp else 50.dp, spring(0.85f, 420f), label = "compactH")
+    val side by animateDpAsState(if (collapsed) 64.dp else 12.dp, spring(0.85f, 420f), label = "compactW")
+    val enter = fadeIn(tween(160)) + scaleIn(spring(0.85f, 520f), initialScale = 0.8f)
+    val exit = fadeOut(tween(110)) + scaleOut(spring(1f, 700f), targetScale = 0.85f)
     Column(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
     // Fila de pestañas (opcional): una cápsula de vidrio encima de la barra, solo con la barra abierta.
-    AnimatedVisibility(showStrip && !collapsed, enter = fadeIn(tween(180)) + expandVertically(spring(0.85f, 420f)), exit = fadeOut(tween(120)) + shrinkVertically(tween(180))) {
+    AnimatedVisibility(showStrip && !collapsed, enter = fadeIn(tween(180)) + expandVertically(spring(0.85f, 420f)), exit = fadeOut(tween(120)) + shrinkVertically(spring(1f, 700f))) {
         Box(Modifier.padding(bottom = 8.dp).glass(RoundedCornerShape(18.dp), 10f).padding(4.dp)) {
             TabStrip(tab, tabs, onSelectTab, onCloseTab, minTab = 110.dp, maxTab = 170.dp)
         }
@@ -775,15 +776,15 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AnimatedVisibility(tab.isSecure && !tab.isStart, enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f), exit = fadeOut(tween(110))) {
+                AnimatedVisibility(tab.isSecure && !tab.isStart, enter = fadeIn(tween(160)) + scaleIn(spring(0.85f, 420f), initialScale = 0.85f), exit = fadeOut(tween(110))) {
                     Icon(Icons.Outlined.Lock, null, tint = k.ink55, modifier = Modifier.padding(end = 5.dp).size(12.dp))
                 }
                 // El sitio cambia con un deslizamiento suave al navegar o cambiar de pestaña.
                 AnimatedContent(
                     targetState = addressLabel(tab).ifBlank { "Buscar o escribir dirección" },
                     transitionSpec = {
-                        (fadeIn(tween(200)) + slideInVertically(spring(0.8f, 500f)) { it / 2 }) togetherWith
-                            (fadeOut(tween(120)) + slideOutVertically(tween(160)) { -it / 2 })
+                        (fadeIn(tween(200)) + slideInVertically(spring(0.85f, 500f)) { it / 2 }) togetherWith
+                            (fadeOut(tween(120)) + slideOutVertically(spring(1f, 700f)) { -it / 2 })
                     },
                     label = "compactLabel",
                 ) { text ->
@@ -821,13 +822,13 @@ fun SafariTopAddress(tab: Tab, space: Space?, collapsed: Boolean, a: ChromeActio
     val r = if (k.material) 28.dp else 22.dp
     AnimatedContent(
         targetState = collapsed,
-        transitionSpec = { fadeIn(tween(200, delayMillis = 60)) togetherWith fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.86f, 420f) } },
+        transitionSpec = { fadeIn(tween(200, delayMillis = 60)) togetherWith fadeOut(tween(110)) using SizeTransform(clip = false) { _, _ -> spring(0.85f, 420f) } },
         contentAlignment = Alignment.TopCenter,
         modifier = modifier.fillMaxWidth(),
         label = "topAddress",
     ) { small ->
         Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = r, bottomEnd = r)).background(k.glass)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(bottomStart = r, bottomEnd = r)).background(k.glassFill())
                 .then(if (k.material) Modifier else Modifier.background(spaceTint(space))),
         ) {
             if (small) {
@@ -857,7 +858,7 @@ private fun CompactMenu(tab: Tab, tabCount: Int, a: ChromeActions, onDismiss: ()
     ) {
         androidx.compose.animation.AnimatedVisibility(
             shown,
-            enter = fadeIn(tween(140)) + scaleIn(spring(0.8f, 600f), initialScale = 0.92f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
+            enter = fadeIn(tween(140)) + scaleIn(spring(0.85f, 600f), initialScale = 0.92f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
         ) {
             Column(
                 Modifier.navigationBarsPadding().padding(end = 16.dp, bottom = 70.dp).width(250.dp)
@@ -897,7 +898,7 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
     val k = LocalKaze.current
     val list = if (tabs.any { it.id == tab.id }) tabs else listOf(tab)
     Column(
-        modifier.fillMaxWidth().background(k.glass)
+        modifier.fillMaxWidth().background(k.glassFill())
             .then(if (k.material) Modifier else Modifier.background(spaceTint(space))),
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 10.dp)) {
@@ -909,7 +910,7 @@ private fun TabletBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions, 
                 AnimatedVisibility(
                     tab.canGoBack || tab.canGoForward,
                     enter = fadeIn(tween(160)) + expandHorizontally(spring(0.85f, 500f)),
-                    exit = fadeOut(tween(110)) + shrinkHorizontally(tween(160)),
+                    exit = fadeOut(tween(110)) + shrinkHorizontally(spring(1f, 700f)),
                 ) {
                     Capsule {
                         if (tab.canGoBack) BarIcon(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", { a.onHistoryMenu(-1) }, a.onBack)

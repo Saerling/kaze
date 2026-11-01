@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.screens
 
+import app.kaze.browser.zsync.ZenSync
 import app.kaze.browser.ui.components.FaviconTile
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
@@ -28,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,17 +70,37 @@ fun StartPage(
     onOpenFavorite: (Tab) -> Unit,
     onFavoriteMenu: (Tab) -> Unit,
     onPrivacyReport: () -> Unit,
+    /** Solo para las capturas: hace como si hubiera sesión de Firefox. */
+    forceSynced: Boolean = false,
 ) {
     val app = LocalApp.current
     val k = LocalKaze.current
+    val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val favorites = app.store.essentials()
     var frequent by remember { mutableStateOf(emptyList<HistoryEntry>()) }
     var reading by remember { mutableStateOf(emptyList<ReadingItem>()) }
-    LaunchedEffect(Unit) {
-        if (!private) {
-            frequent = withContext(Dispatchers.IO) { app.db.frequent() }
-            reading = withContext(Dispatchers.IO) { app.db.readingList().take(4) }
+    // ¿Hay sesión de Firefox? Leer la cuenta descifra el almacén seguro: se hace fuera del hilo principal.
+    var synced by remember { mutableStateOf(forceSynced) }
+    // La página se pinta al instante con lo que ya está en memoria (saludo, Favoritos, cerradas);
+    // lo que sale de disco llega en una sola pasada en segundo plano y aparece con un fundido.
+    LaunchedEffect(private) {
+        if (private) return@LaunchedEffect
+        val loaded = withContext(Dispatchers.IO) {
+            Triple(
+                runCatching { app.db.frequent() }.getOrDefault(emptyList()),
+                runCatching { app.db.readingList().take(4) }.getOrDefault(emptyList()),
+                runCatching { ZenSync.email(context) != null }.getOrDefault(false),
+            )
         }
+        frequent = loaded.first; reading = loaded.second; synced = loaded.third || forceSynced
+    }
+    // Reanudar navegación (Safari en iOS 27): cerradas hace poco y lo que llegó del escritorio (Zen).
+    val closed = if (private) emptyList() else app.store.recentlyClosed.take(8)
+    val favoriteIds = favorites.map { it.id }.toSet()
+    val remote = if (private || !synced) emptyList() else {
+        val spaceIds = app.store.profileSpaces.map { it.id }.toSet()
+        app.store.tabs.filter { it.zenId != null && it.id !in favoriteIds && it.spaceId in spaceIds }
+            .sortedByDescending { it.lastUsed }.take(8)
     }
     val space = app.store.currentSpace
 
@@ -100,7 +123,7 @@ fun StartPage(
                     style = KazeType.largeTitle, color = k.ink, modifier = Modifier.padding(horizontal = 20.dp),
                 )
                 Text(
-                    java.text.SimpleDateFormat("EEEE d 'de' MMMM", java.util.Locale("es")).format(now.time).replaceFirstChar { it.uppercase() },
+                    remember { java.text.SimpleDateFormat("EEEE d 'de' MMMM", java.util.Locale("es")).format(now.time).replaceFirstChar { it.uppercase() } },
                     style = KazeType.subhead, color = k.ink55, modifier = Modifier.padding(start = 20.dp, top = 2.dp, bottom = 8.dp),
                 )
                 if (private) {
@@ -125,7 +148,12 @@ fun StartPage(
                     }
                 }
 
-                if (frequent.isNotEmpty() && app.settings.startFrequent) {
+                if ((closed.isNotEmpty() || remote.isNotEmpty()) && app.settings.startResume) {
+                    Section("Reanudar navegación")
+                    ResumeRow(closed, remote, onOpenUrl, onOpenFavorite)
+                }
+
+                FadeIn(frequent.isNotEmpty() && app.settings.startFrequent) {
                     Section("Visitados con frecuencia")
                     // Filas con ícono, título y sitio en dos columnas: se distinguen de los Favoritos de un vistazo.
                     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.padding(horizontal = 16.dp)) {
@@ -174,7 +202,7 @@ fun StartPage(
                     }
                 }
 
-                if (reading.isNotEmpty() && app.settings.startReading) {
+                FadeIn(reading.isNotEmpty() && app.settings.startReading) {
                     Section("Lista de lectura")
                     Panel(pad = 0.dp) {
                         reading.forEachIndexed { i, r ->
@@ -202,6 +230,60 @@ fun StartPage(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Sección que entra con un fundido suave cuando su contenido llega del disco (sin saltos bruscos). */
+@Composable
+private fun FadeIn(visible: Boolean, content: @Composable () -> Unit) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible,
+        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 380f)) +
+            androidx.compose.animation.expandVertically(androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 380f)),
+        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(),
+    ) { Column { content() } }
+}
+
+/**
+ * "Reanudar navegación": fila horizontal de tarjetas con ícono, título y sitio. Primero las
+ * pestañas cerradas hace poco (se abren en esta pestaña) y luego las que llegaron de Zen en el
+ * computador (se abren como su pestaña).
+ */
+@Composable
+private fun ResumeRow(closed: List<Pair<String, String>>, remote: List<Tab>, onOpenUrl: (String) -> Unit, onOpenTab: (Tab) -> Unit) {
+    androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(closed.size, key = { "c:" + closed[it].first }) { i ->
+            val (url, title) = closed[i]
+            ResumeCard(url, title, Icons.Outlined.History, "Cerrada hace poco") { onOpenUrl(url) }
+        }
+        items(remote.size, key = { "r:" + remote[it].id }) { i ->
+            val t = remote[i]
+            ResumeCard(t.pinnedUrl ?: t.url, t.displayTitle, Icons.Outlined.Computer, "En tu computador") { onOpenTab(t) }
+        }
+    }
+}
+
+@Composable
+private fun ResumeCard(url: String, title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, caption: String, onClick: () -> Unit) {
+    val k = LocalKaze.current
+    Column(
+        Modifier.width(164.dp).height(132.dp).clip(RoundedCornerShape(18.dp)).background(k.card.copy(alpha = 0.85f))
+            .tap(onClick).padding(12.dp),
+    ) {
+        FaviconTile(url, 34.dp, 19.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            title.ifBlank { Urls.displayHost(url) }, style = KazeType.subhead.copy(fontWeight = FontWeight.Medium), color = k.ink,
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = k.ink55, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(Urls.displayHost(url).ifBlank { caption }, style = KazeType.footnote, color = k.ink55, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

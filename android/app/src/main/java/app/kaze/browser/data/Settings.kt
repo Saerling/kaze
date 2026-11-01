@@ -86,6 +86,10 @@ class Settings(context: Context) {
     var trackersTotal by pref("trackers_total", 0)
     var trackersSince by pref("trackers_since", "")
     var onboarded by pref("onboarded", false)
+    /** Transparencia del vidrio (barras y hojas flotantes), 0–100 %. 20 = el vidrio de siempre. */
+    var glassTransparency by pref("glass_transparency", 20)
+    /** Sección "Reanudar navegación" en la página de inicio. */
+    var startResume by pref("start_resume", true)
 
     // ── Mecánica ──────────────────────────────────────────────────────
 

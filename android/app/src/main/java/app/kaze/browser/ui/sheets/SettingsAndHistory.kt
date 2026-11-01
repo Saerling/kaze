@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.data.AccentColor
 import app.kaze.browser.data.UiStyle
@@ -242,6 +244,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                 BarLayoutPicker(s.barLayout) { s.barLayout = it; s.barTop = false }
                 Toggle("Pestañas en la barra (teléfono)", s.tabStripPhone) { s.tabStripPhone = it }
                 Choice("Color", AccentColor.entries, s.accent, { it.label }) { s.accent = it }
+                GlassSlider(s.glassTransparency) { s.glassTransparency = it }
                 Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
                 Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {
                     s.textSize = it; Engine.applyTextSize(app.runtime, it)
@@ -251,6 +254,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     { when (it) { "compact" -> "Compacta"; "list" -> "Lista"; else -> "Tarjetas" } }, divider = false,
                 ) { s.tabsView = it }
             }
+            Note("Transparencia del vidrio: más alto deja ver más la página a través de las barras; más bajo da un vidrio más opaco y con más contraste.")
             Note("Material You usa los colores de tu fondo de pantalla (Android 12 o más nuevo) con el color en Automático.")
 
             IosSectionHeader("Tableta")
@@ -267,6 +271,7 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             IosSectionHeader("Página de inicio")
             IosGroup {
                 Toggle("Favoritos", s.startFavorites) { s.startFavorites = it }
+                Toggle("Reanudar navegación", s.startResume) { s.startResume = it }
                 Toggle("Visitados con frecuencia", s.startFrequent) { s.startFrequent = it }
                 Toggle("Reporte de privacidad", s.startPrivacy) { s.startPrivacy = it }
                 Toggle("Lista de lectura", s.startReading, divider = false) { s.startReading = it }
@@ -349,6 +354,32 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
 private fun Note(text: String) {
     val k = LocalKaze.current
     Text(text, style = KazeType.footnote, color = k.ink55, modifier = Modifier.padding(start = 32.dp, end = 24.dp, top = 7.dp))
+}
+
+/** "Transparencia del vidrio" (como en la familia 27 de Apple): deslizador 0–100 % con vista previa en vivo. */
+@Composable
+private fun GlassSlider(value: Int, onChange: (Int) -> Unit) {
+    val k = LocalKaze.current
+    // El vidrio de toda la app cambia en vivo mientras se arrastra (el guardado es asíncrono).
+    var local by remember(value) { mutableStateOf(value.toFloat()) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Transparencia del vidrio", style = KazeType.body, color = k.ink, modifier = Modifier.weight(1f))
+            Text("${local.toInt()} %", style = KazeType.body, color = k.ink55)
+        }
+        androidx.compose.material3.Slider(
+            value = local,
+            onValueChange = { local = it; onChange(it.toInt()) },
+            valueRange = 0f..100f,
+            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = k.accent, inactiveTrackColor = k.ink12),
+            modifier = Modifier.semantics { contentDescription = "Transparencia del vidrio" },
+        )
+        Row {
+            Text("Opaco", style = KazeType.footnote, color = k.ink55, modifier = Modifier.weight(1f))
+            Text("Transparente", style = KazeType.footnote, color = k.ink55)
+        }
+    }
+    Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(k.separator))
 }
 
 @Composable

@@ -77,12 +77,15 @@ data class KazeColors(
     val flow: Boolean = false,
     /** Zen (como Zen Browser y Z-Sync): papel cálido, acento verde azulado, superficies planas. */
     val zen: Boolean = false,
+    /** Transparencia del vidrio elegida en Ajustes → Diseño (0 = opaco, 1 = lo más claro posible). */
+    val glassClear: Float = DEFAULT_GLASS_CLEAR,
 ) {
     /** Radio de las tarjetas: más redondo en Material You (Material 3 Expressive) y en Living Flow. */
     val corner get() = when { material -> 24; flow -> 26; zen -> 16; else -> 14 }
-    val ink70 get() = ink.copy(alpha = 0.7f)
-    val ink55 get() = ink.copy(alpha = 0.6f)
-    val ink35 get() = ink.copy(alpha = 0.3f)
+    // Familia 27: texto secundario un poco más firme para que se lea bien sobre el vidrio.
+    val ink70 get() = ink.copy(alpha = 0.76f)
+    val ink55 get() = ink.copy(alpha = 0.64f)
+    val ink35 get() = ink.copy(alpha = 0.36f)
     val ink12 get() = ink.copy(alpha = 0.12f)
     val rim get() = (if (isDark) Color.White else Color.Black).copy(alpha = if (isDark) 0.10f else 0.06f)
 }
@@ -163,6 +166,23 @@ fun styledColors(context: android.content.Context, dark: Boolean, style: UiStyle
     )
 }
 
+/** 20 % reproduce el vidrio de siempre; más alto = más transparente. */
+const val DEFAULT_GLASS_CLEAR = 0.2f
+
+/**
+ * Color del vidrio según la transparencia elegida. Con 20 % queda como antes; al subir se
+ * aclara hasta ~45 % de opacidad y al bajar llega a opaco. Nunca baja de 0.4 para que el
+ * texto encima siga siendo legible.
+ */
+fun KazeColors.glassFill(): Color {
+    val factor = 1.12f - glassClear * 0.62f
+    return glass.copy(alpha = (glass.alpha * factor).coerceIn(0.4f, 1f))
+}
+
+/** Filo del vidrio: más marcado cuanto más transparente, para separar el texto del fondo. */
+private fun KazeColors.glassRim(base: Float): Color =
+    (if (isDark) Color.White else Color.Black).copy(alpha = base + glassClear * (if (isDark) 0.10f else 0.08f))
+
 val LocalKaze = staticCompositionLocalOf { kazeColors(false) }
 
 @Composable
@@ -170,6 +190,7 @@ fun KazeTheme(
     dark: Boolean,
     style: UiStyle = UiStyle.SAFARI,
     accent: AccentColor = AccentColor.AUTO,
+    glassTransparency: Int = (DEFAULT_GLASS_CLEAR * 100).toInt(),
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -178,7 +199,7 @@ fun KazeTheme(
     val paper by animateColorAsState(target.paper, spec, label = "paper")
     val ink by animateColorAsState(target.ink, spec, label = "ink")
     val accentC by animateColorAsState(target.accent, spec, label = "accent")
-    val colors = target.copy(paper = paper, ink = ink, accent = accentC)
+    val colors = target.copy(paper = paper, ink = ink, accent = accentC, glassClear = glassTransparency.coerceIn(0, 100) / 100f)
 
     val scheme = if (dark) {
         darkColorScheme(
@@ -246,8 +267,8 @@ fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
         // Zen: superficie plana con un borde finísimo y una sombra casi imperceptible.
         return this
             .shadow((elevation / 6f).dp, shape, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.10f))
-            .clip(shape).background(k.glass, shape)
-            .border(0.5.dp, k.ink.copy(alpha = if (k.isDark) 0.10f else 0.07f), shape)
+            .clip(shape).background(k.glassFill(), shape)
+            .border(0.5.dp, k.glassRim(if (k.isDark) 0.10f else 0.07f), shape)
     }
     if (k.flow) {
         // Gota de agua (Living Flow): sombra suave teñida, cuerpo un poco más claro arriba y
@@ -256,7 +277,7 @@ fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
         return this
             .shadow(elevation.dp, shape, ambientColor = k.accent.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.20f))
             .clip(shape)
-            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(lerp(k.glass, Color.White, if (k.isDark) 0.06f else 0.2f), k.glass)), shape)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(k.glassFill().let { g -> listOf(lerp(g, Color.White, if (k.isDark) 0.06f else 0.2f), g) }), shape)
             .border(
                 1.dp,
                 androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = hi), Color.White.copy(alpha = hi * 0.15f))),
@@ -266,8 +287,8 @@ fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
     return this
         .shadow(elevation.dp, shape, ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.22f))
         .clip(shape)
-        .background(k.glass, shape)
-        .border(0.5.dp, (if (k.isDark) Color.White else Color.Black).copy(alpha = if (k.isDark) 0.14f else 0.06f), shape)
+        .background(k.glassFill(), shape)
+        .border(0.5.dp, k.glassRim(if (k.isDark) 0.14f else 0.06f), shape)
 }
 
 /** Se encoge y atenúa mientras el dedo está encima. */

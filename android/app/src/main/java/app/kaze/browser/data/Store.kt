@@ -55,6 +55,43 @@ class Store(private val db: Db, private val settings: Settings) {
         colors = listOf(0xFF3B3355.toInt(), 0xFF5B4B8A.toInt()), position = Int.MAX_VALUE,
     )
 
+    /**
+     * Se llama cuando cambia algo que viaja a la cuenta de Firefox (fijadas, Essentials, sus grupos).
+     * Lo usa la sincronización con Zen para subir los cambios unos segundos después.
+     */
+    var onSyncChange: (() -> Unit)? = null
+
+    /**
+     * Se llama al borrar un espacio o perfil enlazado con Zen, con los ids de Zen que se sueltan: en la
+     * cuenta no se borra nada (siguen en el escritorio) y la sincronización no los vuelve a traer.
+     */
+    var onUnlinked: ((spaceZenIds: List<String>, tabZenIds: List<String>) -> Unit)? = null
+
+    /** Suelta los enlaces con Zen de unos espacios que se van a borrar (y de sus pestañas que se cierran). */
+    private fun unlinkForDelete(spaceIds: Collection<String>, closing: List<Tab>) {
+        val spaceZen = spaces.filter { it.id in spaceIds }.mapNotNull { it.zenId }
+        val tabZen = closing.mapNotNull { it.zenId }
+        if (spaceZen.isEmpty() && tabZen.isEmpty()) return
+        closing.forEach { it.zenId = null }
+        spaces.filter { it.id in spaceIds }.forEach { it.zenId = null }
+        onUnlinked?.invoke(spaceZen, tabZen)
+    }
+
+    /** Al cerrar sesión: nada queda enlazado con la cuenta anterior. */
+    fun unlinkAll() {
+        tabs.filter { it.zenId != null }.forEach { it.zenId = null; db.saveTab(it) }
+        spaces.filter { it.zenId != null }.forEach { it.zenId = null; db.saveSpace(it) }
+    }
+
+    /** Espera a que todo lo pendiente esté escrito en la base de datos (desde un hilo de fondo). */
+    fun awaitWrites() {
+        db.io.submit {}.get(10, java.util.concurrent.TimeUnit.SECONDS)
+    }
+
+    private fun syncChanged(vararg list: Tab) {
+        if (list.any { !it.isPrivate && (it.kind != TabKind.NORMAL || it.zenId != null) }) onSyncChange?.invoke()
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private val pendingState = LinkedHashSet<String>()
     private val flushTask = Runnable { flush() }
@@ -121,6 +158,7 @@ class Store(private val db: Db, private val settings: Settings) {
         if (currentProfileId == id) switchProfile(Profile.DEFAULT_ID)
         val ids = spaces.filter { it.profileId == id }.map { it.id }
         val closed = tabs.filter { it.spaceId in ids }
+        unlinkForDelete(ids, closed)
         tabs.removeAll(closed)
         spaces.removeAll { it.id in ids }
         profiles.removeAll { it.id == id }
@@ -172,6 +210,7 @@ class Store(private val db: Db, private val settings: Settings) {
         val heir = profileSpaces.first { it.id != id }
         tabs.filter { it.spaceId == id && it.kind == TabKind.ESSENTIAL }.forEach { it.spaceId = heir.id; db.saveTab(it) }
         val closed = tabs.filter { it.spaceId == id && it.kind != TabKind.ESSENTIAL }
+        unlinkForDelete(listOf(id), closed)
         tabs.removeAll(closed)
         spaces.removeAll { it.id == id }
         db.deleteSpace(id)
@@ -228,6 +267,7 @@ class Store(private val db: Db, private val settings: Settings) {
         }
         tabs.remove(t)
         db.deleteTab(t.id)
+        syncChanged(t)
         if (selectedTabId == t.id) selectedTabId = null
         if (t.isPrivate && tabs.none { it.isPrivate } && currentSpaceId == Space.PRIVATE_ID) {
             selectSpace(profileSpaces.first().id)
@@ -243,6 +283,8 @@ class Store(private val db: Db, private val settings: Settings) {
         if (t.isPrivate || t.kind == kind) return
         val oldKind = t.kind
         t.kind = kind
+        // Los grupos de fijadas y de normales son distintos (como en Zen): al cambiar de tipo sale del suyo.
+        t.folder = ""
         t.pinnedUrl = if (kind == TabKind.NORMAL) null else (t.pinnedUrl ?: t.url)
         // Al fijar, va al final de los fijados; al desfijar, arriba de las normales.
         t.position = when (kind) {
@@ -253,6 +295,43 @@ class Store(private val db: Db, private val settings: Settings) {
         persistPositions(t.spaceId, kind)
         persistPositions(t.spaceId, oldKind)
         db.saveTab(t)
+        syncChanged(t)
+    }
+
+    /**
+     * Deshacer un cierre: vuelve a abrir la pestaña como estaba (tipo, grupo, página fijada y enlace con
+     * Zen). Si la sincronización aún no subió el cierre, para Zen es como si nunca se hubiera cerrado.
+     */
+    fun reopen(
+        url: String, spaceId: String, kind: TabKind, folder: String = "", zenId: String? = null,
+        pinnedUrl: String? = null, private: Boolean = false, select: Boolean = false,
+    ): Tab {
+        val sid = if (spaceById(spaceId) == null && !private) currentSpaceId else spaceId
+        val t = newTab(url, spaceId = sid, private = private, select = false)
+        if (!private && zenId != null && tabs.none { it.zenId == zenId }) link(t, zenId)
+        if (kind != TabKind.NORMAL) setKind(t, kind)
+        if (pinnedUrl != null && kind != TabKind.NORMAL) { t.pinnedUrl = pinnedUrl; db.saveTab(t) }
+        if (folder.isNotEmpty()) setFolder(listOf(t), folder)
+        if (select) select(t)
+        return t
+    }
+
+    /** Deshacer un desfijado: vuelve a ser fijada en su grupo, con su página de casa y en su sitio. */
+    fun repin(t: Tab, folder: String, pinnedUrl: String?, position: Int) {
+        if (t.isPrivate || tabById(t.id) == null) return
+        setKind(t, TabKind.PINNED)
+        if (pinnedUrl != null) t.pinnedUrl = pinnedUrl
+        setFolder(listOf(t), folder)
+        val list = pinned(t.spaceId).filter { it.id != t.id }.toMutableList()
+        list.add(position.coerceIn(0, list.size), t)
+        list.forEachIndexed { i, s -> if (s.position != i || s === t) { s.position = i; db.saveTab(s) } }
+    }
+
+    /** Enlaza la pestaña con su registro de Zen (o lo suelta con null). Lo usa la sincronización. */
+    fun link(t: Tab, zenId: String?) {
+        if (t.isPrivate || t.zenId == zenId) return
+        t.zenId = zenId
+        db.saveTab(t)
     }
 
     fun moveToSpace(t: Tab, spaceId: String) {
@@ -262,14 +341,17 @@ class Store(private val db: Db, private val settings: Settings) {
         t.position = -1
         persistPositions(spaceId, t.kind)
         db.saveTab(t)
+        syncChanged(t)
+    }
+
+    private fun siblings(t: Tab): List<Tab> = when (t.kind) {
+        TabKind.ESSENTIAL -> essentials()
+        TabKind.PINNED -> pinned(t.spaceId)
+        TabKind.NORMAL -> normal(t.spaceId)
     }
 
     fun reorder(t: Tab, delta: Int) {
-        val siblings = when (t.kind) {
-            TabKind.ESSENTIAL -> essentials()
-            TabKind.PINNED -> pinned(t.spaceId)
-            TabKind.NORMAL -> normal(t.spaceId)
-        }.toMutableList()
+        val siblings = siblings(t).toMutableList()
         val i = siblings.indexOf(t)
         val j = i + delta
         if (i < 0 || j !in siblings.indices) return
@@ -286,25 +368,34 @@ class Store(private val db: Db, private val settings: Settings) {
 
     // ── Carpetas y orden de las pestañas ──────────────────────────────
 
-    /** Carpetas del espacio, en el orden de su primera pestaña. */
-    fun folders(spaceId: String): List<String> = normal(spaceId).map { it.folder }.filter { it.isNotEmpty() }.distinct()
+    private fun ofKind(spaceId: String, kind: TabKind) = if (kind == TabKind.PINNED) pinned(spaceId) else normal(spaceId)
 
-    fun folderTabs(spaceId: String, name: String): List<Tab> = normal(spaceId).filter { it.folder == name }
+    /**
+     * Carpetas (grupos) del espacio, en el orden de su primera pestaña. Las normales y las fijadas tienen
+     * grupos separados, como en Zen (los de fijadas son las carpetas que se sincronizan con el escritorio).
+     */
+    fun folders(spaceId: String, kind: TabKind = TabKind.NORMAL): List<String> =
+        ofKind(spaceId, kind).map { it.folder }.filter { it.isNotEmpty() }.distinct()
 
-    /** Mete pestañas en una carpeta (la crea si no existe). */
+    fun folderTabs(spaceId: String, name: String, kind: TabKind = TabKind.NORMAL): List<Tab> =
+        ofKind(spaceId, kind).filter { it.folder == name }
+
+    /** Mete pestañas en una carpeta (la crea si no existe). Las Essentials no van en carpetas. */
     fun setFolder(list: List<Tab>, name: String) {
-        list.filter { !it.isPrivate }.forEach { it.folder = name; db.saveTab(it) }
+        val changed = list.filter { !it.isPrivate && it.kind != TabKind.ESSENTIAL && it.folder != name }
+        changed.forEach { it.folder = name; db.saveTab(it) }
+        syncChanged(*changed.toTypedArray())
     }
 
-    /** Nombre libre para una carpeta nueva: "Carpeta", "Carpeta 2"… */
-    fun newFolderName(spaceId: String): String {
-        val used = folders(spaceId).toSet()
-        return generateSequence(1) { it + 1 }.map { if (it == 1) "Carpeta" else "Carpeta $it" }.first { it !in used }
+    /** Nombre libre para una carpeta nueva: "Grupo", "Grupo 2"… */
+    fun newFolderName(spaceId: String, kind: TabKind = TabKind.NORMAL): String {
+        val used = folders(spaceId, kind).toSet()
+        return generateSequence(1) { it + 1 }.map { if (it == 1) "Grupo" else "Grupo $it" }.first { it !in used }
     }
 
-    fun renameFolder(spaceId: String, old: String, new: String) {
+    fun renameFolder(spaceId: String, old: String, new: String, kind: TabKind = TabKind.NORMAL) {
         val name = new.trim().ifEmpty { return }
-        setFolder(folderTabs(spaceId, old), name)
+        setFolder(folderTabs(spaceId, old, kind), name)
     }
 
     /** Organizar pestañas: las sueltas del mismo sitio (2 o más) van a una carpeta con su nombre. */
@@ -322,12 +413,13 @@ class Store(private val db: Db, private val settings: Settings) {
         return core.replaceFirstChar { it.uppercase() }
     }
 
-    fun ungroup(spaceId: String, name: String) = setFolder(folderTabs(spaceId, name), "")
+    fun ungroup(spaceId: String, name: String, kind: TabKind = TabKind.NORMAL) = setFolder(folderTabs(spaceId, name, kind), "")
 
-    /** Arrastrar y soltar: pone la pestaña [moved] en el lugar de [target] (las demás se corren). */
+    /** Arrastrar y soltar: pone la pestaña [moved] en el lugar de [target] (las demás se corren). Mismo tipo. */
     fun moveBefore(moved: Tab, target: Tab) {
-        if (moved.id == target.id || moved.spaceId != target.spaceId) return
-        val list = normal(moved.spaceId).toMutableList()
+        if (moved.id == target.id || moved.kind != target.kind) return
+        if (moved.kind != TabKind.ESSENTIAL && moved.spaceId != target.spaceId) return
+        val list = siblings(moved).toMutableList()
         val from = list.indexOf(moved)
         val to = list.indexOf(target)
         if (from < 0 || to < 0) return

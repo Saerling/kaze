@@ -4,6 +4,7 @@
 
 package app.kaze.browser
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.SideEffect
 import app.kaze.browser.ui.screens.HistoryPopup
@@ -253,7 +254,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         if (::app.isInitialized && !showTabs) app.pool.resumeVisible()
+        // Al volver al primer plano se traen los cambios del escritorio (la primera vez la lanza el arranque).
+        if (::app.isInitialized && startedOnce) app.tabSync.onForeground()
+        startedOnce = true
     }
+    private var startedOnce = false
 
     override fun onStop() {
         super.onStop()
@@ -418,18 +423,23 @@ class MainActivity : ComponentActivity() {
             val sid = t.spaceId
             val kind = t.kind
             val priv = t.isPrivate
+            val folder = t.folder
+            val zenId = t.zenId
+            val home = t.pinnedUrl
+            // Si está sincronizada con Zen, el cierre no se sube mientras se puede deshacer.
+            // Si está en Zen, el cierre no se sube mientras se vea el aviso de "Deshacer" (y al menos 5 s).
+            val release = zenId?.let { app.tabSync.hold(it) }
             val next = if (wasSelected) store.nextAfterClose(t) else null
             app.pool.close(t)
             app.thumbnails.delete(t.id)
             store.close(t)
             if (next != null) open(next) else if (store.selectedTab == null) showTabs = true
             // Píldora para deshacer el cierre.
-            ui.show("Pestaña cerrada", "Deshacer") {
+            ui.show(if (zenId != null) "Pestaña cerrada (también se quitará de Zen)" else "Pestaña cerrada", "Deshacer", onAction = {
                 store.recentlyClosed.removeAll { it.first == url }
-                val back = store.newTab(url, spaceId = sid, private = priv, select = wasSelected)
-                if (kind != TabKind.NORMAL) store.setKind(back, kind)
+                val back = store.reopen(url, sid, kind, folder, zenId, home, priv, select = wasSelected)
                 if (wasSelected) open(back)
-            }
+            }, onDismiss = release)
         }
 
         fun showTabsGrid() = snapshot { showTabs = true }
@@ -637,11 +647,14 @@ class MainActivity : ComponentActivity() {
             permissionLauncher.launch(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS))
         }
 
-        // Sincronización con el escritorio (si hay sesión): trae lo nuevo poco después de abrir, sin frenar el arranque.
+        // Sincronización con el escritorio (si hay sesión): poco después de abrir, sin frenar el arranque.
+        // Luego, cada vez que la app vuelve al primer plano (onStart), como mucho una vez cada 5 minutos.
         LaunchedEffect(Unit) {
+            app.tabSync.onNews = { n -> ui.show(if (n == 1) "1 pestaña nueva del escritorio" else "$n pestañas nuevas del escritorio") }
+            app.tabSync.onProblem = { ui.show(it) }
             if (ZenSync.email(this@MainActivity) == null) return@LaunchedEffect
             delay(4000)
-            runCatching { ZenSync.pull(this@MainActivity, store) }.onSuccess { if (it > 0) ui.show("$it pestañas nuevas del escritorio") }
+            app.tabSync.onForeground()
             runCatching { ZenSync.syncPasswords(this@MainActivity, app.logins) }
         }
         val navPx = WindowInsets.navigationBars.getBottom(density)
@@ -966,7 +979,7 @@ class MainActivity : ComponentActivity() {
             ui.prompt?.let { p -> PromptHost(p, onDone = { ui.prompt = null }, onFile = ::openFilePicker) }
             ui.permission?.let { p -> PermissionHost(p) { ui.permission = null } }
 
-            Toast(ui.toast, ui.toastAction) { ui.toast = null; ui.toastAction = null }
+            Toast(ui.toast, ui.toastAction) { ui.dismissToast() }
         }
 
         // Ajustes se abre desde la Biblioteca y desde la vista de pestañas.
@@ -1008,17 +1021,24 @@ private fun Toast(message: String?, action: Pair<String, () -> Unit>?, onGone: (
         ) {
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.92f))
-                    .padding(start = 18.dp, end = if (action != null) 6.dp else 18.dp, top = 6.dp, bottom = 6.dp),
+                    .padding(start = 18.dp, end = if (action != null) 6.dp else 18.dp, top = if (action != null) 0.dp else 6.dp, bottom = if (action != null) 0.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(message.orEmpty(), style = KazeType.small, color = k.paper, modifier = Modifier.padding(vertical = 4.dp))
                 if (action != null) {
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        action.first, style = KazeType.small.copy(fontWeight = FontWeight.SemiBold), color = k.paper,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent)
-                            .clickable { action.second(); onGone() }.padding(horizontal = 14.dp, vertical = 8.dp),
-                    )
+                    // Área táctil de 44 dp de alto; el botón se dibuja igual que antes.
+                    Box(
+                        Modifier.heightIn(min = 44.dp).clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null,
+                        ) { action.second(); onGone() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            action.first, style = KazeType.small.copy(fontWeight = FontWeight.SemiBold), color = k.paper,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent).padding(horizontal = 14.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             }
         }

@@ -3,154 +3,438 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * Fyx sobre Zen: el diseño y las funciones de Zen, con el acabado de Safari.
- * Barra superior limpia con la dirección centrada, tarjetas suaves, acento azul
- * y animaciones con resorte. Las pestañas siguen en la barra lateral de Zen.
+ * Fyx sobre Zen con el acabado de Safari en macOS 27 ("Golden Gate"):
+ * Liquid Glass más claro y con más contraste, barra lateral limpia con secciones,
+ * barra de herramientas compacta (cápsulas de 34 px), menús de vidrio legibles,
+ * ventana activa resaltada y animaciones con ease-out fuerte (solo transform/opacity).
+ * El vidrio es color translúcido + brillo en el borde: sin desenfoques animados en áreas grandes.
+ * Transparencia ajustable con pyx.glass.opacity (ventana.js la pasa a --pyx-glass-o).
  */
 
+/* ══ Tokens ═════════════════════════════════════════════════════════════ */
 :root {
-  --pyx-accent: #0A84FF;
-  /* Entradas: ease-out fuerte (frena al final). Resorte suave, sin rebote exagerado. */
+  --pyx-glass-o: 0.5;
+  --pyx-accent: #007AFF;
+  --pyx-label: #1d1d1f;
+  --pyx-label-2: rgb(60 60 67 / 0.72);
+  --pyx-fill: rgb(120 120 128 / 0.12);
+  --pyx-fill-2: rgb(120 120 128 / 0.18);
+  /* Vidrio: de casi transparente (o = 0) a casi opaco (o = 1). */
+  --pyx-glass: rgb(255 255 255 / calc(0.32 + 0.6 * var(--pyx-glass-o)));
+  --pyx-glass-strong: rgb(255 255 255 / calc(0.7 + 0.3 * var(--pyx-glass-o)));
+  --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.7), 0 0 0 0.5px rgb(0 0 0 / 0.1);
+  --pyx-menu-bg: rgb(250 250 252 / calc(0.86 + 0.14 * var(--pyx-glass-o)));
+  --pyx-menu-rim: rgb(0 0 0 / 0.12);
+  --pyx-card: var(--pyx-glass-strong);
+  --pyx-rim: rgb(0 0 0 / 0.08);
+  --pyx-field: var(--pyx-fill);
+  --pyx-field-hover: var(--pyx-fill-2);
+  /* Curvas: ease-out fuerte para entradas; resorte suave (rebote apenas visible). */
   --pyx-ease: cubic-bezier(.16, 1, .3, 1);
   --pyx-spring: cubic-bezier(.34, 1.2, .64, 1);
-  /* Sombras en capas, muy suaves (más realistas que una sola sombra fuerte). */
-  --pyx-shadow-1: 0 0 0 0.5px var(--pyx-rim), 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.06);
+  --pyx-fast: 150ms;
+  --pyx-mid: 220ms;
+  --pyx-slow: 300ms;
+  /* Sombras en capas, suaves. */
+  --pyx-shadow-1: 0 0 0 0.5px var(--pyx-rim), 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.05);
   --pyx-shadow-2: 0 0 0 0.5px var(--pyx-rim), 0 2px 6px rgb(0 0 0 / 0.06), 0 10px 30px rgb(0 0 0 / 0.10);
   --pyx-shadow-3: 0 0 0 0.5px var(--pyx-rim), 0 4px 12px rgb(0 0 0 / 0.08), 0 18px 48px rgb(0 0 0 / 0.16);
-  --pyx-field: color-mix(in srgb, currentColor 7%, transparent);
-  --pyx-field-hover: color-mix(in srgb, currentColor 11%, transparent);
-  --pyx-card: color-mix(in srgb, white 82%, transparent);
-  --pyx-rim: rgb(0 0 0 / 0.08);
+  --pyx-control: 34px;
+  --pyx-radius-window: 16px;
+  --pyx-radius-panel: 18px;
+  --pyx-radius-row: 10px;
   @media (prefers-color-scheme: dark) {
     --pyx-accent: #0A84FF;
-    --pyx-card: color-mix(in srgb, white 11%, transparent);
-    --pyx-rim: rgb(255 255 255 / 0.08);
+    --pyx-label: #f5f5f7;
+    --pyx-label-2: rgb(235 235 245 / 0.66);
+    --pyx-fill: rgb(255 255 255 / 0.08);
+    --pyx-fill-2: rgb(255 255 255 / 0.13);
+    --pyx-glass: rgb(44 44 48 / calc(0.3 + 0.62 * var(--pyx-glass-o)));
+    --pyx-glass-strong: rgb(84 84 92 / calc(0.5 + 0.4 * var(--pyx-glass-o)));
+    --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.12), 0 0 0 0.5px rgb(0 0 0 / 0.45);
+    --pyx-menu-bg: rgb(36 36 40 / calc(0.88 + 0.12 * var(--pyx-glass-o)));
+    --pyx-menu-rim: rgb(255 255 255 / 0.12);
+    --pyx-rim: rgb(255 255 255 / 0.07);
   }
   font-family: system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Barra superior: dirección centrada, como Safari ─────────────────── */
+/* ══ Barra superior: compacta y uniforme, todo en cápsulas de 34 px ════ */
 
-#urlbar-container {
-  flex: 0 1 680px !important;
-  max-width: 680px !important;
-  margin-inline: auto !important;
-}
-#urlbar:not([breakout-extend]) #urlbar-background {
-  border-radius: 10px !important;
-  background: var(--pyx-field) !important;
+#nav-bar {
+  background: transparent !important;
   border: 0 !important;
-  box-shadow: none !important;
-  transition: background-color 180ms var(--pyx-ease), box-shadow 220ms var(--pyx-ease);
+  padding-block: 8px !important;
+  padding-inline: 4px 8px !important;
+  min-height: calc(var(--pyx-control) + 16px) !important;
+  --toolbarbutton-outer-padding: 0px;
+  --toolbarbutton-inner-padding: 9px;
+  --toolbarbutton-border-radius: 999px;
 }
-#urlbar:not([breakout-extend]):hover #urlbar-background {
-  background: var(--pyx-field-hover) !important;
+#nav-bar-customization-target {
+  align-items: center !important;
+  gap: 8px;
 }
-#urlbar:not([focused]) .urlbar-input {
-  text-align: center;
+/* Sin muelles: la dirección se centra sola y los botones de la derecha van al borde. */
+#nav-bar toolbarspring { display: none !important; }
+#nav-bar > #PanelUI-button { margin-inline-start: 8px !important; align-items: center; }
+
+#nav-bar .toolbarbutton-1 {
+  padding: 0 !important;
+  margin: 0 !important;
 }
-#urlbar[focused] #urlbar-background,
-#urlbar[breakout-extend] #urlbar-background {
-  outline: 3px solid color-mix(in srgb, var(--pyx-accent) 45%, transparent) !important;
-  outline-offset: 0 !important;
-  box-shadow: var(--pyx-shadow-3) !important;
+#nav-bar .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  width: var(--pyx-control) !important;
+  height: var(--pyx-control) !important;
+  min-height: 0 !important;
+  padding: 9px !important;
+  border-radius: 999px !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), 0 1px 3px rgb(0 0 0 / 0.07) !important;
+  transition: background-color var(--pyx-fast) var(--pyx-ease), transform var(--pyx-fast) var(--pyx-ease), opacity var(--pyx-mid) var(--pyx-ease);
 }
-#urlbar[breakout-extend] {
-  animation: pyx-pop 220ms var(--pyx-spring);
+#nav-bar .toolbarbutton-1:not([disabled]):hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  background: var(--pyx-glass-strong) !important;
 }
-@keyframes pyx-pop {
-  from { transform: scale(0.98); opacity: 0.6; }
+#nav-bar .toolbarbutton-1:not([disabled]):is(:hover:active, [open], [checked]) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  background: color-mix(in srgb, var(--pyx-glass-strong), currentColor 8%) !important;
+}
+/* Presión: la cápsula se hunde un poco y vuelve con resorte. */
+:is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) .toolbarbutton-1:not([disabled]):hover:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  transform: scale(0.92);
+  transition-duration: 90ms;
+}
+:is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  transition: background-color var(--pyx-fast) var(--pyx-ease), transform 260ms var(--pyx-spring), opacity var(--pyx-mid) var(--pyx-ease);
 }
 
-/* Botones de la barra: píldora al pasar el ratón y pequeña respuesta al clic. */
-:is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) toolbarbutton > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
-  border-radius: 8px !important;
-  transition: background-color 150ms var(--pyx-ease), transform 120ms var(--pyx-ease);
+/* Botones vecinos forman una sola cápsula (atrás|adelante, compartir|+|pestañas), como Safari. */
+#nav-bar .toolbarbutton-1:not(:is(#back-button, #forward-button)[disabled]) + .toolbarbutton-1:not([disabled]) {
+  margin-inline-start: -8px !important;
 }
-:is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) toolbarbutton:active > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
-  transform: scale(0.94);
+#nav-bar .toolbarbutton-1:not(:is(#back-button, #forward-button)[disabled]) + .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  border-start-start-radius: 0 !important;
+  border-end-start-radius: 0 !important;
+  padding-inline-start: 7px !important;
+  width: calc(var(--pyx-control) - 2px) !important;
+  box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.5), inset 0 -0.5px 0 rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.05) !important;
+}
+#nav-bar .toolbarbutton-1:has(+ .toolbarbutton-1:not(:is(#back-button, #forward-button)[disabled])) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  border-start-end-radius: 0 !important;
+  border-end-end-radius: 0 !important;
+  padding-inline-end: 7px !important;
+  width: calc(var(--pyx-control) - 2px) !important;
+}
+#nav-bar .toolbarbutton-1:not(:is(#back-button, #forward-button)[disabled]) + .toolbarbutton-1:has(+ .toolbarbutton-1:not(:is(#back-button, #forward-button)[disabled])) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  width: calc(var(--pyx-control) - 4px) !important;
 }
 
-/* Atrás y adelante solo aparecen cuando sirven (como en Android y Safari). */
+/* Atrás y adelante solo aparecen cuando sirven (como Safari). */
 :is(#back-button, #forward-button) {
   max-width: 40px;
-  overflow: hidden;
-  transition: max-width 200ms var(--pyx-ease), opacity 140ms var(--pyx-ease), padding 200ms var(--pyx-ease);
+  overflow: clip;
+  transition: max-width var(--pyx-mid) var(--pyx-ease), opacity var(--pyx-fast) var(--pyx-ease), margin var(--pyx-mid) var(--pyx-ease) !important;
 }
 :is(#back-button, #forward-button)[disabled] {
   max-width: 0;
   opacity: 0;
-  padding-inline: 0 !important;
   pointer-events: none;
 }
+#forward-button[disabled] { margin-inline-start: -8px !important; }
+#back-button[disabled]:has(+ #forward-button[disabled]) { margin-inline-end: -8px !important; }
 
-/* ── Pestañas en la barra lateral: filas suaves, la elegida como tarjeta ── */
+/* Recargar va dentro de la dirección (ventana.js). Compartir con su ícono. */
+:root[pyx-reload-inside] #stop-reload-button { display: none !important; }
+#pyx-share-button { list-style-image: url("chrome://kaze/content/iconos/compartir.svg"); }
 
-.tabbrowser-tab .tab-background {
-  border-radius: 10px !important;
-  transition: background-color 160ms var(--pyx-ease), box-shadow 200ms var(--pyx-ease), transform 160ms var(--pyx-ease) !important;
+/* ── Dirección: cápsula de vidrio centrada ── */
+#urlbar-container {
+  flex: 0 1 640px !important;
+  max-width: 640px !important;
+  min-width: 260px !important;
+  margin-inline: auto !important;
+  padding-inline: 0 !important;
 }
-.tabbrowser-tab:not([selected]):hover .tab-background {
-  background: var(--pyx-field) !important;
+#urlbar {
+  --urlbar-min-height: var(--pyx-control) !important;
+  --urlbar-height: var(--pyx-control) !important;
 }
-.tabbrowser-tab[selected] .tab-background {
-  background: var(--pyx-card) !important;
-  box-shadow: var(--pyx-shadow-1) !important;
+#urlbar:not([breakout-extend]) #urlbar-background {
+  border-radius: 999px !important;
+  border: 0 !important;
+  outline: none !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), 0 1px 3px rgb(0 0 0 / 0.07) !important;
+  transition: background-color var(--pyx-fast) var(--pyx-ease), box-shadow var(--pyx-mid) var(--pyx-ease);
 }
-.tabbrowser-tab:active .tab-background {
-  transform: scale(0.98);
+#urlbar:not([breakout-extend]):hover #urlbar-background { background: var(--pyx-glass-strong) !important; }
+#urlbar:not([focused]) .urlbar-input { text-align: center; }
+#urlbar .urlbar-input { font-size: 13px; letter-spacing: -0.08px; }
+#urlbar:not([focused]) .urlbar-input { font-weight: 500; }
+/* Enfoque: anillo de acento y se eleva un poco (solo opacidad/transform). */
+#urlbar[focused]:not([breakout-extend]) #urlbar-background {
+  background: var(--pyx-glass-strong) !important;
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--pyx-accent) 42%, transparent), var(--pyx-shadow-1) !important;
 }
-.tabbrowser-tab[selected] .tab-label {
-  font-weight: 600;
+#urlbar[breakout-extend] #urlbar-background {
+  border-radius: 16px !important;
+  background: var(--pyx-menu-bg) !important;
+  outline: none !important;
+  border: 0 !important;
+  box-shadow: 0 0 0 0.5px var(--pyx-menu-rim), 0 4px 12px rgb(0 0 0 / 0.08), 0 12px 32px rgb(0 0 0 / 0.12) !important;
 }
-.tabbrowser-tab:not([pinned])[fadein] {
-  animation: pyx-tab-in 260ms var(--pyx-ease);
+#urlbar[breakout-extend] {
+  animation: pyx-pop var(--pyx-mid) var(--pyx-ease);
+  transform-origin: top center;
 }
-@keyframes pyx-tab-in {
-  from { opacity: 0; transform: translateX(-12px); }
+@keyframes pyx-pop {
+  from { transform: scale(0.985) translateY(-2px); opacity: 0.4; }
 }
-/* Pestañas dormidas (sin RAM) un poco más tenues. */
-.tabbrowser-tab:is([pending], [discarded]) .tab-label,
-.tabbrowser-tab:is([pending], [discarded]) .tab-icon-image {
+#urlbar .urlbar-input-container { padding-inline: 6px !important; }
+
+/* Íconos dentro de la dirección: lector, traducir y recargar siempre a mano; el resto, solo al pasar el ratón. */
+#urlbar :is(.urlbar-page-action, #identity-box > .identity-box-button, #remote-control-box) {
+  border-radius: 999px !important;
+  transition: opacity var(--pyx-fast) var(--pyx-ease), background-color var(--pyx-fast) var(--pyx-ease), transform 220ms var(--pyx-spring);
+}
+#urlbar .urlbar-page-action:hover { background: var(--pyx-fill) !important; }
+#urlbar .urlbar-page-action:hover:active { transform: scale(0.9); transition-duration: 90ms; }
+#urlbar:not(:hover, [focused]) :is(#zen-copy-url-button, #star-button-box, #pageActionButton, #zen-site-data-icon-button) {
+  opacity: 0;
+}
+#reader-mode-button[readeractive] .urlbar-icon,
+#translations-button[translationsactive] .urlbar-icon { fill: var(--pyx-accent) !important; }
+#pyx-reload > .urlbar-icon {
+  list-style-image: url("chrome://global/skin/icons/reload.svg");
+  transition: transform 300ms var(--pyx-ease);
+}
+#pyx-reload[loading] > .urlbar-icon { list-style-image: url("chrome://global/skin/icons/close.svg"); }
+#pyx-reload:hover:active > .urlbar-icon { transform: rotate(-30deg); }
+#urlbar[focused] #pyx-reload { display: none; }
+
+/* ══ Barra lateral flotante, como Safari en macOS 27 ════════════════════ */
+
+#navigator-toolbox {
+  margin: 8px 0 8px 8px !important;
+  border-radius: var(--pyx-radius-panel) !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), var(--pyx-shadow-2) !important;
+  overflow: clip;
+  color: var(--pyx-label);
+  transition: box-shadow var(--pyx-slow) var(--pyx-ease), opacity var(--pyx-mid) var(--pyx-ease);
+}
+#zen-sidebar-top-buttons { padding-inline: 4px !important; }
+:is(#zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  border-radius: 8px !important;
+}
+:is(#zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) .toolbarbutton-1:not([disabled]):hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+  background: var(--pyx-fill) !important;
+}
+
+/* Espacio de Zen = grupo/perfil de Safari: encabezado pequeño, en negrita y gris. */
+.zen-current-workspace-indicator {
+  margin-block: 4px 2px !important;
+}
+.zen-current-workspace-indicator-name {
+  font-size: 11.5px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.1px;
+  color: var(--pyx-label-2) !important;
+  opacity: 1 !important;
+}
+.zen-current-workspace-indicator::before {
+  border-radius: var(--pyx-radius-row) !important;
+  transition: background-color var(--pyx-fast) var(--pyx-ease) !important;
+}
+.zen-current-workspace-indicator:hover::before { background: var(--pyx-fill) !important; }
+.pinned-tabs-container-separator {
   opacity: 0.55;
 }
 
-/* Essentials: mosaicos que se elevan al pasar el ratón. */
+/* Filas de pestañas: compactas; la elegida es una píldora de vidrio claro. */
+#tabbrowser-tabs {
+  --tab-border-radius: var(--pyx-radius-row);
+}
+.tabbrowser-tab:not([zen-essential]) {
+  --tab-min-height: 34px;
+}
+.tabbrowser-tab .tab-label {
+  font-size: 13px;
+  letter-spacing: -0.08px;
+}
+.tabbrowser-tab .tab-background {
+  border-radius: var(--pyx-radius-row) !important;
+  transition: background-color var(--pyx-fast) var(--pyx-ease), box-shadow var(--pyx-mid) var(--pyx-ease), transform var(--pyx-fast) var(--pyx-ease) !important;
+}
+.tabbrowser-tab:not([selected], [multiselected]):hover .tab-background {
+  background: var(--pyx-fill) !important;
+}
+.tabbrowser-tab:is([selected], [multiselected]) .tab-background {
+  background: var(--pyx-glass-strong) !important;
+  box-shadow: var(--pyx-glass-rim), 0 1px 2px rgb(0 0 0 / 0.06), 0 3px 10px rgb(0 0 0 / 0.07) !important;
+}
+.tabbrowser-tab[selected] .tab-label { font-weight: 600; }
+.tabbrowser-tab:hover:active:not(:has(.tab-close-button:hover)) .tab-background {
+  transform: scale(0.98);
+  transition-duration: 90ms !important;
+}
+/* Cambiar de pestaña: el ícono hace un pequeño rebote. */
+.tabbrowser-tab[selected] .tab-icon-stack {
+  animation: pyx-tab-pick 260ms var(--pyx-spring);
+}
+@keyframes pyx-tab-pick {
+  from { transform: scale(0.86); }
+}
+/* Cerrar: solo al pasar el ratón, como Safari. */
+.tabbrowser-tab:not([zen-essential]) .tab-close-button {
+  border-radius: 6px !important;
+  transition: opacity var(--pyx-fast) var(--pyx-ease), background-color var(--pyx-fast) var(--pyx-ease);
+}
+.tabbrowser-tab:not(:hover) .tab-close-button { opacity: 0; }
+.tabbrowser-tab .tab-close-button:hover { background: var(--pyx-fill-2) !important; }
+/* Pestañas dormidas (sin RAM) un poco más tenues. */
+.tabbrowser-tab:is([pending], [discarded]):not([selected]) :is(.tab-label, .tab-icon-image) {
+  opacity: 0.55;
+}
+
+/* Essentials: mosaicos de vidrio (Favoritos de Safari). */
+.zen-essentials-container { gap: 6px !important; padding-block: 4px !important; }
+.tabbrowser-tab[zen-essential] {
+  --tab-min-height: 44px;
+}
 .tabbrowser-tab[zen-essential] .tab-background {
   border-radius: 12px !important;
+  background: var(--pyx-glass) !important;
+  box-shadow: var(--pyx-glass-rim), 0 1px 2px rgb(0 0 0 / 0.05) !important;
+  transition: transform var(--pyx-mid) var(--pyx-spring), box-shadow var(--pyx-mid) var(--pyx-ease), background-color var(--pyx-fast) var(--pyx-ease) !important;
 }
 .tabbrowser-tab[zen-essential]:hover .tab-background {
+  background: var(--pyx-glass-strong) !important;
   transform: translateY(-1px);
-  box-shadow: var(--pyx-shadow-2) !important;
+  box-shadow: var(--pyx-glass-rim), var(--pyx-shadow-2) !important;
 }
+.tabbrowser-tab[zen-essential][selected] .tab-background {
+  background: var(--pyx-glass-strong) !important;
+  box-shadow: 0 0 0 1.5px var(--pyx-accent), var(--pyx-shadow-1) !important;
+}
+.tabbrowser-tab[zen-essential]:hover:active .tab-background { transform: scale(0.95); transition-duration: 90ms !important; }
 
-/* ── Página: tarjeta flotante con esquinas y sombra suaves ────────────── */
+/* ══ Página: tarjeta flotante; la ventana activa se resalta ═════════════ */
 
+#tabbrowser-tabbox, .browserStack > browser {
+  border-radius: 14px !important;
+}
 #tabbrowser-tabbox {
   box-shadow: var(--pyx-shadow-2) !important;
 }
 
-/* ── Menús y paneles: más redondos, con animación de entrada ──────────── */
+/* Ventana inactiva: sin brillo ni sombra fuerte y controles atenuados (como macOS). */
+#navigator-toolbox:-moz-window-inactive {
+  box-shadow: var(--pyx-glass-rim), var(--pyx-shadow-1) !important;
+}
+#tabbrowser-tabbox:-moz-window-inactive {
+  box-shadow: var(--pyx-shadow-1) !important;
+}
+:is(#nav-bar-customization-target, #PanelUI-button, #TabsToolbar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons):-moz-window-inactive {
+  opacity: 0.6;
+}
+#nav-bar .toolbarbutton-1:-moz-window-inactive > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack),
+#urlbar:not([breakout-extend]):-moz-window-inactive #urlbar-background {
+  box-shadow: 0 0 0 0.5px var(--pyx-rim) !important;
+}
+.tabbrowser-tab[selected]:-moz-window-inactive .tab-background {
+  box-shadow: 0 0 0 0.5px var(--pyx-rim) !important;
+}
+:is(#nav-bar-customization-target, #PanelUI-button, #TabsToolbar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) {
+  transition: opacity var(--pyx-mid) var(--pyx-ease);
+}
+
+/* ══ Menús y paneles: vidrio con buen contraste, abren desde su origen ══ */
 
 menupopup, panel {
-  --panel-border-radius: 12px;
+  --panel-background: var(--pyx-menu-bg) !important;
+  --panel-background-color: var(--pyx-menu-bg) !important;
+  --arrowpanel-background: var(--pyx-menu-bg) !important;
+  --menu-background-color: var(--pyx-menu-bg) !important;
+  --panel-color: var(--pyx-label) !important;
+  --arrowpanel-color: var(--pyx-label) !important;
+  --menu-color: var(--pyx-label) !important;
+  --panel-border-color: var(--pyx-menu-rim) !important;
+  --arrowpanel-border-color: var(--pyx-menu-rim) !important;
+  --menu-border-color: var(--pyx-menu-rim) !important;
+  --panel-border-radius: 12px !important;
+  --arrowpanel-border-radius: 14px !important;
+  --panel-padding: 5px !important;
+  --menuitem-border-radius: 6px;
+  --arrowpanel-menuitem-border-radius: 8px !important;
+  --menuitem-padding: 4px 10px !important;
+  --panel-separator-color: color-mix(in srgb, currentColor 12%, transparent) !important;
+  --menuitem-hover-background-color: var(--pyx-accent) !important;
+  --menu-disabled-color: color-mix(in srgb, currentColor 38%, transparent);
+  --panel-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.12), 0 12px 32px rgb(0 0 0 / 0.14) !important;
+  font-size: 13px;
 }
-panel[type="arrow"][animate="open"], menupopup[animate="open"] {
-  animation: pyx-panel 180ms var(--pyx-ease);
+/* Menús: la opción activa se resalta en azul con texto blanco (como macOS). */
+menupopup :is(menu, menuitem):is([_moz-menuactive]):not([disabled]) {
+  background-color: var(--pyx-accent) !important;
+  color: white !important;
+  --menu-icon-fill: white;
+  -moz-context-properties: fill;
+  fill: white;
+}
+menupopup :is(menu, menuitem)[_moz-menuactive] :is(.menu-accel, .menu-iconic-accel, .menu-right) { color: rgb(255 255 255 / 0.8) !important; fill: white; }
+menupopup :is(menu, menuitem) { border-radius: 6px !important; min-height: 24px; }
+/* Paneles (☰, descargas…): resaltado gris suave, filas redondeadas. */
+panel .subviewbutton:not([disabled]):hover { background-color: var(--pyx-fill) !important; }
+panel .subviewbutton:not([disabled]):hover:active { background-color: var(--pyx-fill-2) !important; }
+/* Menos íconos en el menú principal, como macOS 27. */
+#appMenu-mainView .subviewbutton:not(#appMenu-zoom-controls *) > .toolbarbutton-icon { display: none; }
+
+panel[type="arrow"][animate="open"] {
+  animation: pyx-panel var(--pyx-mid) var(--pyx-ease);
+  transform-origin: top right;
+}
+panel[type="arrow"][animate="open"]:is([side="bottom"], [position^="before"]) { transform-origin: bottom center; }
+menupopup:is([animate="open"], [pyx-open]) {
+  animation: pyx-menu 180ms var(--pyx-ease);
+  transform-origin: top left;
 }
 @keyframes pyx-panel {
-  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  from { opacity: 0; transform: scale(0.94); }
+}
+@keyframes pyx-menu {
+  from { opacity: 0; transform: scale(0.97) translateY(-3px); }
 }
 
-/* Movimiento reducido: sin desplazamientos ni escalas, pero con fundidos cortos (si se quitan todos, se siente roto). */
+/* Control del vidrio en el menú de Fyx. */
+#pyx-glass-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  & #pyx-glass-label { margin: 0 4px 0 0; font-weight: 500; }
+  & .pyx-glass-end { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  & .pyx-glass-less { box-shadow: inset 0 0 0 1.2px currentColor; opacity: 0.6; }
+  & .pyx-glass-more { background: currentColor; opacity: 0.6; }
+  & #pyx-glass-slider { flex: 1; min-width: 120px; accent-color: var(--pyx-accent); margin: 0; }
+}
+
+/* ── Movimiento reducido: escalas y desplazamientos cambian por fundidos cortos ── */
 @media (prefers-reduced-motion: reduce) {
-  /* Mismas animaciones, pero solo con opacidad (las escalas y desplazamientos se cambian por fundidos). */
   @keyframes pyx-pop { from { opacity: 0.6; } }
-  @keyframes pyx-tab-in { from { opacity: 0; } }
   @keyframes pyx-panel { from { opacity: 0; } }
+  @keyframes pyx-menu { from { opacity: 0; } }
   @keyframes pyx-card-in { from { opacity: 0; } }
+  @keyframes pyx-tab-pick { from { opacity: 0.6; } }
+  /* Zen no anima las pestañas nuevas con movimiento reducido: un fundido corto. */
+  .tabbrowser-tab:not([pinned])[fadein] { animation: pyx-tab-in 150ms var(--pyx-ease); }
+  @keyframes pyx-tab-in { from { opacity: 0; } }
   :root[pyx-overview] #tabbrowser-tabbox { transform: none !important; }
-  .pyx-card .pyx-thumb, .tabbrowser-tab .tab-background { transform: none !important; }
+  .pyx-card .pyx-thumb, .tabbrowser-tab .tab-background, #pyx-reload > .urlbar-icon,
+  :is(#nav-bar, #zen-sidebar-top-buttons, #zen-sidebar-foot-buttons) .toolbarbutton-1 > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
+    transform: none !important;
+  }
 }
 
 /* ── Todas las pestañas (como Safari): la página se aleja y aparecen las miniaturas ── */
@@ -270,80 +554,6 @@ panel[type="arrow"][animate="open"], menupopup[animate="open"] {
 }
 .pyx-empty { margin: auto; opacity: 0.6; }
 
-/* ══ Liquid Glass, como Safari en macOS 26/27 ═══════════════════════════
- * - La barra lateral es un panel de vidrio flotante, separado del borde, con esquinas grandes.
- * - Los botones van en cápsulas de vidrio (atrás/adelante juntos, como en Safari).
- * - La dirección es una cápsula centrada; la página, una tarjeta con esquinas suaves.
- * El vidrio es un color translúcido + brillo en el borde (sin desenfoque en áreas grandes: rinde mejor). */
-:root {
-  --pyx-glass: color-mix(in srgb, white 62%, transparent);
-  --pyx-glass-strong: color-mix(in srgb, white 78%, transparent);
-  --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.55), 0 0 0 0.5px rgb(0 0 0 / 0.08);
-  --pyx-radius-panel: 18px;
-  @media (prefers-color-scheme: dark) {
-    --pyx-glass: color-mix(in srgb, white 7%, transparent);
-    --pyx-glass-strong: color-mix(in srgb, white 12%, transparent);
-    --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.10), 0 0 0 0.5px rgb(0 0 0 / 0.35);
-  }
-}
-
-/* Barra lateral flotante */
-#navigator-toolbox {
-  margin: 8px 0 8px 8px !important;
-  border-radius: var(--pyx-radius-panel) !important;
-  background: var(--pyx-glass) !important;
-  box-shadow: var(--pyx-glass-rim), var(--pyx-shadow-2) !important;
-  overflow: clip;
-}
-
-/* Página: tarjeta con las mismas esquinas que el panel */
-#tabbrowser-tabbox, .browserStack > browser {
-  border-radius: 14px !important;
-}
-
-/* Barra superior: transparente, los controles flotan en cápsulas */
-#nav-bar {
-  background: transparent !important;
-  border: 0 !important;
-  padding-block: 6px !important;
-}
-#nav-bar toolbarbutton:not(#urlbar-container *) > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
-  width: 34px !important;
-  height: 34px !important;
-  padding: 9px !important;
-  border-radius: 999px !important;
-  background: var(--pyx-glass) !important;
-  box-shadow: var(--pyx-glass-rim), 0 1px 3px rgb(0 0 0 / 0.08);
-}
-#nav-bar toolbarbutton:not([disabled]):hover > :is(.toolbarbutton-icon, .toolbarbutton-badge-stack) {
-  background: var(--pyx-glass-strong) !important;
-}
-/* Atrás y adelante: una sola cápsula (dos mitades unidas) */
-#back-button:not([disabled]) + #forward-button:not([disabled]) > .toolbarbutton-icon { border-start-start-radius: 0 !important; border-end-start-radius: 0 !important; }
-#back-button:not([disabled]):has(+ #forward-button:not([disabled])) > .toolbarbutton-icon { border-start-end-radius: 0 !important; border-end-end-radius: 0 !important; }
-#back-button + #forward-button { margin-inline-start: -2px !important; }
-
-/* Dirección: cápsula de vidrio centrada */
-#urlbar-container { flex: 0 1 620px !important; max-width: 620px !important; }
-#urlbar:not([breakout-extend]) #urlbar-background {
-  border-radius: 999px !important;
-  background: var(--pyx-glass) !important;
-  box-shadow: var(--pyx-glass-rim), 0 1px 3px rgb(0 0 0 / 0.08) !important;
-}
-#urlbar:not([breakout-extend]):hover #urlbar-background { background: var(--pyx-glass-strong) !important; }
-#urlbar[breakout-extend] #urlbar-background { border-radius: 16px !important; }
-#urlbar { --urlbar-min-height: 34px !important; }
-
-/* Pestañas de la barra lateral: cápsulas; la elegida es vidrio claro */
-.tabbrowser-tab .tab-background { border-radius: 12px !important; }
-.tabbrowser-tab[selected] .tab-background {
-  background: var(--pyx-glass-strong) !important;
-  box-shadow: var(--pyx-glass-rim), 0 2px 8px rgb(0 0 0 / 0.10) !important;
-}
-
-/* Menús y paneles: vidrio con esquinas grandes */
-menupopup, panel { --panel-border-radius: 14px; --panel-padding: 6px; }
-
 /* ── Tinte del sitio web (Safari): la barra de arriba toma el color de la página ── */
 #nav-bar, #zen-appcontent-navbar-container {
   transition: background-color 280ms var(--pyx-ease), color 200ms var(--pyx-ease);
@@ -351,9 +561,30 @@ menupopup, panel { --panel-border-radius: 14px; --panel-padding: 6px; }
 :root[pyx-tinted] :is(#zen-appcontent-navbar-container, #nav-bar) {
   background-color: var(--pyx-tint) !important;
 }
-:root[pyx-tinted="light"] #nav-bar { color: #1d1d1f !important; --toolbarbutton-icon-fill: #1d1d1f; --toolbar-color: #1d1d1f; }
-:root[pyx-tinted="dark"] #nav-bar { color: #f5f5f7 !important; --toolbarbutton-icon-fill: #f5f5f7; --toolbar-color: #f5f5f7; }
-:root[pyx-tinted="light"] #nav-bar { --pyx-glass: rgb(255 255 255 / 0.55); --pyx-glass-strong: rgb(255 255 255 / 0.75); }
-:root[pyx-tinted="dark"] #nav-bar { --pyx-glass: rgb(255 255 255 / 0.12); --pyx-glass-strong: rgb(255 255 255 / 0.2); }
-:root[pyx-tinted="light"] #urlbar { color: #1d1d1f !important; --urlbar-box-text-color: #1d1d1f; }
-:root[pyx-tinted="dark"] #urlbar { color: #f5f5f7 !important; --urlbar-box-text-color: #f5f5f7; }
+:root[pyx-tinted="light"] :is(#nav-bar, #urlbar) {
+  color: #1d1d1f !important;
+  --toolbarbutton-icon-fill: #1d1d1f;
+  --toolbar-color: #1d1d1f;
+  --urlbar-box-text-color: #1d1d1f;
+  --toolbar-field-color: #1d1d1f;
+  --toolbar-field-focus-color: #1d1d1f;
+  --pyx-glass: rgb(255 255 255 / calc(0.4 + 0.4 * var(--pyx-glass-o)));
+  --pyx-glass-strong: rgb(255 255 255 / calc(0.7 + 0.25 * var(--pyx-glass-o)));
+  --pyx-fill: rgb(0 0 0 / 0.07);
+}
+:root[pyx-tinted="dark"] :is(#nav-bar, #urlbar) {
+  color: #f5f5f7 !important;
+  --toolbarbutton-icon-fill: #f5f5f7;
+  --toolbar-color: #f5f5f7;
+  --urlbar-box-text-color: #f5f5f7;
+  --toolbar-field-color: #f5f5f7;
+  --toolbar-field-focus-color: #f5f5f7;
+  --pyx-glass: rgb(255 255 255 / calc(0.1 + 0.08 * var(--pyx-glass-o)));
+  --pyx-glass-strong: rgb(255 255 255 / calc(0.18 + 0.1 * var(--pyx-glass-o)));
+  --pyx-glass-rim: inset 0 0 0 0.5px rgb(255 255 255 / 0.16), 0 0 0 0.5px rgb(0 0 0 / 0.3);
+  --pyx-fill: rgb(255 255 255 / 0.12);
+}
+:root[pyx-tinted="light"] #urlbar:not([breakout-extend]) :is(.urlbar-input, #urlbar-scheme) { color: #1d1d1f !important; }
+:root[pyx-tinted="dark"] #urlbar:not([breakout-extend]) :is(.urlbar-input, #urlbar-scheme) { color: #f5f5f7 !important; }
+/* Con la dirección abierta, el panel de sugerencias usa los colores normales (legible). */
+:root[pyx-tinted] #urlbar[breakout-extend] { color: var(--pyx-label) !important; --urlbar-box-text-color: var(--pyx-label); }

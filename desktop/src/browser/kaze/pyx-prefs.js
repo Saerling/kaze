@@ -11,12 +11,15 @@ pref("zen.view.use-single-toolbar", false);
 pref("zen.urlbar.behavior", "normal");
 pref("zen.theme.border-radius", 12);
 pref("zen.theme.acrylic-sidebar", true);
+// Transparencia del vidrio de Fyx (0 = más transparente, 1 = opaco). Se cambia también desde el menú de Fyx.
+pref("pyx.glass.opacity", "0.5");
 pref("zen.view.show-clear-tabs-button", true);
 pref("zen.updates.show-update-notification", false);
 pref("zen.welcome-screen.seen", true);
 #ifdef XP_WIN
 pref("widget.windows.mica", true);
 pref("widget.windows.mica.toplevel-backdrop", 2);
+pref("widget.windows.mica.popups", 1);
 #endif
 
 // ── Procesos: el mayor gasto de RAM ───────────────────────────────────

@@ -241,11 +241,16 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             }
             Note("Con las sugerencias activas, lo que escribes se envía al buscador.")
 
+            IosSectionHeader("Pestañas")
+            IosGroup {
+                BarLayoutPicker(s.barLayout) { s.barLayout = it; s.barTop = false }
+                Toggle("Fila de pestañas sobre la barra", s.tabStripPhone, divider = false) { s.tabStripPhone = it }
+            }
+            Note("En el teléfono, muestra las pestañas abiertas encima de la barra. Está en prueba.")
+
             IosSectionHeader("Diseño")
             IosGroup {
                 Choice("Estilo", UiStyle.entries, s.uiStyle, { it.label }) { s.uiStyle = it }
-                BarLayoutPicker(s.barLayout) { s.barLayout = it; s.barTop = false }
-                Toggle("Pestañas en la barra (teléfono)", s.tabStripPhone) { s.tabStripPhone = it }
                 Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
                 Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {
                     s.textSize = it; Engine.applyTextSize(app.runtime, it)

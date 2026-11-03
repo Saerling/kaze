@@ -67,7 +67,7 @@ class Settings(context: Context) {
     var barTop by pref("bar_top", false)
     /** Diseño de la barra, como en Safari: "compact" (una píldora flotante), "bottom" o "top". */
     /** Teléfono: fila de pestañas (con grupos) encima de la barra. */
-    var tabStripPhone by pref("tab_strip_phone", true)
+    var tabStripPhone by pref("tab_strip_phone2", false)
     /** Bloqueador de anuncios (uBlock Origin, se instala solo). */
     var adblock by pref("adblock", true)
     var barLayout by pref("bar_layout2", "compact")

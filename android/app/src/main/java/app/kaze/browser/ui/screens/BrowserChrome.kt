@@ -4,6 +4,7 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.foundation.combinedClickable
 
 import androidx.compose.animation.shrinkVertically
@@ -821,8 +822,10 @@ private val TrayPad = 6.dp
 private val TrayShape = RoundedCornerShape(31.dp)
 
 /** Aparición de la fila de pestañas: crece desde abajo con el resorte de la barra y se funde un poco después. */
-private val StripEnter = expandVertically(spring(1f, 420f), expandFrom = Alignment.Bottom) + fadeIn(tween(200, delayMillis = 60))
-private val StripExit = fadeOut(tween(100)) + shrinkVertically(spring(1f, 520f), shrinkTowards = Alignment.Bottom)
+private val StripEnter = expandVertically(spring(0.86f, 380f), expandFrom = Alignment.Bottom) + fadeIn(tween(220, delayMillis = 50)) +
+    scaleIn(spring(0.7f, 420f), initialScale = 0.94f, transformOrigin = TransformOrigin(0.5f, 1f))
+private val StripExit = fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 0.96f, transformOrigin = TransformOrigin(0.5f, 1f)) +
+    shrinkVertically(spring(1f, 520f), shrinkTowards = Alignment.Bottom)
 
 /**
  * Superficie de una pieza de la barra compacta: su propio vidrio ([flat] = 0) o, dentro de la bandeja

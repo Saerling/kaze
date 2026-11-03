@@ -72,7 +72,8 @@ import kotlin.math.abs
 private val SheetReleaseSpeed = 300.dp
 
 // suéltala más despacio y se cierra si se bajó al menos esto; menos, vuelve a abrirse
-private val SheetCloseTravel = 36.dp
+// Fyx: más que en Mochy (36 dp) para que la hoja no se cierre sin querer al desplazar su contenido.
+private val SheetCloseTravel = 120.dp
 
 // un tirón rápido hacia abajo que acabó antes de mover la hoja también la cierra, con esta velocidad y recorrido
 private val SheetCloseFlick = 900.dp

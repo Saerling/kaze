@@ -68,6 +68,7 @@ import app.kaze.browser.ui.theme.LocalKaze
 import app.kaze.browser.ui.theme.card
 import app.kaze.browser.ui.theme.glass
 import app.kaze.browser.ui.theme.pressFeedback
+import app.kaze.browser.ui.mochy.RoundedHighlight
 import app.kaze.browser.ui.theme.spaceColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -195,7 +196,7 @@ fun IosSectionHeader(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun IosGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val k = LocalKaze.current
-    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).card(RoundedCornerShape(if (k.material) 26.dp else 12.dp)), content = content)
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).card(k.shapeOf(k.cornerOr(if (k.material) 26 else 12))), content = content)
 }
 
 @Composable
@@ -273,16 +274,18 @@ fun ToolbarIcon(icon: ImageVector, label: String, enabled: Boolean = true, tint:
     // Como en Safari: sin onda; el ícono se encoge un poco al tocarlo y el color cambia suave.
     val color by animateColorAsState(if (enabled) (tint ?: k.accent) else k.ink35, tween(180), label = "iconTint")
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // Respuesta táctil de Mochy: un círculo suave detrás del ícono (en vez de la onda) y el rebote al soltar.
+    val highlight = remember(k.ink) { RoundedHighlight(24.dp, color = k.ink.copy(alpha = 0.10f)) }
     Box(
         Modifier.size(48.dp).clip(CircleShape)
             .then(
                 when {
                     !enabled -> Modifier
                     onLong != null -> Modifier.combinedClickable(
-                        source, indication = null, onClick = onClick,
+                        source, indication = highlight, onClick = onClick,
                         onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); onLong() },
                     )
-                    else -> Modifier.clickable(source, indication = null, onClick = onClick)
+                    else -> Modifier.clickable(source, indication = highlight, onClick = onClick)
                 },
             )
             .pressFeedback(source, 0.86f)

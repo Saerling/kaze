@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.sheets
 
+import app.kaze.browser.ui.mochy.ActionCardColors
+import app.kaze.browser.ui.mochy.SheetActionCard
+import app.kaze.browser.ui.mochy.SheetActionCardRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,7 +100,7 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
             // 1. La página: de qué sitio es y copiar su enlace con un toque (contexto antes que acciones).
             if (web) {
                 Row(
-                    Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card)
+                    Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(k.cardShape).background(k.card)
                         .clickable { ClipboardBridge.copy?.invoke(tab.url); app.ui.show("Enlace copiado"); onDismiss() }
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -113,7 +116,7 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
                 Spacer(Modifier.height(10.dp))
             }
             // 2. Acciones de la página (las más usadas, en mosaicos grandes al alcance del pulgar).
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SheetActionCardRow(Modifier.padding(horizontal = 16.dp)) {
                 val fav = tab.kind == TabKind.ESSENTIAL
                 QuickAction(if (fav) Icons.Outlined.Star else Icons.Outlined.StarBorder, "Favorito", enabled = web && !tab.isPrivate, active = fav, modifier = Modifier.weight(1f)) {
                     store.setKind(tab, if (fav) TabKind.PINNED else TabKind.ESSENTIAL)
@@ -127,7 +130,7 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
             }
             Spacer(Modifier.height(8.dp))
             // 3. El navegador: pestañas nuevas y lo que se consulta seguido.
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SheetActionCardRow(Modifier.padding(horizontal = 16.dp)) {
                 QuickAction(Icons.Outlined.Add, "Nueva", modifier = Modifier.weight(1f), onClick = go(a.onNewTab))
                 QuickAction(Icons.Outlined.VisibilityOff, "Privada", modifier = Modifier.weight(1f), onClick = go(a.onNewPrivate))
                 QuickAction(Icons.Outlined.History, "Historial", modifier = Modifier.weight(1f), onClick = go(a.onLibrary))
@@ -159,18 +162,20 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
     }
 }
 
+/** Acción rápida: tarjeta de acción de Mochy (ui/mochy/MenuCards.kt), cuatro por fila. */
 @Composable
 private fun QuickAction(icon: ImageVector, label: String, modifier: Modifier, enabled: Boolean = true, active: Boolean = false, onClick: () -> Unit) {
+    SheetActionCard(
+        icon, label, onClick, actionCardColors(), KazeType.caption, modifier,
+        enabled = enabled, active = active, minHeight = 76.dp,
+    )
+}
+
+/** Colores de las tarjetas de acción de los menús de Fyx. */
+@Composable
+internal fun actionCardColors(): ActionCardColors {
     val k = LocalKaze.current
-    Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(if (active) k.accent.copy(alpha = 0.16f) else k.card)
-            .clickable(enabled = enabled, onClick = onClick).padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, null, tint = if (enabled) k.accent else k.ink35, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(label, style = KazeType.caption, color = if (enabled) k.ink else k.ink35, maxLines = 1)
-    }
+    return ActionCardColors(surface = k.card, activeSurface = k.accent.copy(alpha = 0.16f), icon = k.accent, text = k.ink, disabled = k.ink35)
 }
 
 /** Borrar datos de navegación: elegir qué y borrarlo. */

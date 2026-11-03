@@ -15,6 +15,9 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.outlined.Check
+import app.kaze.browser.ui.theme.glassFill
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.data.AccentColor
 import app.kaze.browser.data.UiStyle
@@ -243,8 +246,6 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                 Choice("Estilo", UiStyle.entries, s.uiStyle, { it.label }) { s.uiStyle = it }
                 BarLayoutPicker(s.barLayout) { s.barLayout = it; s.barTop = false }
                 Toggle("Pestañas en la barra (teléfono)", s.tabStripPhone) { s.tabStripPhone = it }
-                Choice("Color", AccentColor.entries, s.accent, { it.label }) { s.accent = it }
-                GlassSlider(s.glassTransparency) { s.glassTransparency = it }
                 Choice("Tema", ThemeMode.entries, s.theme, { it.label }) { s.theme = it; needsRestart = true }
                 Choice("Tamaño del texto de las páginas", listOf(85, 100, 115, 130, 150, 175), s.textSize, { "$it %" }) {
                     s.textSize = it; Engine.applyTextSize(app.runtime, it)
@@ -254,6 +255,10 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
                     { when (it) { "compact" -> "Compacta"; "list" -> "Lista"; else -> "Tarjetas" } }, divider = false,
                 ) { s.tabsView = it }
             }
+
+            // Personalización con las tarjetas de Mochy: color, esquinas, vidrio y movimiento.
+            IosSectionHeader("Personalización")
+            PersonalizationSection(s)
             Note("Transparencia del vidrio: más alto deja ver más la página a través de las barras; más bajo da un vidrio más opaco y con más contraste.")
             Note("Material You usa los colores de tu fondo de pantalla (Android 12 o más nuevo) con el color en Automático.")
 
@@ -357,29 +362,89 @@ private fun Note(text: String) {
 }
 
 /** "Transparencia del vidrio" (como en la familia 27 de Apple): deslizador 0–100 % con vista previa en vivo. */
+/**
+ * Personalización (Ajustes → Diseño), con las tarjetas de personalización de Mochy (ui/mochy/Customisation.kt):
+ * color principal, redondez y curva de las esquinas, vidrio y su transparencia, y animaciones y transiciones.
+ * Cada control cambia la interfaz en vivo.
+ */
 @Composable
-private fun GlassSlider(value: Int, onChange: (Int) -> Unit) {
+internal fun PersonalizationSection(s: app.kaze.browser.data.Settings) {
     val k = LocalKaze.current
-    // El vidrio de toda la app cambia en vivo mientras se arrastra (el guardado es asíncrono).
-    var local by remember(value) { mutableStateOf(value.toFloat()) }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Transparencia del vidrio", style = KazeType.body, color = k.ink, modifier = Modifier.weight(1f))
-            Text("${local.toInt()} %", style = KazeType.body, color = k.ink55)
+    val colors = app.kaze.browser.ui.mochy.CustomiseColors(
+        card = k.card, row = k.lift, text = k.ink, muted = k.ink55, swatch = k.accent.copy(alpha = 0.35f), highlight = k.accent,
+    )
+    val toggle: @Composable (Boolean, (Boolean) -> Unit) -> Unit = { v, on -> KazeSwitch(v, on) }
+    // Radio del estilo (lo que hay con "Restablecer").
+    val styleCorner = k.copy(cornerOverride = -1).corner
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        // Color principal: muestras redondas (el mismo ajuste "Color" de siempre).
+        app.kaze.browser.ui.mochy.EffectCard(title = "Color", colors = colors) {
+            AccentSwatches(s.accent) { s.accent = it }
+            Spacer(Modifier.height(6.dp))
+            Text(s.accent.label, style = KazeType.footnote, color = k.ink55)
         }
-        androidx.compose.material3.Slider(
-            value = local,
-            onValueChange = { local = it; onChange(it.toInt()) },
-            valueRange = 0f..100f,
-            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = k.accent, inactiveTrackColor = k.ink12),
-            modifier = Modifier.semantics { contentDescription = "Transparencia del vidrio" },
+        app.kaze.browser.ui.mochy.CornerRoundingSection(
+            radiusDp = k.corner.toFloat(), defaultRadius = styleCorner.toFloat(), maxRadius = 32f, smooth = k.smooth, colors = colors,
+            onRadiusChange = { s.cornerRadius = it.toInt() }, onReset = { s.cornerRadius = -1 },
         )
-        Row {
-            Text("Opaco", style = KazeType.footnote, color = k.ink55, modifier = Modifier.weight(1f))
-            Text("Transparente", style = KazeType.footnote, color = k.ink55)
+        app.kaze.browser.ui.mochy.EffectCard(title = "Forma de las esquinas", colors = colors) {
+            Text("Continuas: la curva de los íconos de apps (superelipse), sin el quiebre de un arco.", style = KazeType.footnote, color = k.ink55)
+            Spacer(Modifier.height(10.dp))
+            app.kaze.browser.ui.mochy.MiniSegmented(listOf("Redondas", "Continuas"), if (s.smoothCorners) 1 else 0, { s.smoothCorners = it == 1 }, colors)
+        }
+        app.kaze.browser.ui.mochy.EffectCard(
+            title = "Vidrio", colors = colors, toggle = { toggle(s.glassOn) { s.glassOn = it } },
+            canReset = !s.glassOn || s.glassTransparency != 20, onReset = { s.glassOn = true; s.glassTransparency = 20 },
+            preview = {
+                // Vista previa fija: una barra de vidrio sobre rayas, con el vidrio de verdad.
+                Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    repeat(5) { i -> Box(Modifier.padding(horizontal = 10.dp).fillMaxWidth(if (i % 2 == 0) 1f else 0.6f).height(6.dp).clip(RoundedCornerShape(3.dp)).background(k.accent.copy(alpha = 0.6f))) }
+                }
+                Box(Modifier.align(Alignment.BottomCenter).padding(10.dp).fillMaxWidth().height(28.dp).clip(RoundedCornerShape(50)).background(k.glassFill()))
+            },
+        ) {
+            Text(if (s.glassOn) "Las barras dejan ver la página a través." else "Barras opacas, con el mayor contraste.", style = KazeType.footnote, color = k.ink55)
+        }
+        app.kaze.browser.ui.mochy.CustomiseSliderCard(
+            title = "Transparencia del vidrio", startLabel = "Opaco", endLabel = "Transparente",
+            fraction = s.glassTransparency / 100f, colors = colors, valueText = "${s.glassTransparency} %", enabled = s.glassOn,
+            onFractionChange = { s.glassTransparency = (it * 100).toInt() },
+        )
+        app.kaze.browser.ui.mochy.AnimationSection(
+            enabled = s.animationsOn, onEnabled = { s.animationsOn = it },
+            speed = s.animationSpeed / 100f, onSpeed = { s.animationSpeed = (it * 100).toInt() },
+            colors = colors, toggle = toggle,
+        ) {
+            Spacer(Modifier.height(11.dp))
+            app.kaze.browser.ui.mochy.EffectCard(title = "Transiciones", colors = colors) {
+                Text("Mochy: la vista de pestañas crece con un resorte y las tarjetas aparecen en ráfaga.", style = KazeType.footnote, color = k.ink55)
+                Spacer(Modifier.height(10.dp))
+                app.kaze.browser.ui.mochy.MiniSegmented(listOf("Fyx", "Mochy"), if (s.mochyTransitions) 1 else 0, { s.mochyTransitions = it == 1 }, colors, enabled = s.animationsOn)
+            }
         }
     }
-    Box(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(k.separator))
+}
+
+/** Muestras del color principal; la de Automático lleva una "A". */
+@Composable
+private fun AccentSwatches(value: AccentColor, onPick: (AccentColor) -> Unit) {
+    val k = LocalKaze.current
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AccentColor.entries.forEach { c ->
+            val sel = c == value
+            val ring by androidx.compose.animation.animateColorAsState(if (sel) k.ink else Color.Transparent, label = "ring")
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(ring).padding(3.dp).clip(CircleShape)
+                    .background(if (c == AccentColor.AUTO) k.lift else Color(c.argb))
+                    .clickable(role = androidx.compose.ui.semantics.Role.RadioButton) { onPick(c) }
+                    .semantics { contentDescription = "Color ${c.label}"; selected = sel },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (c == AccentColor.AUTO) Text("A", style = KazeType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = k.ink)
+                else if (sel) Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -483,7 +548,7 @@ private fun ZenSyncSection() {
     if (email == null) {
         // Sin sesión: una tarjeta que explica qué se gana y un solo botón claro.
         Column(
-            Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card).padding(18.dp),
+            Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(k.cardShape).background(k.card).padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("Tus pestañas y contraseñas en todos tus dispositivos", style = KazeType.headline, color = k.ink, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -498,7 +563,7 @@ private fun ZenSyncSection() {
     } else {
         // Con sesión: quién eres, cuándo se sincronizó y el botón principal a la vista.
         Row(
-            Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card).padding(14.dp),
+            Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(k.cardShape).background(k.card).padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(44.dp).clip(CircleShape).background(k.accent), contentAlignment = Alignment.Center) {

@@ -4,6 +4,12 @@
 
 package app.kaze.browser.ui.screens
 
+import app.kaze.browser.ui.mochy.press3D
+import androidx.compose.ui.platform.testTag
+import app.kaze.browser.ui.mochy.Chip
+import app.kaze.browser.ui.mochy.ChipColors
+import app.kaze.browser.ui.mochy.ChipsRow
+import app.kaze.browser.ui.mochy.MochyChip
 import app.kaze.browser.data.Topics
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
@@ -472,40 +478,21 @@ private fun TopicChips(
     onGroup: () -> Unit,
 ) {
     val k = LocalKaze.current
-    val spec = spring<Color>(dampingRatio = 0.85f, stiffness = 500f)
-    @Composable
-    fun Pill(label: String, count: Int?, on: Boolean, description: String = label, onClick: () -> Unit) {
-        val bg by androidx.compose.animation.animateColorAsState(if (on) k.accent else k.lift, spec, label = "pill")
-        val fg by androidx.compose.animation.animateColorAsState(if (on) Color.White else k.ink, spec, label = "pillText")
-        Row(
-            Modifier.height(34.dp).clip(RoundedCornerShape(50)).background(bg).clickable(onClick = onClick)
-                .semantics { contentDescription = description }.padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = fg, maxLines = 1)
-            if (count != null) Text("  $count", style = KazeType.footnote, color = fg.copy(alpha = 0.75f), maxLines = 1)
-        }
-    }
-    // La píldora elegida siempre queda a la vista (se desliza hasta ella con resorte).
-    val row = androidx.compose.foundation.lazy.rememberLazyListState()
-    LaunchedEffect(selected) {
-        val i = filters.indexOfFirst { it.key == selected }
-        row.animateScrollToItem(if (i < 0) 0 else maxOf(0, i))
-    }
-    androidx.compose.foundation.lazy.LazyRow(
-        Modifier.fillMaxWidth(),
-        state = row,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    // Píldoras de ChipsRow de Mochy (ui/mochy/ChipsRow.kt): la elegida se redondea con un resorte.
+    val colors = ChipColors(container = k.lift, label = k.ink, selectedContainer = k.accent, selectedLabel = Color.White)
+    val style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold)
+    val chips = listOf(Chip<String?>(null, "Todas", total)) +
+        filters.map { f -> Chip<String?>(f.key, "${f.emoji} ${f.label}", f.tabIds.size, description = "Tema ${f.label}") }
+    ChipsRow(
+        chips = chips,
+        currentValue = selected,
+        onValueUpdate = { key -> onPick(if (key != null && key == selected) null else key) },
+        colors = colors,
+        textStyle = style,
+        modifier = Modifier.testTag("temas"),
     ) {
-        item(key = "all") { Pill("Todas", total, selected == null) { onPick(null) } }
-        items(filters.size, key = { filters[it].key }) { i ->
-            val f = filters[i]
-            Pill("${f.emoji} ${f.label}", f.tabIds.size, f.key == selected, description = "Tema ${f.label}") {
-                onPick(if (f.key == selected) null else f.key)
-            }
-        }
         item(key = "group") {
-            Pill("✦ Crear grupos por tema", null, false, onClick = onGroup)
+            MochyChip("✦ Crear grupos por tema", selected = false, colors = colors, textStyle = style, onClick = onGroup)
         }
     }
 }
@@ -798,9 +785,11 @@ private fun TabCard(
                 .fillMaxWidth()
                 // En tableta la pantalla es apaisada: la vista previa también (se ve completa y nítida).
                 .aspectRatio(if (LocalApp.current.ui.tablet) 1.3f else if (compact) 0.68f else 0.74f)
-                .card(RoundedCornerShape(k.corner.dp))
-                .then(if (selected) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier.border(0.5.dp, k.rim, RoundedCornerShape(k.corner.dp)))
-                .then(if (highlight) Modifier.border(3.dp, k.accent, RoundedCornerShape(k.corner.dp)) else Modifier)
+                // Se inclina hacia el dedo al apretarla (Press3D de Mochy); el encogido lo pone tap().
+                .press3D(maxTilt = 5f, pressedScale = 1f)
+                .card(k.cardShape)
+                .then(if (selected) Modifier.border(3.dp, k.accent, k.cardShape) else Modifier.border(0.5.dp, k.rim, k.cardShape))
+                .then(if (highlight) Modifier.border(3.dp, k.accent, k.cardShape) else Modifier)
                 .then(drag)
                 .tap(onOpen),
         ) {
@@ -808,7 +797,7 @@ private fun TabCard(
             when {
                 b != null && !tab.isStart -> Image(
                     b.asImageBitmap(), null, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(k.corner.dp)),
+                    modifier = Modifier.fillMaxSize().clip(k.cardShape),
                 )
                 else -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     if (tab.isStart) {
@@ -894,9 +883,9 @@ private fun FolderCard(name: String, tabs: List<Tab>, list: Boolean, highlight: 
     }
     Column {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(0.74f).clip(RoundedCornerShape(k.corner.dp))
+            Modifier.fillMaxWidth().aspectRatio(0.74f).clip(k.cardShape)
                 .background(color.copy(alpha = if (k.isDark) 0.20f else 0.16f))
-                .border(if (highlight) 3.dp else 1.dp, if (highlight) k.accent else color.copy(alpha = 0.35f), RoundedCornerShape(k.corner.dp))
+                .border(if (highlight) 3.dp else 1.dp, if (highlight) k.accent else color.copy(alpha = 0.35f), k.cardShape)
                 .tap(onOpen).padding(8.dp),
         ) {
             // Cuadrícula 2×2 de miniaturas (o íconos si la pestaña está dormida).
@@ -995,14 +984,23 @@ private fun FolderView(
 @Composable
 private fun Modifier.staggerIn(index: Int, active: Boolean): Modifier {
     val p = remember { androidx.compose.animation.core.Animatable(if (active) 0f else 1f) }
+    val mochy = app.kaze.browser.ui.mochy.AppMotion.mochyTransitions
     LaunchedEffect(Unit) {
+        // Sin animaciones (Fyx o Android) no se espera la ráfaga: aparecen al instante.
+        if (app.kaze.browser.ui.mochy.AppMotion.reduced) { p.snapTo(1f); return@LaunchedEffect }
         if (p.value < 1f) {
-            kotlinx.coroutines.delay(35L * index.coerceIn(0, 8))
-            p.animateTo(1f, tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+            if (mochy) {
+                // Aparición de Mochy (RevealOnAppear): ráfaga escalonada de 60 ms y su curva, sube 20 dp.
+                kotlinx.coroutines.delay(app.kaze.browser.ui.mochy.BurstStepMs.toLong() * index.coerceIn(0, app.kaze.browser.ui.mochy.BurstMaxSteps))
+                p.animateTo(1f, tween(app.kaze.browser.ui.mochy.RevealFadeInMs, easing = app.kaze.browser.ui.mochy.RevealEasing))
+            } else {
+                kotlinx.coroutines.delay(35L * index.coerceIn(0, 8))
+                p.animateTo(1f, tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+            }
         }
     }
     return graphicsLayer {
         alpha = p.value
-        translationY = (1f - p.value) * 16.dp.toPx()
+        translationY = (1f - p.value) * (if (mochy) app.kaze.browser.ui.mochy.RevealSlideDistance else 16.dp).toPx()
     }
 }

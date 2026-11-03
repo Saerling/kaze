@@ -114,6 +114,12 @@ import app.kaze.browser.ui.theme.KazeType
 import app.kaze.browser.ui.theme.LocalKaze
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import app.kaze.browser.ui.mochy.TopToast
+import app.kaze.browser.ui.mochy.AppMotion
+import app.kaze.browser.ui.mochy.containerEnter
+import app.kaze.browser.ui.mochy.containerExit
+import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
+import app.kaze.browser.ui.mochy.TopToastHost
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.GeckoSession
@@ -238,9 +244,25 @@ class MainActivity : ComponentActivity() {
 
         if (savedInstanceState == null) handleIntent(intent)
 
-        setContent {
+        // La escala de animación de Mochy va al recompositor de la ventana: el interruptor y la velocidad de
+        // Ajustes → Diseño llegan a todas las animaciones (y sigue "Quitar animaciones" de Android).
+        val motionObserver = AppMotion.followSystemScale(this)
+        lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) { contentResolver.unregisterContentObserver(motionObserver) }
+        })
+        val motionRecomposer = window.decorView.createLifecycleAwareWindowRecomposer(AppMotion.durationScale, lifecycle)
+        setContent(parent = motionRecomposer) {
             val dark = Engine.isDarkTheme(this, app.settings)
-            KazeTheme(dark, app.settings.uiStyle, app.settings.accent, app.settings.glassTransparency) {
+            val s = app.settings
+            SideEffect {
+                AppMotion.enabled = s.animationsOn
+                AppMotion.speed = s.animationSpeed / 100f
+                AppMotion.mochyTransitions = s.mochyTransitions
+            }
+            KazeTheme(
+                dark, s.uiStyle, s.accent, s.glassTransparency,
+                cornerRadius = s.cornerRadius, smoothCorners = s.smoothCorners, glassOn = s.glassOn,
+            ) {
                 CompositionLocalProvider(LocalApp provides app) { Root() }
             }
         }
@@ -755,8 +777,9 @@ class MainActivity : ComponentActivity() {
 
             AnimatedVisibility(
                 visible = showTabs,
-                enter = fadeIn(tween(180)) + scaleIn(spring(0.85f, 420f), initialScale = 1.04f),
-                exit = fadeOut(tween(160)) + scaleOut(spring(1f, 700f), targetScale = 1.04f),
+                // Transiciones de Mochy (ui/mochy/Transitions.kt) o las de siempre, según Ajustes → Diseño.
+                enter = if (AppMotion.mochyTransitions) containerEnter() else fadeIn(tween(180)) + scaleIn(spring(0.85f, 420f), initialScale = 1.04f),
+                exit = if (AppMotion.mochyTransitions) containerExit() else fadeOut(tween(160)) + scaleOut(spring(1f, 700f), targetScale = 1.04f),
             ) {
                 TabsScreen(
                     onOpen = ::open,
@@ -979,7 +1002,16 @@ class MainActivity : ComponentActivity() {
             ui.prompt?.let { p -> PromptHost(p, onDone = { ui.prompt = null }, onFile = ::openFilePicker) }
             ui.permission?.let { p -> PermissionHost(p) { ui.permission = null } }
 
-            Toast(ui.toast, ui.toastAction) { ui.dismissToast() }
+            // Aviso con la píldora y el movimiento de TopToast de Mochy (ui/mochy/TopToast.kt).
+            val toastAction = ui.toastAction
+            val current = ui.toast?.let { msg ->
+                remember(ui.toastId, msg, toastAction) {
+                    TopToast(ui.toastId, msg, toastAction?.first, toastAction?.second, if (toastAction != null) 4500L else 2200L)
+                }
+            }
+            Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 128.dp)) {
+                TopToastHost(current, onDismiss = { id -> if (id == ui.toastId && ui.toast != null) ui.dismissToast() }, accent = LocalKaze.current.accent)
+            }
         }
 
         // Ajustes se abre desde la Biblioteca y desde la vista de pestañas.
@@ -1000,47 +1032,6 @@ class MainActivity : ComponentActivity() {
         finder.find(query, flags).accept { r ->
             ui.findTotal = r?.total ?: 0
             ui.findCurrent = r?.current ?: 0
-        }
-    }
-}
-
-@Composable
-private fun Toast(message: String?, action: Pair<String, () -> Unit>?, onGone: () -> Unit) {
-    val k = LocalKaze.current
-    LaunchedEffect(message, action) {
-        if (message != null) {
-            delay(if (action != null) 4500 else 2200)
-            onGone()
-        }
-    }
-    Box(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 128.dp), contentAlignment = Alignment.BottomCenter) {
-        AnimatedVisibility(
-            message != null,
-            enter = fadeIn(tween(160)) + slideInVertically(spring(0.85f, 500f)) { it },
-            exit = fadeOut(tween(140)) + slideOutVertically(spring(1f, 700f)) { it / 2 },
-        ) {
-            Row(
-                Modifier.clip(RoundedCornerShape(50)).background(k.ink.copy(alpha = 0.92f))
-                    .padding(start = 18.dp, end = if (action != null) 6.dp else 18.dp, top = if (action != null) 0.dp else 6.dp, bottom = if (action != null) 0.dp else 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(message.orEmpty(), style = KazeType.small, color = k.paper, modifier = Modifier.padding(vertical = 4.dp))
-                if (action != null) {
-                    Spacer(Modifier.width(10.dp))
-                    // Área táctil de 44 dp de alto; el botón se dibuja igual que antes.
-                    Box(
-                        Modifier.heightIn(min = 44.dp).clickable(
-                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null,
-                        ) { action.second(); onGone() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            action.first, style = KazeType.small.copy(fontWeight = FontWeight.SemiBold), color = k.paper,
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(k.accent).padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-            }
         }
     }
 }

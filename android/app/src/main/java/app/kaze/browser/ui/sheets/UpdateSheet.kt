@@ -117,7 +117,7 @@ fun UpdateSheet(onDismiss: () -> Unit) {
                 val (title, items) = remember(info.notes) { parseNotes(info.notes) }
                 Spacer(Modifier.height(18.dp))
                 Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(k.corner.dp)).background(k.card).padding(16.dp),
+                    Modifier.fillMaxWidth().clip(k.cardShape).background(k.card).padding(16.dp),
                 ) {
                     Text("Novedades", style = KazeType.footnote.copy(fontWeight = FontWeight.SemiBold), color = k.accent)
                     if (title.isNotBlank()) {

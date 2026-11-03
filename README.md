@@ -54,4 +54,4 @@
 
 ## Licencia
 
-[Mozilla Public License 2.0](LICENSE), como Firefox y Zen. Kaze no está afiliado a Mozilla, a Zen Browser ni a Z-Sync.
+[Mozilla Public License 2.0](LICENSE), como Firefox y Zen. La app Android se distribuye bajo [GPL-3.0](android/LICENSE) porque incluye código de [Mochy Music](https://github.com/realidkroo/Mochy-Music) (realidkroo); detalles en [`android/NOTICE.md`](android/NOTICE.md). Kaze no está afiliado a Mozilla, a Zen Browser ni a Z-Sync.

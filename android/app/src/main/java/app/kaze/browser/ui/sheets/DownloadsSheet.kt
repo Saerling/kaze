@@ -78,7 +78,7 @@ fun DownloadsSheet(onDismiss: () -> Unit) {
             }
         } else {
             Column(
-                Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(k.corner.dp)).background(k.card).animateContentSize(spring(0.9f, 400f)),
+                Modifier.padding(horizontal = 16.dp).clip(k.cardShape).background(k.card).animateContentSize(spring(0.9f, 400f)),
             ) {
                 list.forEachIndexed { i, d ->
                     key(d.id) { DownloadRow(d, divider = i < list.lastIndex, onOpen = { open(context, d) }, onRemove = { app.downloads.remove(d) }) }

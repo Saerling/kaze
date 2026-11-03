@@ -88,6 +88,19 @@ class Settings(context: Context) {
     var onboarded by pref("onboarded", false)
     /** Transparencia del vidrio (barras y hojas flotantes), 0–100 %. 20 = el vidrio de siempre. */
     var glassTransparency by pref("glass_transparency", 20)
+    // ── Personalización (tarjetas de Mochy en Ajustes → Diseño) ──
+    /** Radio de las esquinas en dp; -1 = el del estilo elegido. */
+    var cornerRadius by pref("corner_radius", -1)
+    /** Esquinas continuas (superelipse de Mochy) en vez de arcos de círculo. */
+    var smoothCorners by pref("smooth_corners", false)
+    /** Vidrio en las barras; apagado, las barras son opacas. */
+    var glassOn by pref("glass_on", true)
+    /** Animaciones de Fyx (apagadas, todo salta a su final; "Quitar animaciones" de Android también cuenta). */
+    var animationsOn by pref("animations_on", true)
+    /** Velocidad de las animaciones en %, sobre la de Android (50–200). */
+    var animationSpeed by pref("animation_speed", 100)
+    /** Transiciones de Mochy (resortes de contenedor) o las de siempre de Fyx. */
+    var mochyTransitions by pref("mochy_transitions", true)
     /** Sección "Reanudar navegación" en la página de inicio. */
     var startResume by pref("start_resume", true)
 

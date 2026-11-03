@@ -4,6 +4,8 @@
 
 package app.kaze.browser.ui.theme
 
+import app.kaze.browser.ui.mochy.pressBounce
+import app.kaze.browser.ui.mochy.SmoothCornerShape
 import androidx.compose.ui.draw.drawBehind
 import app.kaze.browser.data.AccentColor
 import app.kaze.browser.data.UiStyle
@@ -79,9 +81,21 @@ data class KazeColors(
     val zen: Boolean = false,
     /** Transparencia del vidrio elegida en Ajustes → Diseño (0 = opaco, 1 = lo más claro posible). */
     val glassClear: Float = DEFAULT_GLASS_CLEAR,
+    /** Radio elegido en Ajustes → Diseño → Redondez (dp); -1 = el del estilo. */
+    val cornerOverride: Int = -1,
+    /** Esquinas continuas (SmoothCornerShape de Mochy). */
+    val smooth: Boolean = false,
+    /** Vidrio encendido; apagado, las barras son opacas. */
+    val glassOn: Boolean = true,
 ) {
     /** Radio de las tarjetas: más redondo en Material You (Material 3 Expressive) y en Living Flow. */
-    val corner get() = when { material -> 24; flow -> 26; zen -> 16; else -> 14 }
+    val corner get() = if (cornerOverride >= 0) cornerOverride else when { material -> 24; flow -> 26; zen -> 16; else -> 14 }
+    /** Forma de las tarjetas con el radio y la curva elegidos. */
+    val cardShape: Shape get() = shapeOf(corner)
+    /** Una forma de [radius] dp con la curva elegida (círculo o superelipse de Mochy). */
+    fun shapeOf(radius: Int): Shape = if (smooth) SmoothCornerShape(radius.dp) else RoundedCornerShape(radius.dp)
+    /** Radio de hojas y grupos: el del estilo, o el elegido (con tope para que las hojas no queden raras). */
+    fun cornerOr(styleDefault: Int, max: Int = 32): Int = if (cornerOverride >= 0) cornerOverride.coerceAtMost(max) else styleDefault
     // Familia 27: texto secundario un poco más firme para que se lea bien sobre el vidrio.
     val ink70 get() = ink.copy(alpha = 0.76f)
     val ink55 get() = ink.copy(alpha = 0.64f)
@@ -175,6 +189,7 @@ const val DEFAULT_GLASS_CLEAR = 0.2f
  * texto encima siga siendo legible.
  */
 fun KazeColors.glassFill(): Color {
+    if (!glassOn) return glass.copy(alpha = 1f)
     val factor = 1.12f - glassClear * 0.62f
     return glass.copy(alpha = (glass.alpha * factor).coerceIn(0.4f, 1f))
 }
@@ -191,6 +206,9 @@ fun KazeTheme(
     style: UiStyle = UiStyle.SAFARI,
     accent: AccentColor = AccentColor.AUTO,
     glassTransparency: Int = (DEFAULT_GLASS_CLEAR * 100).toInt(),
+    cornerRadius: Int = -1,
+    smoothCorners: Boolean = false,
+    glassOn: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -199,7 +217,9 @@ fun KazeTheme(
     val paper by animateColorAsState(target.paper, spec, label = "paper")
     val ink by animateColorAsState(target.ink, spec, label = "ink")
     val accentC by animateColorAsState(target.accent, spec, label = "accent")
-    val colors = target.copy(paper = paper, ink = ink, accent = accentC, glassClear = glassTransparency.coerceIn(0, 100) / 100f)
+    val colors = target.copy(paper = paper, ink = ink, accent = accentC, glassClear = glassTransparency.coerceIn(0, 100) / 100f,
+        cornerOverride = cornerRadius, smooth = smoothCorners, glassOn = glassOn,
+    )
 
     val scheme = if (dark) {
         darkColorScheme(
@@ -291,23 +311,15 @@ fun Modifier.glass(shape: Shape = PillShape, elevation: Float = 18f): Modifier {
         .border(0.5.dp, k.glassRim(if (k.isDark) 0.14f else 0.06f), shape)
 }
 
-/** Se encoge y atenúa mientras el dedo está encima. */
+/**
+ * Se encoge bajo el dedo y vuelve con un rebote pequeño: el pressBounce de Mochy (ui/mochy/TouchFeedback.kt),
+ * que también muestra el apretón en un toque rápido. Además se atenúa un poco, como antes en Fyx.
+ */
 @Composable
 fun Modifier.pressFeedback(source: MutableInteractionSource, scaleTo: Float = 0.95f): Modifier {
     val pressed by source.collectIsPressedAsState()
-    // Living Flow: al soltar, rebota con elasticidad (como el agua); en los otros estilos, firme y rápido.
-    val flow = LocalKaze.current.flow
-    val scale by animateFloatAsState(
-        if (pressed) scaleTo else 1f,
-        if (flow) androidx.compose.animation.core.spring(dampingRatio = if (pressed) 0.9f else 0.42f, stiffness = 520f) else tween(90),
-        label = "pressScale",
-    )
-    val alpha by animateFloatAsState(if (pressed) 0.6f else 1f, tween(90), label = "pressAlpha")
-    return graphicsLayer {
-        scaleX = scale
-        scaleY = scale
-        this.alpha = alpha
-    }
+    val alpha by animateFloatAsState(if (pressed) 0.7f else 1f, tween(90), label = "pressAlpha")
+    return pressBounce(source, scaleTo).graphicsLayer { this.alpha = alpha }
 }
 
 /** Colores de grupo (espacio) atenuados para el fondo de la página de inicio. */

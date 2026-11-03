@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,6 +43,12 @@ import app.kaze.browser.ui.theme.LocalKaze
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Before
+import app.kaze.browser.ui.mochy.TopToastHost
+import app.kaze.browser.ui.mochy.TopToast
+import app.kaze.browser.ui.sheets.MenuActions
+import app.kaze.browser.ui.sheets.MainMenuSheet
+import app.kaze.browser.ui.sheets.TabMenuSheet
+import app.kaze.browser.ui.sheets.PersonalizationSection
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -181,6 +188,8 @@ class ScreenshotTest {
         try {
             compose.setContent { Themed(false) { Tabs() } }
             compose.waitForIdle()
+            // Con muchas pestañas abiertas la píldora puede quedar fuera de la fila: primero se desliza hasta ella.
+            compose.onNode(androidx.compose.ui.test.hasTestTag("temas")).performScrollToNode(androidx.compose.ui.test.hasContentDescription("Tema Noticias"))
             compose.onNodeWithContentDescription("Tema Noticias").performClick()
             compose.mainClock.advanceTimeBy(1200)
             compose.waitForIdle()
@@ -381,6 +390,54 @@ class ScreenshotTest {
                 fontSize = 17.sp, color = Color(0xFF202122), modifier = Modifier.padding(top = 16.dp), lineHeight = 27.sp,
             )
         }
+    }
+
+    /** Menú ⋯ con las tarjetas de acción de Mochy, en la hoja con el movimiento de Mochy. */
+    @Test fun menu_principal() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("wikipedia") }
+        val a = MenuActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+        compose.setContent { Themed(false) { Box(Modifier.fillMaxSize()) { MainMenuSheet(tab, {}, a) } } }
+        compose.waitForIdle()
+        captureScreenRoboImage("../../docs/capturas/android-menu.png")
+    }
+
+    /** Menú de una pestaña: "Abrir" y "Cerrar pestaña" en tarjetas grandes y el resto en la lista. */
+    @Test fun menu_pestana() {
+        val tab = app.store.normal(app.store.currentSpaceId).first { it.url.contains("bbc") }
+        compose.setContent { Themed(true) { Box(Modifier.fillMaxSize()) { TabMenuSheet(tab, {}, {}, {}) } } }
+        compose.waitForIdle()
+        captureScreenRoboImage("../../docs/capturas/android-menu-pestana.png")
+    }
+
+    /** Aviso con "Deshacer" con la píldora de TopToast de Mochy. */
+    @Test fun aviso() {
+        val toast = TopToast(1, "Pestaña cerrada (también se quitará de Zen)", "Deshacer", {}, 60_000)
+        compose.setContent {
+            Themed(false) {
+                Box(Modifier.fillMaxSize().background(Color.White)) {
+                    FakePage()
+                    Box(Modifier.fillMaxSize().padding(bottom = 128.dp)) {
+                        TopToastHost(toast, {}, LocalKaze.current.accent)
+                    }
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1500)
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-aviso.png")
+    }
+
+    /** Ajustes → Diseño → Personalización (tarjetas de Mochy). */
+    @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
+    @Test fun personalizacion() {
+        compose.setContent {
+            Themed(true) {
+                Column(Modifier.fillMaxSize().background(LocalKaze.current.paper).padding(top = 24.dp)) {
+                    PersonalizationSection(app.settings)
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("../../docs/capturas/android-personalizacion.png")
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onRoot() =

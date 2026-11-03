@@ -4,6 +4,9 @@
 
 package app.kaze.browser.ui.sheets
 
+import app.kaze.browser.ui.mochy.MochyModalSheet
+import app.kaze.browser.ui.mochy.SheetActionCard
+import app.kaze.browser.ui.mochy.SheetActionCardRow
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.outlined.Folder
@@ -77,13 +80,10 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -124,16 +124,17 @@ import app.kaze.browser.ui.theme.spaceColor
 import org.json.JSONObject
 
 /** Hoja inferior al estilo iOS: fondo agrupado y asa gris. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KazeSheet(onDismiss: () -> Unit, full: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
     val k = LocalKaze.current
-    ModalBottomSheet(
+    // Movimiento y arrastre de la hoja de Mochy (ui/mochy/BottomSheet.kt). [full] se conserva por
+    // compatibilidad: la hoja siempre se abre completa (como hacía ModalBottomSheet con él).
+    MochyModalSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = full),
         containerColor = k.paper,
         contentColor = k.ink,
-        shape = RoundedCornerShape(topStart = if (k.material) 28.dp else 14.dp, topEnd = if (k.material) 28.dp else 14.dp),
+        shape = k.cornerOr(if (k.material) 28 else 14).let { r -> RoundedCornerShape(topStart = r.dp, topEnd = r.dp) },
+        lightSystemBars = !k.isDark,
         dragHandle = {
             Box(Modifier.padding(top = 8.dp, bottom = 6.dp).size(36.dp, 5.dp).clip(CircleShape).background(k.ink.copy(alpha = 0.22f)))
         },
@@ -468,9 +469,19 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
     val app = LocalApp.current
     val store = app.store
     PageHeader(tab)
-    IosGroup {
-        IosRow("Abrir", Icons.AutoMirrored.Outlined.OpenInNew) { onDismiss(); onOpen() }
-        if (!tab.isPrivate && !tab.isStart) {
+    // Las dos acciones de siempre en tarjetas grandes, como los menús de Mochy (NewActionGrid); el resto en la lista.
+    SheetActionCardRow(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)) {
+        SheetActionCard(
+            Icons.AutoMirrored.Outlined.OpenInNew, "Abrir", { onDismiss(); onOpen() }, actionCardColors(), KazeType.headline,
+            Modifier.weight(1f), minHeight = 84.dp,
+        )
+        SheetActionCard(
+            Icons.Outlined.Close, "Cerrar pestaña", { closeWithUndo(app, tab); onDismiss() }, actionCardColors(), KazeType.headline,
+            Modifier.weight(1f), minHeight = 84.dp, iconTint = SystemRed,
+        )
+    }
+    if (!tab.isPrivate && !tab.isStart) IosGroup {
+        run {
             if (tab.kind == TabKind.ESSENTIAL) {
                 IosRow("Quitar de Favoritos", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
             } else {
@@ -489,10 +500,7 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
                 }
             }
             if (store.profileSpaces.size > 1) IosRow("Mover a otro espacio", Icons.AutoMirrored.Outlined.DriveFileMove) { onDismiss(); onMove() }
-            IosRow("Copiar dirección", Icons.Outlined.ContentCopy) { ClipboardBridge.copy?.invoke(tab.url); onDismiss() }
-        }
-        IosRow("Cerrar pestaña", Icons.Outlined.Close, iconTint = SystemRed, titleColor = SystemRed, divider = false) {
-            closeWithUndo(app, tab); onDismiss()
+            IosRow("Copiar dirección", Icons.Outlined.ContentCopy, divider = false) { ClipboardBridge.copy?.invoke(tab.url); onDismiss() }
         }
     }
 }

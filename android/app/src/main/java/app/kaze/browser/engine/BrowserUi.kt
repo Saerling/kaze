@@ -6,6 +6,7 @@ package app.kaze.browser.engine
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.kaze.browser.data.Tab
@@ -56,6 +57,8 @@ class BrowserUi {
     var contextMenu by mutableStateOf<ContextMenuRequest?>(null)
     var fullscreen by mutableStateOf(false)
     var toast by mutableStateOf<String?>(null)
+    /** Sube con cada aviso: dos avisos iguales seguidos cuentan como dos (y reinician su tiempo). */
+    var toastId by mutableLongStateOf(0L)
     /** Acción del aviso (p. ej. "Deshacer"). */
     var toastAction by mutableStateOf<Pair<String, () -> Unit>?>(null)
     /** Pide abrir Ajustes desde cualquier hoja. */
@@ -81,6 +84,7 @@ class BrowserUi {
         toastDismiss = onDismiss
         previous?.invoke()
         toastAction = if (action != null && onAction != null) action to onAction else null
+        toastId++
         toast = message
     }
 

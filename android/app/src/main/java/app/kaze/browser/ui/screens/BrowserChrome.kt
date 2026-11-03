@@ -4,6 +4,8 @@
 
 package app.kaze.browser.ui.screens
 
+import androidx.compose.foundation.combinedClickable
+
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.expandVertically
 import app.kaze.browser.data.TabKind
@@ -276,7 +278,10 @@ private fun ExpandedBar(tab: Tab, space: Space?, tabCount: Int, a: ChromeActions
             .padding(top = 8.dp, start = 10.dp, end = 10.dp),
     ) {
         Column(Modifier.widthIn(max = 760.dp).align(Alignment.CenterHorizontally)) {
-        if (LocalApp.current.settings.tabStripPhone && tabs.size > 1) TabStrip(tab, tabs, onSelectTab, onCloseTab, Modifier.padding(bottom = 6.dp), minTab = 110.dp, maxTab = 170.dp)
+        // Fila de pestañas: dentro de la misma barra; en la página de inicio no aporta y se esconde.
+        AnimatedVisibility(LocalApp.current.settings.tabStripPhone && tabs.size > 1 && !tab.isStart, enter = StripEnter, exit = StripExit) {
+            TabStrip(tab, tabs, onSelectTab, onCloseTab, Modifier.padding(bottom = 6.dp), minTab = 110.dp, maxTab = 170.dp)
+        }
         if (showAddress) TabPager(tab, tabs, a, onSelectTab)
         Row(
             Modifier.fillMaxWidth().padding(top = 2.dp),
@@ -725,18 +730,23 @@ fun HistoryPopup(tab: Tab, direction: Int, onGo: (Int) -> Unit, onDismiss: () ->
 @Composable
 private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolean, a: ChromeActions, modifier: Modifier, tabs: List<Tab> = emptyList(), onSelectTab: (Tab) -> Unit = {}, onCloseTab: (Tab) -> Unit = {}) {
     val k = LocalKaze.current
-    val showStrip = LocalApp.current.settings.tabStripPhone && tabs.size > 1
+    // En la página de inicio la fila no aporta (no hay página que cambiar de un vistazo): se esconde.
+    val showStrip = LocalApp.current.settings.tabStripPhone && tabs.size > 1 && !tab.isStart
     var menu by remember { mutableStateOf(false) }
     val height by animateDpAsState(if (collapsed) 36.dp else 50.dp, spring(0.85f, 420f), label = "compactH")
     val side by animateDpAsState(if (collapsed) 64.dp else 12.dp, spring(0.85f, 420f), label = "compactW")
+    // 1 = la fila de pestañas y la barra forman una sola bandeja de vidrio (las burbujas se aplanan dentro);
+    // 0 = cada pieza es su propio vidrio. Resorte sin rebote, con el mismo ritmo que la barra (se puede interrumpir).
+    val tray by animateFloatAsState(if (showStrip && !collapsed) 1f else 0f, spring(1f, 420f), label = "tray")
     val enter = fadeIn(tween(160)) + scaleIn(spring(0.85f, 520f), initialScale = 0.8f)
     val exit = fadeOut(tween(110)) + scaleOut(spring(1f, 700f), targetScale = 0.85f)
     Column(modifier.fillMaxWidth().navigationBarsPadding().padding(start = side, end = side, bottom = 8.dp)) {
-    // Fila de pestañas (opcional): una cápsula de vidrio encima de la barra, solo con la barra abierta.
-    AnimatedVisibility(showStrip && !collapsed, enter = fadeIn(tween(180)) + expandVertically(spring(0.85f, 420f)), exit = fadeOut(tween(120)) + shrinkVertically(spring(1f, 700f))) {
-        Box(Modifier.padding(bottom = 8.dp).glass(RoundedCornerShape(18.dp), 10f).padding(4.dp)) {
-            TabStrip(tab, tabs, onSelectTab, onCloseTab, minTab = 110.dp, maxTab = 170.dp)
-        }
+    Box(Modifier.fillMaxWidth()) {
+    // El vidrio de la bandeja se funde (no se encoge): sin recalcular nada caro por fotograma.
+    if (tray > 0.001f) Box(Modifier.matchParentSize().graphicsLayer { alpha = tray }.glass(TrayShape, 16f))
+    Column(Modifier.padding(TrayPad * tray)) {
+    AnimatedVisibility(showStrip && !collapsed, enter = StripEnter, exit = StripExit) {
+        TabStrip(tab, tabs, onSelectTab, onCloseTab, Modifier.padding(start = 2.dp, end = 2.dp, top = 2.dp, bottom = 6.dp), minTab = 110.dp, maxTab = 170.dp)
     }
     Box(Modifier.fillMaxWidth()) {
         // Como Safari en iOS: burbujas de vidrio a los lados (atrás, adelante, ⋯) y la píldora grande del sitio.
@@ -752,16 +762,16 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
         ) {
             // Atrás y adelante solo aparecen cuando sirven (como Safari).
             AnimatedVisibility(!collapsed && tab.canGoBack, enter = enter, exit = exit) {
-                Bubble(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", tab.canGoBack, { a.onHistoryMenu(-1) }, a.onBack, Modifier.padding(end = 8.dp))
+                Bubble(Icons.AutoMirrored.Outlined.ArrowBackIos, "Atrás (mantén para ver el historial)", tab.canGoBack, { a.onHistoryMenu(-1) }, a.onBack, Modifier.padding(end = 8.dp), tray)
             }
             AnimatedVisibility(!collapsed && tab.canGoForward, enter = enter, exit = exit) {
-                Bubble(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", tab.canGoForward, { a.onHistoryMenu(1) }, a.onForward, Modifier.padding(end = 8.dp))
+                Bubble(Icons.AutoMirrored.Outlined.ArrowForwardIos, "Adelante (mantén para ver el historial)", tab.canGoForward, { a.onHistoryMenu(1) }, a.onForward, Modifier.padding(end = 8.dp), tray)
             }
             val pillSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
             val progress by animateFloatAsState(if (tab.loading) tab.progress / 100f else 0f, tween(200), label = "cp")
             val accent = k.accent
             Row(
-                Modifier.weight(1f).height(height).pressFeedback(pillSource, 0.97f).glass(RoundedCornerShape(50), 16f).clip(RoundedCornerShape(50))
+                Modifier.weight(1f).height(height).pressFeedback(pillSource, 0.97f).barSurface(RoundedCornerShape(50), tray).clip(RoundedCornerShape(50))
                     // Progreso de carga dentro de la píldora, de izquierda a derecha por su borde de abajo.
                     .drawWithContent {
                         drawContent()
@@ -796,18 +806,43 @@ private fun CompactBar(tab: Tab, space: Space?, tabCount: Int, collapsed: Boolea
                 }
             }
             AnimatedVisibility(!collapsed, enter = enter, exit = exit) {
-                Bubble(Icons.Outlined.MoreHoriz, "Más", true, a.onShare, { menu = true }, Modifier.padding(start = 8.dp))
+                Bubble(Icons.Outlined.MoreHoriz, "Más", true, a.onShare, { menu = true }, Modifier.padding(start = 8.dp), tray)
             }
         }
+    }
+    }
     }
     }
     if (menu) CompactMenu(tab, tabCount, a) { menu = false }
 }
 
+private val TrayPad = 6.dp
+// Concéntrica con la píldora de 50 dp: radio 25 + margen 6.
+private val TrayShape = RoundedCornerShape(31.dp)
+
+/** Aparición de la fila de pestañas: crece desde abajo con el resorte de la barra y se funde un poco después. */
+private val StripEnter = expandVertically(spring(1f, 420f), expandFrom = Alignment.Bottom) + fadeIn(tween(200, delayMillis = 60))
+private val StripExit = fadeOut(tween(100)) + shrinkVertically(spring(1f, 520f), shrinkTowards = Alignment.Bottom)
+
+/**
+ * Superficie de una pieza de la barra compacta: su propio vidrio ([flat] = 0) o, dentro de la bandeja
+ * con la fila de pestañas ([flat] = 1), un relleno tenue sin sombra. En medio se mezclan.
+ */
+@Composable
+private fun Modifier.barSurface(shape: androidx.compose.ui.graphics.Shape, flat: Float, elevation: Float = 16f): Modifier {
+    if (flat <= 0.001f) return glass(shape, elevation)
+    val k = LocalKaze.current
+    val fill = k.ink.copy(alpha = if (k.isDark) 0.10f else 0.055f)
+    return this
+        .shadow((elevation * (1f - flat)).dp, shape, ambientColor = Color.Black.copy(alpha = 0.18f * (1f - flat)), spotColor = Color.Black.copy(alpha = 0.22f * (1f - flat)))
+        .clip(shape)
+        .background(androidx.compose.ui.graphics.lerp(k.glassFill(), fill, flat), shape)
+}
+
 /** Burbuja de vidrio redonda de la barra compacta. */
 @Composable
-private fun Bubble(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, onLong: () -> Unit, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(modifier.size(50.dp).glass(CircleShape, 16f), contentAlignment = Alignment.Center) {
+private fun Bubble(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, onLong: () -> Unit, onClick: () -> Unit, modifier: Modifier = Modifier, flat: Float = 0f) {
+    Box(modifier.size(50.dp).barSurface(CircleShape, flat), contentAlignment = Alignment.Center) {
         ToolbarIcon(icon, label, enabled = enabled, onLong = onLong, onClick = onClick)
     }
 }
@@ -1088,7 +1123,7 @@ fun TabStrip(
             val i = visible.indexOfFirst { it.id == tab.id }
             if (i >= 0) state.animateScrollToItem(i)
         }
-        androidx.compose.foundation.lazy.LazyRow(state = state, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.lazy.LazyRow(state = state, modifier = Modifier.fadingEdges(state, 20.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             // La etiqueta sale aunque el grupo esté plegado (entonces sus pestañas se esconden tras ella).
             ordered.forEachIndexed { oi, t ->
                 if (t.folder.isNotEmpty() && ordered.getOrNull(oi - 1)?.let(::groupKey) != groupKey(t)) {
@@ -1099,13 +1134,29 @@ fun TabStrip(
                         val count = counts[gk] ?: 0
                         // Se toca toda la altura de la fila y al menos 44 dp de ancho (Compose amplía además el
                         // área táctil hasta el mínimo del sistema); el dibujo sigue siendo la píldora de 24 dp.
+                        // Tocar pliega o despliega; mantener abre el menú del grupo (plegar, fijar o desfijar, desagrupar).
+                        var menu by remember { mutableStateOf(false) }
+                        val app = LocalApp.current
                         Box(
                             Modifier.animateItem(placementSpec = spring(0.85f, 420f, IntOffset.VisibilityThreshold))
                                 .fillMaxHeight().widthIn(min = 44.dp)
-                                .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { folded[gk] = folded[gk] != true }
-                                .semantics { contentDescription = "Grupo $name, $count pestañas (tocar para plegar o desplegar)" },
+                                .combinedClickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null,
+                                    onLongClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress); menu = true },
+                                ) { folded[gk] = folded[gk] != true }
+                                .semantics { contentDescription = "Grupo $name, $count pestañas (tocar para plegar o desplegar; mantener para ver opciones)" },
                             contentAlignment = Alignment.Center,
                         ) {
+                        val isPinned = t.kind == TabKind.PINNED
+                        GroupMenu(
+                            menu, pinned = isPinned, onDismiss = { menu = false },
+                            onPinToggle = {
+                                val done = if (isPinned) store.unpinGroup(t.spaceId, name) else store.pinGroup(t.spaceId, name)
+                                if (done.isNotEmpty()) app.ui.show(if (isPinned) "Grupo «$name» desfijado" else "Grupo «$name» fijado")
+                            },
+                            onUngroup = { store.ungroup(t.spaceId, name, t.kind) },
+                            foldLabel = if (folded[gk] == true) "Desplegar" else "Plegar", onFold = { folded[gk] = folded[gk] != true },
+                        )
                         Row(
                             Modifier.height(24.dp).clip(RoundedCornerShape(50)).background(c).padding(horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,

@@ -117,9 +117,10 @@ fun MainMenuSheet(tab: Tab, onDismiss: () -> Unit, a: MenuActions) {
             }
             // 2. Acciones de la página (las más usadas, en mosaicos grandes al alcance del pulgar).
             SheetActionCardRow(Modifier.padding(horizontal = 16.dp)) {
-                val fav = tab.kind == TabKind.ESSENTIAL
+                // Favoritos de la página de inicio (lista propia; las Essentials se eligen en el menú de la pestaña).
+                val fav = store.isFavorite(tab.url)
                 QuickAction(if (fav) Icons.Outlined.Star else Icons.Outlined.StarBorder, "Favorito", enabled = web && !tab.isPrivate, active = fav, modifier = Modifier.weight(1f)) {
-                    store.setKind(tab, if (fav) TabKind.PINNED else TabKind.ESSENTIAL)
+                    if (fav) store.removeFavorite(tab.url) else store.addFavorite(tab.url, tab.displayTitle)
                     app.ui.show(if (fav) "Quitada de Favoritos" else "Añadida a Favoritos")
                 }
                 QuickAction(Icons.Outlined.Share, "Compartir", enabled = web, modifier = Modifier.weight(1f), onClick = go(a.onShare))

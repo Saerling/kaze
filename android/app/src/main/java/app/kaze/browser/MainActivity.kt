@@ -610,7 +610,9 @@ class MainActivity : ComponentActivity() {
         val density = LocalDensity.current
         val collapsedPx = with(density) { 32.dp.roundToPx() } + if (barTop) 0 else WindowInsets.navigationBars.getBottom(density)
         fun onBarHeight(h: Int) {
-            if (!collapsed && h > barExpandedPx) barExpandedPx = h
+            // La altura real de la barra abierta (con o sin fila de pestañas): si la fila se esconde, la página no deja un hueco;
+            // si aparece, la página se aparta y nada queda tapado. Las alturas intermedias de la animación se agrupan abajo.
+            if (!collapsed) barExpandedPx = h
         }
         // Al encogerse, la página crece al momento (queda debajo de la barra que baja: sin huecos negros).
         // Al abrirse, la barra crece encima y la página se ajusta al terminar: nada queda tapado.
@@ -690,6 +692,8 @@ class MainActivity : ComponentActivity() {
                 geckoView.setVerticalClipping(0)
                 return@LaunchedEffect
             }
+            // Mientras la barra crece (o aparece la fila de pestañas) llegan varias alturas seguidas: se espera a la última.
+            if (!collapsed) delay(150)
             geckoView.setDynamicToolbarMaxHeight(max)
             // 0 = barra entera a la vista; negativo = cuánto de la barra está escondido.
             val target = if (collapsed) -(max - smallPx).coerceAtLeast(0).toFloat() else 0f

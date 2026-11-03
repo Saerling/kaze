@@ -351,9 +351,9 @@ fun ShareSheet(
         IosGroup {
             if (!tab.isPrivate) {
                 if (tab.kind == TabKind.ESSENTIAL) {
-                    IosRow("Quitar de Favoritos", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
+                    IosRow("Quitar de Essentials", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
                 } else {
-                    IosRow("Añadir a Favoritos", Icons.Outlined.Star) { store.setKind(tab, TabKind.ESSENTIAL); app.ui.show("Añadida a Favoritos"); onDismiss() }
+                    IosRow("Añadir a Essentials", Icons.Outlined.Star) { store.setKind(tab, TabKind.ESSENTIAL); app.ui.show("Añadida a Essentials"); onDismiss() }
                 }
                 IosRow("Añadir a la lista de lectura", Icons.AutoMirrored.Outlined.MenuBook) {
                     app.db.addToReadingList(tab.url, tab.title); app.ui.show("Añadida a la lista de lectura"); onDismiss()
@@ -483,9 +483,9 @@ private fun TabMenuMain(tab: Tab, onDismiss: () -> Unit, onOpen: () -> Unit, onM
     if (!tab.isPrivate && !tab.isStart) IosGroup {
         run {
             if (tab.kind == TabKind.ESSENTIAL) {
-                IosRow("Quitar de Favoritos", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
+                IosRow("Quitar de Essentials", Icons.Outlined.StarBorder) { store.setKind(tab, TabKind.PINNED); onDismiss() }
             } else {
-                IosRow("Añadir a Favoritos", Icons.Outlined.Star) { store.setKind(tab, TabKind.ESSENTIAL); onDismiss() }
+                IosRow("Añadir a Essentials", Icons.Outlined.Star) { store.setKind(tab, TabKind.ESSENTIAL); onDismiss() }
             }
             when (tab.kind) {
                 TabKind.NORMAL -> IosRow("Fijar pestaña", Icons.Outlined.PushPin) { store.setKind(tab, TabKind.PINNED); onDismiss() }

@@ -249,4 +249,44 @@ class StoreTest {
         assertEquals("Kaze", h[0].title)
         assertTrue(db.visited(arrayOf("https://kaze.app/", "https://otro.com"))[0])
     }
+
+    /** Sin editar, los Favoritos son las Essentials sin repetir sitio; al editarlos quedan guardados aparte. */
+    @Test fun favoritosPropiosSinDuplicados() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        ctx.getSharedPreferences("kaze", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        store = Store(db, Settings(ctx)).apply { load() }
+        repeat(3) { store.setKind(store.newTab("https://mail.google.com/", select = false), TabKind.ESSENTIAL) }
+        store.setKind(store.newTab("https://github.com/", select = false), TabKind.ESSENTIAL)
+        assertEquals(listOf("https://mail.google.com/", "https://github.com/"), store.favorites().map { it.url })
+        assertTrue(!store.favoritesEdited())
+        assertTrue(!store.addFavorite("http://www.github.com", "GitHub"))
+        assertTrue(store.addFavorite("https://es.wikipedia.org/", "Wikipedia"))
+        assertTrue(store.favoritesEdited())
+        store.moveFavorite(2, 0)
+        store.removeFavorite("https://mail.google.com")
+        assertEquals(listOf("https://es.wikipedia.org/", "https://github.com/"), store.favorites().map { it.url })
+        // Otra Essential más no cambia la lista propia, y se guarda entre arranques.
+        store.setKind(store.newTab("https://youtube.com/", select = false), TabKind.ESSENTIAL)
+        val again = Store(db, Settings(ctx)).apply { load() }
+        assertEquals(listOf("https://es.wikipedia.org/", "https://github.com/"), again.favorites().map { it.url })
+        ctx.getSharedPreferences("kaze", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    /** Fijar un grupo pasa sus pestañas a fijadas en un grupo de fijadas con el mismo nombre (y vuelta). */
+    @Test fun fijarYDesfijarGrupo() {
+        val sid = store.currentSpaceId
+        val a = store.newTab("https://a.com/", select = false)
+        val b = store.newTab("https://b.com/", select = false)
+        store.newTab("https://c.com/", select = false)
+        store.setFolder(listOf(b, a), "Lecturas")
+        val order = store.folderTabs(sid, "Lecturas").map { it.id }
+        assertEquals(2, store.pinGroup(sid, "Lecturas").size)
+        assertTrue(store.folders(sid).isEmpty())
+        assertEquals(listOf("Lecturas"), store.folders(sid, TabKind.PINNED))
+        assertEquals(order, store.folderTabs(sid, "Lecturas", TabKind.PINNED).map { it.id })
+        assertTrue(listOf(a, b).all { it.kind == TabKind.PINNED && it.pinnedUrl != null })
+        assertEquals(2, store.unpinGroup(sid, "Lecturas").size)
+        assertEquals(order, store.folderTabs(sid, "Lecturas").map { it.id })
+        assertTrue(store.pinned(sid).isEmpty())
+    }
 }

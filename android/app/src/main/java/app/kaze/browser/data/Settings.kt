@@ -104,6 +104,10 @@ class Settings(context: Context) {
     /** Sección "Reanudar navegación" en la página de inicio. */
     var startResume by pref("start_resume", true)
 
+    /** Favoritos propios de un perfil (JSON); null si el usuario nunca los editó. */
+    fun favorites(profileId: String): String? = runCatching { p.getString("favorites:$profileId", null) }.getOrNull()
+    fun saveFavorites(profileId: String, json: String) { p.edit().putString("favorites:$profileId", json).apply() }
+
     // ── Mecánica ──────────────────────────────────────────────────────
 
     private fun <T : Enum<T>> pref(key: String, default: T, parse: (String) -> T) =

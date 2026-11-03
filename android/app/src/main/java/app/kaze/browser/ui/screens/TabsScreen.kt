@@ -83,6 +83,12 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.animation.core.animateFloat
+import app.kaze.browser.ui.mochy.ContainerCloseEasing
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.semantics.selected
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -151,45 +157,18 @@ fun TabsScreen(
     val store = app.store
     val space = store.currentSpace ?: store.profileSpaces.first()
     var query by remember { mutableStateOf("") }
-    val pinned = store.pinned(space.id)
-    // Essentials (Zen): del perfil, visibles en todos los espacios. En la privada no se muestran.
-    val essentials = if (space.id == Space.PRIVATE_ID) emptyList() else store.essentials()
     val spaces = store.visibleSpaces
     fun step(delta: Int) {
         val i = spaces.indexOfFirst { it.id == space.id }
         spaces.getOrNull(i + delta)?.let { store.selectSpace(it.id) }
     }
-    val allNormal = store.normal(space.id)
-    // Temas (como Safari en iOS 27): píldoras "Todas" + grupos, temas y sitios detectados.
-    // Se recalcula solo cuando cambian las direcciones, títulos o grupos de las pestañas.
-    val topicSig = allNormal.joinToString("\u0001") { it.id + it.url + it.title + it.folder }
-    val topicFilters = remember(topicSig) { Topics.filters(allNormal) }
-    var topicKey by remember(space.id) { mutableStateOf<String?>(null) }
-    val topic = topicFilters.firstOrNull { it.key == topicKey }
-    val normal = allNormal.let { list ->
-        if (topic == null) list else list.filter { it.id in topic.tabIds }
-    }.let { list ->
-        if (query.isBlank()) list else list.filter { it.title.contains(query, true) || it.url.contains(query, true) }
-    }
-    val flat = query.isNotBlank() || topic != null
-    fun groupByTopic() {
-        val groups = Topics.groups(allNormal)
-        groups.forEach { (name, list) -> store.setFolder(list, name) }
-        if (groups.isNotEmpty()) { topicKey = null; haptic.performHapticFeedback(HapticFeedbackType.Confirm) }
-    }
-    // Cada espacio recuerda su propio desplazamiento: cambiar rápido entre espacios no deja la lista a medias.
-    val grid = remember(space.id) { LazyGridState() }
+    // Tema elegido en cada espacio (como Safari en iOS 27): cada espacio recuerda el suyo.
+    val topicKeys = remember { androidx.compose.runtime.mutableStateMapOf<String, String?>() }
     // Modos de vista: tarjetas (por defecto), compacta (3 columnas) y lista.
     val mode = app.settings.tabsView
     // En tableta caben más columnas.
     val tablet = app.ui.tablet
     val cols = when (mode) { "list" -> if (tablet) 2 else 1; "compact" -> if (tablet) 6 else 3; else -> if (tablet) 4 else 2 }
-    LaunchedEffect(space.id) {
-        // Mostrar la pestaña actual sin tener que buscarla (solo si está más abajo de lo visible).
-        val i = normal.indexOfFirst { it.id == store.selectedTabId }
-        val header = 1 + (if (topicFilters.isNotEmpty()) 1 else 0) + (if (essentials.isNotEmpty()) 1 else 0) + (if (pinned.isNotEmpty()) 1 else 0)
-        if (i >= 4) grid.scrollToItem(header + i)
-    }
 
     // ── Arrastrar para ordenar y soltar encima para hacer carpetas ──
     val haptics = LocalHapticFeedback.current
@@ -199,6 +178,9 @@ fun TabsScreen(
     var hoverKey by remember { mutableStateOf<String?>(null) }
     var mergeReady by remember { mutableStateOf(false) }
     var openFolder by remember { mutableStateOf<String?>(null) }
+    // Centro de cada carpeta en la pantalla: la carpeta abierta crece desde ahí y vuelve ahí al cerrarse.
+    val folderCenters = remember { HashMap<String, Offset>() }
+    var rootSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     LaunchedEffect(hoverKey) {
         mergeReady = false
         if (hoverKey != null && hoverKey != dragId) {
@@ -207,11 +189,11 @@ fun TabsScreen(
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
-    fun keyAt(p: Offset): String? = grid.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+    fun keyAt(grid: LazyGridState, p: Offset): String? = grid.layoutInfo.visibleItemsInfo.firstOrNull { info ->
         p.x >= info.offset.x && p.x <= info.offset.x + info.size.width &&
             p.y >= info.offset.y && p.y <= info.offset.y + info.size.height
     }?.key as? String
-    fun dragModifier(t: Tab): Modifier = Modifier.pointerInput(t.id) {
+    fun dragModifier(t: Tab, grid: LazyGridState): Modifier = Modifier.pointerInput(t.id) {
         detectDragGesturesAfterLongPress(
             onDragStart = { local ->
                 val info = grid.layoutInfo.visibleItemsInfo.firstOrNull { it.key == t.id }
@@ -223,7 +205,7 @@ fun TabsScreen(
             onDrag = { change, d ->
                 change.consume()
                 dragOffset += d
-                hoverKey = keyAt(dragStart + dragOffset)?.takeIf { it != t.id && (it.startsWith("f:") || store.tabById(it) != null) }
+                hoverKey = keyAt(grid, dragStart + dragOffset)?.takeIf { it != t.id && (it.startsWith("f:") || store.tabById(it) != null) }
             },
             onDragEnd = {
                 val target = hoverKey
@@ -233,10 +215,10 @@ fun TabsScreen(
                     target == null -> Unit
                     target.startsWith("f:") && mergeReady -> store.setFolder(listOf(t), target.removePrefix("f:"))
                     mergeReady -> store.tabById(target)?.let { other ->
-                        val name = other.folder.ifEmpty { store.newFolderName(space.id) }
+                        val name = other.folder.ifEmpty { store.newFolderName(t.spaceId) }
                         store.setFolder(listOf(other, t), name)
                     }
-                    target.startsWith("f:") -> store.folderTabs(space.id, target.removePrefix("f:")).firstOrNull()?.let { store.moveBefore(t, it) }
+                    target.startsWith("f:") -> store.folderTabs(t.spaceId, target.removePrefix("f:")).firstOrNull()?.let { store.moveBefore(t, it) }
                     else -> store.tabById(target)?.let { store.moveBefore(t, it) }
                 }
                 dragId = null; hoverKey = null; mergeReady = false; dragOffset = Offset.Zero
@@ -253,19 +235,37 @@ fun TabsScreen(
         } else this.graphicsLayer { scaleX = target; scaleY = target }
     }
 
-    var drag by remember { mutableFloatStateOf(0f) }
-    Box(
-        Modifier.fillMaxSize().pointerInput(spaces.size, space.id) {
-            // Deslizar a los lados cambia de espacio, como en Zen.
-            detectHorizontalDragGestures(
-                onDragStart = { drag = 0f },
-                onDragEnd = { if (drag < -140) step(1) else if (drag > 140) step(-1) },
-                onHorizontalDrag = { _, dx -> drag += dx },
-            )
-        },
-    ) {
-        SpaceBackground(if (space.id == Space.PRIVATE_ID) listOf(0xFF3A3A55.toInt()) else space.colors, strength = 0.35f)
-        androidx.compose.runtime.key(space.id) {
+    /** La cuadrícula de un espacio (todo sale de [sp]: al cambiar de espacio, la que se va sigue mostrando el suyo). */
+    @Composable
+    fun SpaceGrid(sp: Space) {
+        val pinned = store.pinned(sp.id)
+        // Essentials (Zen): del perfil, visibles en todos los espacios. En la privada no se muestran.
+        val essentials = if (sp.id == Space.PRIVATE_ID) emptyList() else store.essentials()
+        val allNormal = store.normal(sp.id)
+        // Temas (como Safari en iOS 27): píldoras "Todas" + grupos, temas y sitios detectados.
+        // Se recalcula solo cuando cambian las direcciones, títulos o grupos de las pestañas.
+        val topicSig = allNormal.joinToString("\u0001") { it.id + it.url + it.title + it.folder }
+        val topicFilters = remember(topicSig) { Topics.filters(allNormal) }
+        val topicKey = topicKeys[sp.id]
+        val topic = topicFilters.firstOrNull { it.key == topicKey }
+        val normal = allNormal.let { list ->
+            if (topic == null) list else list.filter { it.id in topic.tabIds }
+        }.let { list ->
+            if (query.isBlank()) list else list.filter { it.title.contains(query, true) || it.url.contains(query, true) }
+        }
+        val flat = query.isNotBlank() || topic != null
+        fun groupByTopic() {
+            val groups = Topics.groups(allNormal)
+            groups.forEach { (name, list) -> store.setFolder(list, name) }
+            if (groups.isNotEmpty()) { topicKeys.remove(sp.id); haptic.performHapticFeedback(HapticFeedbackType.Confirm) }
+        }
+        val grid = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+        LaunchedEffect(Unit) {
+            // Mostrar la pestaña actual sin tener que buscarla (solo si está más abajo de lo visible).
+            val i = normal.indexOfFirst { it.id == store.selectedTabId }
+            val header = 1 + (if (topicFilters.isNotEmpty()) 1 else 0) + (if (essentials.isNotEmpty()) 1 else 0) + (if (pinned.isNotEmpty()) 1 else 0)
+            if (i >= 4) grid.scrollToItem(header + i)
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(cols),
             state = grid,
@@ -305,7 +305,7 @@ fun TabsScreen(
                                 text = { Text("Agrupar por sitio") },
                                 onClick = {
                                     organizeMenu = false
-                                    if (store.organize(space.id) > 0) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    if (store.organize(sp.id) > 0) haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                 },
                             )
                         }
@@ -325,7 +325,7 @@ fun TabsScreen(
             }
             if (topicFilters.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "topics") {
-                    TopicChips(topicFilters, topicKey, allNormal.count { !it.isStart }, onPick = { topicKey = it }, onGroup = ::groupByTopic)
+                    TopicChips(topicFilters, topicKey, allNormal.count { !it.isStart }, onPick = { topicKeys[sp.id] = it }, onGroup = ::groupByTopic)
                 }
             }
             if (essentials.isNotEmpty() && query.isBlank() && topic == null) {
@@ -362,16 +362,21 @@ fun TabsScreen(
                         val t = e
                         if (mode == "list") TabRow(
                             tab = t, selected = t.id == store.selectedTabId,
-                            onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) }, drag = dragModifier(t),
+                            onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) }, drag = dragModifier(t, grid),
                         ) else TabCard(
                             compact = mode == "compact",
                             tab = t, selected = t.id == store.selectedTabId,
-                            onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) }, drag = dragModifier(t),
+                            onOpen = { onOpen(t) }, onMenu = { onTabMenu(t) }, onClose = { onClose(t) }, drag = dragModifier(t, grid),
                             highlight = hoverKey == key && mergeReady,
                         )
                     } else {
                         val name = e as String
-                        FolderCard(name, store.folderTabs(space.id, name), list = mode == "list", highlight = hoverKey == key && mergeReady) { openFolder = name }
+                        FolderCard(
+                            name, store.folderTabs(sp.id, name), list = mode == "list", highlight = hoverKey == key && mergeReady,
+                            modifier = Modifier.onGloballyPositioned { folderCenters[name] = it.boundsInRoot().center },
+                            onPin = { pinGroup(store, app, sp.id, name) },
+                            onUngroup = { store.ungroup(sp.id, name) },
+                        ) { openFolder = name }
                     }
                 }
             }
@@ -385,26 +390,50 @@ fun TabsScreen(
                 }
             }
         }
+    }
 
-        }
+    // Deslizar a los lados cambia de espacio, como en Zen. Mientras se desliza, la cuadrícula sigue un poco al
+    // dedo (con resistencia) y al soltar vuelve con un resorte: se nota que se puede deslizar, también en el borde.
+    var drag by remember { mutableFloatStateOf(0f) }
+    val follow = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val maxFollow = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
+    Box(
+        Modifier.fillMaxSize().onGloballyPositioned { rootSize = it.size }.pointerInput(spaces.size, space.id) {
+            detectHorizontalDragGestures(
+                onDragStart = { drag = 0f },
+                onDragEnd = {
+                    if (drag < -140) step(1) else if (drag > 140) step(-1)
+                    scope.launch { follow.animateTo(0f, spring(0.85f, 420f)) }
+                },
+                onDragCancel = { scope.launch { follow.animateTo(0f, spring(0.85f, 420f)) } },
+                onHorizontalDrag = { _, dx ->
+                    drag += dx
+                    scope.launch { follow.snapTo((drag * 0.25f).coerceIn(-maxFollow, maxFollow)) }
+                },
+            )
+        },
+    ) {
+        SpaceBackground(if (space.id == Space.PRIVATE_ID) listOf(0xFF3A3A55.toInt()) else space.colors, strength = 0.35f)
+        // Cambio de espacio: la cuadrícula nueva entra desde el lado hacia el que vas y la anterior sale por el otro
+        // (un quinto del ancho, con fundido): se entiende la dirección sin cruzar la pantalla entera.
+        androidx.compose.animation.AnimatedContent(
+            targetState = space.id,
+            transitionSpec = {
+                val from = spaces.indexOfFirst { it.id == initialState }
+                val to = spaces.indexOfFirst { it.id == targetState }
+                val dir = if (to >= from) 1 else -1
+                (androidx.compose.animation.slideInHorizontally(spring(0.9f, 380f, IntOffset.VisibilityThreshold)) { w -> dir * w / 5 } + fadeIn(tween(220, delayMillis = 40))) togetherWith
+                    (androidx.compose.animation.slideOutHorizontally(spring(1f, 500f, IntOffset.VisibilityThreshold)) { w -> -dir * w / 5 } + fadeOut(tween(120)))
+            },
+            modifier = Modifier.fillMaxSize().graphicsLayer { translationX = follow.value },
+            label = "espacio",
+        ) { sid -> SpaceGrid(store.spaceById(sid) ?: space) }
 
-        // Selector de espacios (emojis) encima de la barra, como el de Zen.
+        // Selector de espacios (emojis) encima de la barra, como el de Zen. Con muchos espacios se desliza a los
+        // lados (con los bordes desvanecidos donde hay más) y siempre se acerca al espacio activo.
         if (spaces.size > 1) {
-            Row(
-                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 74.dp)
-                    .glass(RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                spaces.forEach { s ->
-                    Box(
-                        Modifier.size(38.dp).clip(CircleShape).clickable { store.selectSpace(s.id) }
-                            .semantics { contentDescription = s.name },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(s.emoji, fontSize = 18.sp, modifier = Modifier.alpha(if (s.id == space.id) 1f else 0.4f))
-                    }
-                }
-            }
+            SpaceSwitcher(spaces, space.id, onPick = { store.selectSpace(it) }, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 74.dp, start = 24.dp, end = 24.dp))
         }
 
         // Barra inferior: + · grupo · Listo
@@ -427,13 +456,27 @@ fun TabsScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(space.emoji + "  ", fontSize = 15.sp)
-                Text(
-                    if (space.id == Space.PRIVATE_ID) "Privada" else space.name,
-                    style = KazeType.headline, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // El nombre del espacio cambia con un deslizamiento corto en la misma dirección que la cuadrícula.
+                androidx.compose.animation.AnimatedContent(
+                    targetState = space,
+                    transitionSpec = {
+                        (fadeIn(tween(180, delayMillis = 40)) + androidx.compose.animation.slideInVertically(spring(0.9f, 500f, IntOffset.VisibilityThreshold)) { it / 2 }) togetherWith
+                            (fadeOut(tween(100)) + androidx.compose.animation.slideOutVertically(spring(1f, 700f, IntOffset.VisibilityThreshold)) { -it / 2 })
+                    },
+                    contentKey = { it.id },
                     modifier = Modifier.weight(1f, fill = false),
-                )
-                Text("  ${pinned.size + store.normal(space.id).size}", style = KazeType.subhead, color = k.ink55, maxLines = 1)
+                    label = "nombreEspacio",
+                ) { sp ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(sp.emoji + "  ", fontSize = 15.sp)
+                        Text(
+                            if (sp.id == Space.PRIVATE_ID) "Privada" else sp.name,
+                            style = KazeType.headline, color = k.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Text("  ${store.pinned(sp.id).size + store.normal(sp.id).size}", style = KazeType.subhead, color = k.ink55, maxLines = 1)
+                    }
+                }
                 Icon(Icons.Outlined.KeyboardArrowDown, null, tint = k.ink55, modifier = Modifier.size(18.dp))
             }
             Box(
@@ -443,24 +486,119 @@ fun TabsScreen(
             ) { Icon(Icons.Outlined.Check, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
         }
 
-        // Carpeta abierta: se abre desde el centro con sus pestañas.
+        // Carpeta abierta: el velo se funde y la carpeta crece desde su tarjeta (y vuelve a ella al cerrarse).
         AnimatedVisibility(
             visible = openFolder != null,
-            enter = fadeIn(tween(180)) + scaleIn(spring(0.85f, 420f), initialScale = 0.85f),
-            exit = fadeOut(tween(150)) + scaleOut(spring(1f, 700f), targetScale = 0.9f),
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(220, delayMillis = 40)),
         ) {
             var shown by remember { mutableStateOf(openFolder.orEmpty()) }
             LaunchedEffect(openFolder) { openFolder?.let { shown = it } }
+            val p by transition.animateFloat(
+                transitionSpec = {
+                    if (targetState == androidx.compose.animation.EnterExitState.Visible) spring(0.86f, 380f, visibilityThreshold = 0.001f)
+                    else tween(260, easing = ContainerCloseEasing)
+                },
+                label = "carpeta",
+            ) { if (it == androidx.compose.animation.EnterExitState.Visible) 1f else 0f }
+            val center = Offset(rootSize.width / 2f, rootSize.height / 2f)
+            val from = folderCenters[shown] ?: center
             FolderView(
                 name = shown,
                 tabs = store.folderTabs(space.id, shown),
                 selectedId = store.selectedTabId,
                 onOpen = { openFolder = null; onOpen(it) },
                 onClose = onClose,
-                onRename = { new -> store.renameFolder(space.id, shown, new); shown = new.trim().ifEmpty { shown }; openFolder = shown },
+                onRename = { new -> store.renameFolder(space.id, shown, new); val n = new.trim().ifEmpty { shown }; folderCenters[shown]?.let { folderCenters[n] = it }; shown = n; openFolder = shown },
                 onUngroup = { store.ungroup(space.id, shown); openFolder = null },
+                onPin = { openFolder = null; pinGroup(store, app, space.id, shown) },
                 onDismiss = { openFolder = null },
+                panel = Modifier.graphicsLayer {
+                    val q = p.coerceIn(0f, 1.2f)
+                    val s = 0.3f + 0.7f * q
+                    scaleX = s; scaleY = s
+                    translationX = (from.x - center.x) * (1f - q)
+                    translationY = (from.y - center.y) * (1f - q)
+                    alpha = (q * 2.5f).coerceIn(0f, 1f)
+                },
             )
+        }
+    }
+}
+
+/** Fija todas las pestañas de un grupo de normales (quedan como grupo de fijadas, la carpeta de Zen). */
+private fun pinGroup(store: app.kaze.browser.data.Store, app: app.kaze.browser.Kaze, spaceId: String, name: String) {
+    if (store.pinGroup(spaceId, name).isNotEmpty()) app.ui.show("Grupo «$name» fijado")
+}
+
+private fun unpinGroup(store: app.kaze.browser.data.Store, app: app.kaze.browser.Kaze, spaceId: String, name: String) {
+    if (store.unpinGroup(spaceId, name).isNotEmpty()) app.ui.show("Grupo «$name» desfijado")
+}
+
+/**
+ * Menú de un grupo (mantener la etiqueta o la carpeta): fijar o desfijar el grupo entero, desagrupar y,
+ * en la fila de pestañas, plegarlo o desplegarlo. Fijar conserva el grupo, así Zen lo ve como carpeta.
+ */
+@Composable
+internal fun GroupMenu(
+    expanded: Boolean, pinned: Boolean, onDismiss: () -> Unit, onPinToggle: () -> Unit, onUngroup: () -> Unit,
+    foldLabel: String? = null, onFold: () -> Unit = {},
+) {
+    val k = LocalKaze.current
+    androidx.compose.material3.DropdownMenu(expanded, onDismiss) {
+        if (foldLabel != null) androidx.compose.material3.DropdownMenuItem(
+            text = { Text(foldLabel) }, onClick = { onDismiss(); onFold() },
+            leadingIcon = { Icon(Icons.Outlined.KeyboardArrowDown, null, tint = k.ink70) },
+        )
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text(if (pinned) "Desfijar grupo" else "Fijar grupo") }, onClick = { onDismiss(); onPinToggle() },
+            leadingIcon = { Icon(Icons.Outlined.PushPin, null, tint = k.ink70) },
+        )
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text("Desagrupar") }, onClick = { onDismiss(); onUngroup() },
+            leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = k.ink70) },
+        )
+    }
+}
+
+/**
+ * Selector de espacios: emojis en una cápsula de vidrio. Si no caben, se desliza a los lados; los bordes se
+ * desvanecen solo donde hay más espacios y, al cambiar de espacio, la fila se desplaza hasta dejarlo centrado.
+ */
+@Composable
+private fun SpaceSwitcher(spaces: List<Space>, currentId: String, onPick: (String) -> Unit, modifier: Modifier) {
+    val k = LocalKaze.current
+    val state = androidx.compose.foundation.lazy.rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val active = spaces.indexOfFirst { it.id == currentId }
+    LaunchedEffect(active, spaces.size) {
+        if (active < 0) return@LaunchedEffect
+        val vp = state.layoutInfo.viewportSize.width
+        val item = with(density) { 38.dp.roundToPx() }
+        state.animateScrollToItem(active, -(vp / 2 - item / 2).coerceAtLeast(0))
+    }
+    Box(modifier.glass(RoundedCornerShape(50))) {
+        androidx.compose.foundation.lazy.LazyRow(
+            state = state,
+            modifier = Modifier
+                .fadingEdges(state)
+                .testTag("espacios"),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            items(spaces.size, key = { spaces[it].id }) { i ->
+                val s = spaces[i]
+                val on = s.id == currentId
+                val bg by androidx.compose.animation.animateColorAsState(if (on) k.ink.copy(alpha = if (k.isDark) 0.16f else 0.08f) else Color.Transparent, spring(stiffness = 500f), label = "espacioFondo")
+                val a by animateFloatAsState(if (on) 1f else 0.45f, spring(stiffness = 500f), label = "espacioAlfa")
+                Box(
+                    Modifier.size(38.dp).clip(CircleShape).background(bg).clickable { onPick(s.id) }
+                        .semantics { contentDescription = s.name; selected = on },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(s.emoji, fontSize = 18.sp, modifier = Modifier.graphicsLayer { alpha = a })
+                }
+            }
         }
     }
 }
@@ -717,12 +855,20 @@ private fun PinnedGroups(tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> 
                             .then(if (target) Modifier.border(1.5.dp, c, RoundedCornerShape(18.dp)) else Modifier)
                             .animateContentSize(spring(0.85f, 500f)).padding(6.dp),
                     ) {
+                        // Tocar pliega o despliega; mantener abre el menú del grupo (Desfijar grupo, Desagrupar).
+                        var menu by remember { mutableStateOf(false) }
+                        val app = LocalApp.current
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).tap({ open[name] = !expanded }, { open[name] = !expanded })
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).tap({ open[name] = !expanded }, { menu = true })
                                 .padding(horizontal = 8.dp, vertical = 6.dp)
-                                .semantics { contentDescription = "Grupo $name, ${list.size} pestañas" },
+                                .semantics { contentDescription = "Grupo $name, ${list.size} pestañas (mantén para ver opciones)" },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            GroupMenu(
+                                menu, pinned = true, onDismiss = { menu = false },
+                                onPinToggle = { unpinGroup(store, app, list.first().spaceId, name) },
+                                onUngroup = { store.ungroup(list.first().spaceId, name, TabKind.PINNED) },
+                            )
                             Box(Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(c), contentAlignment = Alignment.Center) {
                                 Icon(Icons.Outlined.Folder, null, tint = Color.White, modifier = Modifier.size(15.dp))
                             }
@@ -758,6 +904,11 @@ private fun TabCard(
     val k = LocalKaze.current
     val scope = rememberCoroutineScope()
     val dx = remember { Animatable(0f) }
+    // Al cerrar con ✕ la tarjeta se encoge un poco y se funde (rápido, acelera al salir) antes de irse.
+    val gone = remember { Animatable(0f) }
+    val close: () -> Unit = {
+        scope.launch { gone.animateTo(1f, tween(170, easing = androidx.compose.animation.core.FastOutLinearInEasing)); onClose() }
+    }
     var thumb by remember(tab.id) { mutableStateOf<Bitmap?>(app.thumbnails.cached(tab.id)) }
     val version = app.thumbnails.version.intValue
     LaunchedEffect(tab.id, version) {
@@ -767,17 +918,33 @@ private fun TabCard(
     Column(
         Modifier
             .offset { IntOffset(dx.value.roundToInt(), 0) }
-            .alpha(1f - (abs(dx.value) / 600f).coerceIn(0f, 0.7f))
-            // Deslizar a un lado cierra la pestaña.
+            .graphicsLayer {
+                alpha = (1f - (abs(dx.value) / 600f).coerceIn(0f, 0.7f)) * (1f - gone.value)
+                val s = 1f - 0.08f * gone.value
+                scaleX = s; scaleY = s
+            }
+            // Deslizar a un lado cierra la pestaña: basta con pasar 160 px o lanzarla rápido; la tarjeta sigue con
+            // la velocidad del dedo (resorte con velocidad inicial) y, si no llega, vuelve a su sitio igual.
             .pointerInput(tab.id) {
+                val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+                var total = 0f
                 detectHorizontalDragGestures(
+                    onDragStart = { tracker.resetTracking(); total = 0f },
                     onDragEnd = {
-                        if (abs(dx.value) > 160) {
-                            scope.launch { dx.animateTo(if (dx.value > 0) 900f else -900f); onClose() }
-                        } else scope.launch { dx.animateTo(0f) }
+                        val v = tracker.calculateVelocity().x
+                        val fling = abs(v) > 1400f && (v > 0) == (dx.value > 0)
+                        if (abs(dx.value) > 160 || fling) {
+                            val dir = if ((if (fling) v else dx.value) > 0) 1f else -1f
+                            scope.launch { dx.animateTo(dir * 1100f, spring(1f, 320f), initialVelocity = v); onClose() }
+                        } else scope.launch { dx.animateTo(0f, spring(0.8f, 500f), initialVelocity = v) }
                     },
-                    onDragCancel = { scope.launch { dx.animateTo(0f) } },
-                ) { change, d -> change.consume(); scope.launch { dx.snapTo(dx.value + d) } }
+                    onDragCancel = { scope.launch { dx.animateTo(0f, spring(0.8f, 500f)) } },
+                ) { change, d ->
+                    change.consume()
+                    total += d
+                    tracker.addPosition(change.uptimeMillis, Offset(total, 0f))
+                    scope.launch { dx.snapTo(dx.value + d) }
+                }
             },
     ) {
         Box(
@@ -813,7 +980,7 @@ private fun TabCard(
             }
             Box(
                 Modifier.align(Alignment.TopEnd).padding(7.dp).size(26.dp).clip(CircleShape)
-                    .background(k.paper.copy(alpha = 0.85f)).clickable(onClick = onClose)
+                    .background(k.paper.copy(alpha = 0.85f)).clickable(onClick = close)
                     .semantics { contentDescription = "Cerrar pestaña" },
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Outlined.Close, null, tint = k.ink70, modifier = Modifier.size(15.dp)) }
@@ -861,15 +1028,21 @@ private fun TabRow(tab: Tab, selected: Boolean, onOpen: () -> Unit, onMenu: () -
 
 /** Carpeta en la vista de pestañas: mosaico con las miniaturas de hasta 4 pestañas. */
 @Composable
-private fun FolderCard(name: String, tabs: List<Tab>, list: Boolean, highlight: Boolean, onOpen: () -> Unit) {
+private fun FolderCard(
+    name: String, tabs: List<Tab>, list: Boolean, highlight: Boolean, modifier: Modifier = Modifier,
+    onPin: () -> Unit = {}, onUngroup: () -> Unit = {}, onOpen: () -> Unit,
+) {
     val app = LocalApp.current
     val k = LocalKaze.current
     val color = folderColor(name)
+    // Mantener la carpeta abre su menú (Fijar grupo, Desagrupar).
+    var menu by remember { mutableStateOf(false) }
     if (list) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).card(RoundedCornerShape(14.dp))
+            modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).card(RoundedCornerShape(14.dp))
                 .then(if (highlight) Modifier.border(2.dp, k.accent, RoundedCornerShape(14.dp)) else Modifier)
-                .tap(onOpen).padding(horizontal = 10.dp, vertical = 10.dp),
+                .tap(onOpen, { menu = true }).padding(horizontal = 10.dp, vertical = 10.dp)
+                .semantics { contentDescription = "Grupo $name, ${tabs.size} pestañas (mantén para ver opciones)" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
@@ -878,16 +1051,19 @@ private fun FolderCard(name: String, tabs: List<Tab>, list: Boolean, highlight: 
             Spacer(Modifier.width(12.dp))
             Text(name, style = KazeType.body.copy(fontWeight = FontWeight.SemiBold), color = k.ink, modifier = Modifier.weight(1f), maxLines = 1)
             Text("${tabs.size}", style = KazeType.footnote, color = k.ink55)
+            GroupMenu(menu, pinned = false, onDismiss = { menu = false }, onPinToggle = onPin, onUngroup = onUngroup)
         }
         return
     }
-    Column {
+    Column(modifier) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(0.74f).clip(k.cardShape)
                 .background(color.copy(alpha = if (k.isDark) 0.20f else 0.16f))
                 .border(if (highlight) 3.dp else 1.dp, if (highlight) k.accent else color.copy(alpha = 0.35f), k.cardShape)
-                .tap(onOpen).padding(8.dp),
+                .tap(onOpen, { menu = true }).padding(8.dp)
+                .semantics { contentDescription = "Grupo $name, ${tabs.size} pestañas (mantén para ver opciones)" },
         ) {
+            GroupMenu(menu, pinned = false, onDismiss = { menu = false }, onPinToggle = onPin, onUngroup = onUngroup)
             // Cuadrícula 2×2 de miniaturas (o íconos si la pestaña está dormida).
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 tabs.take(4).chunked(2).forEach { row ->
@@ -928,10 +1104,11 @@ internal fun folderColor(name: String): Color {
 @Composable
 private fun FolderView(
     name: String, tabs: List<Tab>, selectedId: String?, onOpen: (Tab) -> Unit, onClose: (Tab) -> Unit,
-    onRename: (String) -> Unit, onUngroup: () -> Unit, onDismiss: () -> Unit,
+    onRename: (String) -> Unit, onUngroup: () -> Unit, onDismiss: () -> Unit, onPin: () -> Unit = {}, panel: Modifier = Modifier,
 ) {
     val k = LocalKaze.current
     var text by remember(name) { mutableStateOf(name) }
+    var menu by remember { mutableStateOf(false) }
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
             if (text != name) onRename(text); onDismiss()
@@ -940,6 +1117,7 @@ private fun FolderView(
     ) {
         Column(
             Modifier.padding(18.dp).fillMaxWidth().heightIn(max = 620.dp)
+                .then(panel)
                 .clip(RoundedCornerShape(30.dp)).background(k.paper)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
                 .padding(16.dp),
@@ -954,10 +1132,14 @@ private fun FolderView(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    "Desagrupar", style = KazeType.subhead.copy(fontWeight = FontWeight.SemiBold), color = k.accent,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onUngroup).padding(horizontal = 10.dp, vertical = 6.dp),
-                )
+                // ⋯: menú del grupo (Fijar grupo, Desagrupar).
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).clickable { menu = true }.semantics { contentDescription = "Opciones del grupo" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.MoreHoriz, null, tint = k.accent, modifier = Modifier.size(22.dp))
+                    GroupMenu(menu, pinned = false, onDismiss = { menu = false }, onPinToggle = onPin, onUngroup = onUngroup)
+                }
             }
             Spacer(Modifier.height(12.dp))
             LazyVerticalGrid(
@@ -965,8 +1147,8 @@ private fun FolderView(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(tabs, key = { it.id }) { t ->
-                    Box(Modifier.animateItem()) {
+                itemsIndexed(tabs, key = { _, t -> t.id }) { i, t ->
+                    Box(Modifier.animateItem(fadeInSpec = tween(200), placementSpec = spring(0.85f, 380f, IntOffset.VisibilityThreshold), fadeOutSpec = tween(150)).staggerIn(i, true)) {
                         TabCard(tab = t, selected = t.id == selectedId, onOpen = { onOpen(t) }, onMenu = {}, onClose = { onClose(t) })
                     }
                 }
@@ -1004,3 +1186,24 @@ private fun Modifier.staggerIn(index: Int, active: Boolean): Modifier {
         translationY = (1f - p.value) * (if (mochy) app.kaze.browser.ui.mochy.RevealSlideDistance else 16.dp).toPx()
     }
 }
+
+/**
+ * Desvanece los bordes de una fila deslizable solo donde hay más contenido (como la fila de temas de Safari).
+ * Se dibuja con una máscara en una capa propia: no cambia el diseño ni recalcula nada al desplazarse.
+ */
+internal fun Modifier.fadingEdges(state: androidx.compose.foundation.lazy.LazyListState, edge: androidx.compose.ui.unit.Dp = 28.dp): Modifier =
+    this.graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            val w = (edge.toPx() / size.width).coerceAtMost(0.4f)
+            val l = if (state.canScrollBackward) w else 0f
+            val r = if (state.canScrollForward) w else 0f
+            if (l == 0f && r == 0f) return@drawWithContent
+            drawRect(
+                androidx.compose.ui.graphics.Brush.horizontalGradient(
+                    0f to (if (l > 0f) Color.Transparent else Color.Black), l to Color.Black,
+                    (1f - r) to Color.Black, 1f to (if (r > 0f) Color.Transparent else Color.Black),
+                ),
+                blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+            )
+        }

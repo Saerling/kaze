@@ -161,3 +161,16 @@ data class HistoryEntry(
 )
 
 fun newId(): String = UUID.randomUUID().toString()
+
+/** Un Favorito de la página de inicio: una dirección con su nombre (lista propia del usuario). */
+data class Favorite(val url: String, val title: String) {
+    companion object {
+        /** Clave para no repetir sitios: sin esquema, sin "www.", sin "/" final ni mayúsculas en el dominio. */
+        fun key(url: String): String {
+            val u = url.trim().substringAfter("://")
+            val host = u.substringBefore('/').lowercase().removePrefix("www.")
+            val rest = u.substring(u.substringBefore('/').length).trimEnd('/')
+            return host + rest
+        }
+    }
+}

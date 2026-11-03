@@ -175,6 +175,87 @@ class Store(private val db: Db, private val settings: Settings) {
     fun essentials(): List<Tab> = tabs.filter {
         it.kind == TabKind.ESSENTIAL && spaceById(it.spaceId)?.profileId == currentProfileId
     }.sortedBy { it.position }
+    // ── Favoritos de la página de inicio ──────────────────────────────
+    // Son una lista propia (dirección y nombre) que elige el usuario, aparte de las Essentials de Zen:
+    // mientras no la edite, se muestran sus Essentials sin repetir sitio (como antes, pero sin los
+    // duplicados que trae la sincronización). En cuanto la edita, queda guardada y ya no cambia sola.
+
+    private val favoriteLists = androidx.compose.runtime.mutableStateMapOf<String, List<Favorite>>()
+
+    private fun ownFavorites(profileId: String = currentProfileId): List<Favorite>? {
+        favoriteLists[profileId]?.let { return it }
+        val json = settings.favorites(profileId) ?: return null
+        val list = runCatching {
+            val a = org.json.JSONArray(json)
+            (0 until a.length()).map { a.getJSONObject(it).let { o -> Favorite(o.getString("u"), o.optString("t")) } }
+        }.getOrDefault(emptyList())
+        favoriteLists[profileId] = list
+        return list
+    }
+
+    /** El usuario ya eligió sus Favoritos (si no, son sus Essentials). */
+    fun favoritesEdited(): Boolean = ownFavorites() != null
+
+    fun favorites(): List<Favorite> = ownFavorites()
+        ?: essentials().map { Favorite(it.pinnedUrl ?: it.url, it.displayTitle) }.filter { it.url.isNotBlank() }.distinctBy { Favorite.key(it.url) }
+
+    fun setFavorites(list: List<Favorite>) {
+        val clean = list.filter { it.url.isNotBlank() }.distinctBy { Favorite.key(it.url) }
+        favoriteLists[currentProfileId] = clean
+        val a = org.json.JSONArray()
+        clean.forEach { a.put(org.json.JSONObject().put("u", it.url).put("t", it.title)) }
+        settings.saveFavorites(currentProfileId, a.toString())
+    }
+
+    fun isFavorite(url: String): Boolean = Favorite.key(url).let { k -> favorites().any { Favorite.key(it.url) == k } }
+
+    /** Añade al final; devuelve false si ya estaba (no hay duplicados). */
+    fun addFavorite(url: String, title: String): Boolean {
+        if (url.isBlank() || isFavorite(url)) return false
+        setFavorites(favorites() + Favorite(url, title))
+        return true
+    }
+
+    fun removeFavorite(url: String) {
+        val k = Favorite.key(url)
+        setFavorites(favorites().filter { Favorite.key(it.url) != k })
+    }
+
+    fun moveFavorite(from: Int, to: Int) {
+        val list = favorites().toMutableList()
+        if (from !in list.indices || to !in list.indices || from == to) return
+        list.add(to, list.removeAt(from))
+        setFavorites(list)
+    }
+
+    /** La Essential que corresponde a un Favorito (se abre como su pestaña), si hay. */
+    fun favoriteTab(f: Favorite): Tab? = Favorite.key(f.url).let { k -> essentials().firstOrNull { Favorite.key(it.pinnedUrl ?: it.url) == k } }
+
+    // ── Fijar y desfijar grupos enteros ───────────────────────────────
+
+    /**
+     * Fija todas las pestañas de un grupo de normales conservando el grupo: queda como grupo de fijadas,
+     * que es lo que la sincronización sube a Zen como carpeta. Si ya hay un grupo de fijadas con ese
+     * nombre, se juntan. Devuelve las pestañas que se fijaron.
+     */
+    fun pinGroup(spaceId: String, name: String): List<Tab> {
+        val list = folderTabs(spaceId, name, TabKind.NORMAL).filter { !it.isPrivate }
+        if (list.isEmpty()) return emptyList()
+        list.forEach { setKind(it, TabKind.PINNED) }
+        setFolder(list, name)
+        return list
+    }
+
+    /** Desfija todas las fijadas de un grupo; siguen juntas como grupo de normales, en el mismo orden. */
+    fun unpinGroup(spaceId: String, name: String): List<Tab> {
+        val list = folderTabs(spaceId, name, TabKind.PINNED).filter { !it.isPrivate }
+        if (list.isEmpty()) return emptyList()
+        // Al desfijar cada una sube arriba de las normales: de la última a la primera conserva el orden.
+        list.asReversed().forEach { setKind(it, TabKind.NORMAL) }
+        setFolder(list, name)
+        return list
+    }
+
     fun pinned(spaceId: String): List<Tab> =
         tabs.filter { it.spaceId == spaceId && it.kind == TabKind.PINNED }.sortedBy { it.position }
     fun normal(spaceId: String): List<Tab> =

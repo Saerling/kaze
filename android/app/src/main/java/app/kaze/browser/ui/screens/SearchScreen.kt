@@ -105,7 +105,7 @@ fun SearchScreen(
         if (query.length < 2) emptyList()
         else app.store.tabs.filter { !it.isPrivate && !it.isStart && (it.title.contains(query, true) || it.url.contains(query, true)) }.take(3)
     }
-    val favorites = app.store.essentials()
+    val favorites = app.store.favorites()
 
     BackHandler(onBack = onDismiss)
 
@@ -131,7 +131,7 @@ fun SearchScreen(
                                     Row(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                                         row.forEach { t ->
                                             Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                                                SiteTile(t.pinnedUrl ?: t.url, t.displayTitle, onClick = { onSwitchTab(t) })
+                                                SiteTile(t.url, t.title.ifBlank { Urls.displayHost(t.url) }, onClick = { app.store.favoriteTab(t)?.let(onSwitchTab) ?: onSubmit(t.url) })
                                             }
                                         }
                                         repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }

@@ -120,12 +120,12 @@ fun LibrarySheet(onDismiss: () -> Unit, onOpenUrl: (String) -> Unit, onOpenTab: 
 
         when (section) {
             0 -> {
-                val favs = app.store.essentials()
-                if (favs.isEmpty()) Empty("Aún no tienes Favoritos.\nEn una página, toca Compartir → Añadir a Favoritos.")
+                val favs = app.store.favorites()
+                if (favs.isEmpty()) Empty("Aún no tienes Favoritos.\nEn una página, toca ⋯ → Favorito, o Editar en la página de inicio.")
                 else IosGroup {
-                    favs.forEachIndexed { i, t ->
-                        IosRow(t.displayTitle, subtitle = Urls.displayHost(t.pinnedUrl ?: t.url), leading = { Favicon(t.pinnedUrl ?: t.url, 26.dp) }, divider = i < favs.lastIndex) {
-                            onDismiss(); onOpenTab(t)
+                    favs.forEachIndexed { i, f ->
+                        IosRow(f.title.ifBlank { Urls.displayHost(f.url) }, subtitle = Urls.displayHost(f.url), leading = { Favicon(f.url, 26.dp) }, divider = i < favs.lastIndex) {
+                            onDismiss(); app.store.favoriteTab(f)?.let(onOpenTab) ?: onOpenUrl(f.url)
                         }
                     }
                 }

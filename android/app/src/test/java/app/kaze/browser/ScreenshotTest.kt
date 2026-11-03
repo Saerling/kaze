@@ -43,6 +43,9 @@ import app.kaze.browser.ui.theme.LocalKaze
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Before
+import app.kaze.browser.data.SpacePalette
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import app.kaze.browser.ui.mochy.TopToastHost
 import app.kaze.browser.ui.mochy.TopToast
 import app.kaze.browser.ui.sheets.MenuActions
@@ -150,6 +153,47 @@ class ScreenshotTest {
         compose.setContent { Themed(false) { StartPage(false, {}, {}, {}, {}) } }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("../../docs/capturas/android-inicio.png")
+    }
+
+    /** Editar Favoritos: quitar, arrastrar para ordenar y añadir desde las pestañas o escribiendo una dirección. */
+    @Test fun inicio_editar_favoritos() {
+        compose.setContent { Themed(false) { StartPage(false, {}, {}, {}, {}, startEditing = true) } }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Dirección del Favorito").assertExists()
+        captureScreenRoboImage("../../docs/capturas/android-favoritos-editar.png")
+    }
+
+    /** Menú de un grupo en la vista de pestañas (mantener la carpeta): Fijar grupo y Desagrupar. */
+    @Test fun grupo_menu() {
+        thumbs()
+        val s = app.store
+        val extra = listOf("https://github.com/" to "GitHub", "https://news.ycombinator.com/" to "Hacker News")
+            .map { (u, t) -> s.newTab(u, select = false).also { it.title = t } }
+        s.setFolder(extra, "Lecturas")
+        try {
+            compose.setContent { Themed(false) { Tabs() } }
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Grupo Lecturas, 2 pestañas (mantén para ver opciones)").performTouchInput { longClick() }
+            compose.waitForIdle()
+            captureScreenRoboImage("../../docs/capturas/android-grupo-menu.png")
+        } finally {
+            extra.forEach { s.close(it) }
+            s.recentlyClosed.clear()
+        }
+    }
+
+    /** Muchos espacios: la fila de emojis se desliza a los lados, con los bordes desvanecidos. */
+    @Test fun pestanas_muchos_espacios() {
+        val s = app.store
+        val added = listOf("📚" to "Estudio", "🎮" to "Juegos", "🎵" to "Música", "🛒" to "Compras", "✈️" to "Viajes", "🍳" to "Cocina", "💡" to "Ideas", "🏋️" to "Gimnasio", "📷" to "Fotos")
+            .mapIndexed { i, (e, n) -> s.addSpace(n, e, SpacePalette.presets[i % SpacePalette.presets.size]) }
+        try {
+            compose.setContent { Themed(true) { Tabs() } }
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage("../../docs/capturas/android-pestanas-espacios.png")
+        } finally {
+            added.forEach { s.deleteSpace(it.id) }
+        }
     }
 
     /** Página de inicio con "Reanudar navegación": cerradas hace poco y pestañas que llegaron de Zen. */

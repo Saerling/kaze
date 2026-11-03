@@ -492,7 +492,7 @@ private fun TopicChips(
         modifier = Modifier.testTag("temas"),
     ) {
         item(key = "group") {
-            MochyChip("✦ Crear grupos por tema", selected = false, colors = colors, textStyle = style, onClick = onGroup)
+            MochyChip("✦ Crear grupos por tema", selected = false, colors = colors, textStyle = style, role = androidx.compose.ui.semantics.Role.Button, onClick = onGroup)
         }
     }
 }

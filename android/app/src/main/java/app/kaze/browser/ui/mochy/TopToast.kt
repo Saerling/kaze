@@ -1,6 +1,9 @@
 // Copiado de Mochy Music (https://github.com/realidkroo/Mochy-Music), de realidkroo.
 // Origen: app/src/main/kotlin/com/mochyy/mochymusic/ui/component/TopToast.kt
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: sin el TopToaster global (el aviso lo da BrowserUi y llega por parámetros), sin
 // carátula ni recursos de Mochy (íconos de Material), el botón de acción con área de 44 dp, el color
 // del botón de acción y la posición (abajo, encima de la barra; se desliza hacia abajo para quitarlo).
@@ -96,6 +99,8 @@ private val ToastTitle = TextStyle(
  */
 @Composable
 fun BoxScope.TopToastHost(toast: TopToast?, onDismiss: (Long) -> Unit, accent: Color, modifier: Modifier = Modifier) {
+    // El aviso que está saliendo (ya reemplazado o quitado) no responde a toques: su "Deshacer" ya no vale.
+    val currentId by rememberUpdatedState(toast?.id)
     AnimatedContent(
         targetState = toast,
         contentKey = { it?.id },
@@ -116,13 +121,13 @@ fun BoxScope.TopToastHost(toast: TopToast?, onDismiss: (Long) -> Unit, accent: C
         label = "topToast",
     ) { t ->
         if (t != null) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) { ToastPill(t, onDismiss, accent) }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) { ToastPill(t, active = t.id == currentId, onDismiss, accent) }
         }
     }
 }
 
 @Composable
-private fun ToastPill(toast: TopToast, onDismiss: (Long) -> Unit, accent: Color) {
+private fun ToastPill(toast: TopToast, active: Boolean, onDismiss: (Long) -> Unit, accent: Color) {
     val scope = rememberCoroutineScope()
     val dismiss by rememberUpdatedState(onDismiss)
     val lift = remember(toast.id) { Animatable(0f) }
@@ -141,7 +146,8 @@ private fun ToastPill(toast: TopToast, onDismiss: (Long) -> Unit, accent: Color)
             .clip(RoundedCornerShape(30.dp))
             .background(ToastCard)
             .semantics { liveRegion = LiveRegionMode.Polite }
-            .pointerInput(toast.id) {
+            .pointerInput(toast.id, active) {
+                if (!active) return@pointerInput
                 // deslizarlo hacia abajo lo quita; solo sigue al dedo en esa dirección
                 detectVerticalDragGestures(
                     onDragStart = { held = true },
@@ -175,9 +181,11 @@ private fun ToastPill(toast: TopToast, onDismiss: (Long) -> Unit, accent: Color)
                     .heightIn(min = 44.dp)
                     .clip(RoundedCornerShape(50))
                     .clickable(
+                        enabled = active,
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                     ) {
+                        if (!active) return@clickable
                         toast.onAction?.invoke()
                         dismiss(toast.id)
                     }

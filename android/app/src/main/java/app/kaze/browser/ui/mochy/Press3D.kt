@@ -1,7 +1,10 @@
 // Copiado de Mochy Music (https://github.com/realidkroo/Mochy-Music), de realidkroo.
 // Origen: app/src/main/kotlin/com/mochyy/mochymusic/ui/component/Press3D.kt
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
-// Cambios en Fyx: solo el paquete.
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
+// Cambios en Fyx: el paquete, y la inclinación se suelta al pasar el umbral de arrastre.
 
 package app.kaze.browser.ui.mochy
 
@@ -66,9 +69,19 @@ fun Modifier.press3D(
                     }
                     scope.launch { press.animateTo(1f, TiltSpring) }
 
+                    // Fyx: pasado el umbral de arrastre (desplazar la lista, deslizar para cerrar, reordenar)
+                    // la inclinación se suelta, así no acompaña al gesto.
+                    val slop = viewConfiguration.touchSlop
+                    val start = down.position
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         if (event.changes.none { it.pressed }) break
+                        val moved = event.changes.firstOrNull { it.id == down.id }?.let { (it.position - start).getDistance() } ?: 0f
+                        if (moved > slop) {
+                            scope.launch { press.animateTo(0f, TiltSpring) }
+                            while (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.pressed }) Unit
+                            break
+                        }
                     }
                     scope.launch { press.animateTo(0f, TiltSpring) }
                 }

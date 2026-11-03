@@ -1,6 +1,9 @@
 // Adaptado de Mochy Music (https://github.com/realidkroo/Mochy-Music), de realidkroo.
 // Origen: app/src/main/kotlin/com/mochyy/mochymusic/ui/component/BottomSheet.kt
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: de la hoja del reproductor de Mochy (con mini reproductor) solo se toman su
 // movimiento y su arrastre: los umbrales al soltar (SheetReleaseSpeed, SheetCloseTravel,
 // SheetCloseFlick), el asentado críticamente amortiguado que sigue la velocidad del dedo
@@ -55,6 +58,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
@@ -98,6 +102,7 @@ fun MochyModalSheet(
     contentColor: Color,
     shape: Shape,
     lightSystemBars: Boolean,
+    paneTitle: String = "Hoja",
     dragHandle: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -108,8 +113,16 @@ fun MochyModalSheet(
     val offset = remember { Animatable(Float.MAX_VALUE) }
     var height by remember { mutableFloatStateOf(0f) }
     var closing by remember { mutableStateOf(false) }
+    var dismissed by remember { mutableStateOf(false) }
     // Recorrido del arrastre actual (para el tirón rápido que no alcanzó a mover la hoja).
     var dragged by remember { mutableFloatStateOf(0f) }
+
+    // Avisa una sola vez que la hoja se fue.
+    fun finish() {
+        if (dismissed) return
+        dismissed = true
+        dismiss()
+    }
 
     // De BottomSheetState.release de Mochy: críticamente amortiguado, al menos tan rápido como el dedo.
     fun settle(target: Float, velocity: Float) {
@@ -119,15 +132,19 @@ fun MochyModalSheet(
         val omega = maxOf(SettleOmega, if (distance > 0.5f && toward > 0f) toward / distance else 0f)
             .coerceAtMost(MaxSettleOmega)
         scope.launch {
-            offset.animateTo(target, spring(dampingRatio = 1f, stiffness = omega * omega), initialVelocity = velocity)
-            if (target > 0f && closing) dismiss()
+            try {
+                offset.animateTo(target, spring(dampingRatio = 1f, stiffness = omega * omega), initialVelocity = velocity)
+            } finally {
+                // También si otra animación (un cambio de alto) cancela el cierre: nunca queda un diálogo invisible.
+                if (closing && target > 0f) finish()
+            }
         }
     }
 
     fun close(velocity: Float = 0f) {
         if (closing) return
         closing = true
-        if (height <= 0f) dismiss() else settle(height, velocity)
+        if (height <= 0f) finish() else settle(height, velocity)
     }
 
     fun drag(delta: Float) {
@@ -196,20 +213,19 @@ fun MochyModalSheet(
                 window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                 WindowCompat.getInsetsController(window, view).apply {
                     isAppearanceLightNavigationBars = lightSystemBars
-                    isAppearanceLightStatusBars = false
+                    isAppearanceLightStatusBars = lightSystemBars
                 }
             }
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-            val shown = if (height > 0f) (1f - offset.value / height).coerceIn(0f, 1f) else 0f
-            // velo: tocarlo cierra
+            // velo: tocarlo cierra (TalkBack cierra con el asa o "Atrás", así hay una sola "Cerrar hoja")
             Box(
                 Modifier.fillMaxSize()
-                    .graphicsLayer { alpha = shown }
+                    .graphicsLayer { alpha = if (height > 0f) (1f - offset.value / height).coerceIn(0f, 1f) else 0f }
                     .background(Color.Black.copy(alpha = ScrimAlpha))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { close() }
-                    .semantics { contentDescription = "Cerrar hoja" },
+                    .clearAndSetSemantics {},
             )
             Column(
                 Modifier
@@ -219,7 +235,10 @@ fun MochyModalSheet(
                     .heightIn(max = maxHeight - top)
                     .onSizeChanged { size ->
                         val h = size.height.toFloat()
-                        if (h != height) {
+                        if (closing) {
+                            // cambió de alto mientras se cerraba: se termina de cerrar sin esperar
+                            if (h != height) { height = h; finish() }
+                        } else if (h != height) {
                             val first = height == 0f
                             height = h
                             if (first) scope.launch { offset.snapTo(h); settle(0f, 0f) }
@@ -229,7 +248,7 @@ fun MochyModalSheet(
                     .graphicsLayer { translationY = offset.value.coerceAtMost(if (height > 0f) height else 10_000f) }
                     .clip(shape)
                     .background(containerColor)
-                    .semantics { paneTitle = "Hoja" }
+                    .semantics { this.paneTitle = paneTitle }
                     .nestedScroll(nested)
                     .draggable(
                         orientation = Orientation.Vertical,

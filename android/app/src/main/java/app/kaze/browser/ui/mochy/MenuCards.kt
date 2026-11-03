@@ -3,6 +3,9 @@
 // (SheetActionCardRow y SheetActionCard), las tarjetas grandes que NewActionGrid
 // (ui/component/NewMenuComponents.kt) pone arriba de cada menú.
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: colores por parámetro (en Mochy son blanco sobre gris oscuro fijo), alto mínimo
 // por parámetro (cuatro tarjetas por fila caben en un teléfono), estado "activo", el rebote de
 // pressBounce al tocar y semántica de botón; el ícono es un ImageVector de Material.
@@ -32,7 +35,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
@@ -84,7 +86,6 @@ fun SheetActionCard(
             .fillMaxHeight()
             .heightIn(min = minHeight)
             .pressBounce(source, 0.94f)
-            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
             .clip(RoundedCornerShape(18.dp))
             .background(if (active) colors.activeSurface else colors.surface)
             .clickable(

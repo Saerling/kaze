@@ -1,6 +1,9 @@
 // Copiado de Mochy Music (https://github.com/realidkroo/Mochy-Music), de realidkroo.
 // Origen: app/src/main/kotlin/com/mochyy/mochymusic/ui/component/TouchFeedback.kt
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: solo el paquete.
 
 package app.kaze.browser.ui.mochy

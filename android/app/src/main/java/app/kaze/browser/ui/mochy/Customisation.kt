@@ -4,6 +4,9 @@
 // ui/screens/gesture/CustomisationEffects.kt (EffectCard, MiniSegmented y la lógica de
 // AnimationSection: interruptor, velocidad por escalones y su vibración en cada escalón).
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: colores por parámetro (Mochy es solo oscuro, Fyx sigue su tema), sin la fuente
 // Inter ni los textos/recursos de Mochy (los textos llegan por parámetro, en español), el
 // interruptor por parámetro (Fyx usa el suyo), vistas previas sin animación continua, el
@@ -160,6 +163,7 @@ fun CornerRoundingSection(
     onRadiusChange: (Float) -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier,
+    onChangeFinished: () -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
     var lastTick by remember { mutableIntStateOf((radiusDp / 2f).roundToInt()) }
@@ -198,6 +202,7 @@ fun CornerRoundingSection(
             fraction = radiusDp / maxRadius,
             colors = colors,
             valueText = "${radiusDp.roundToInt()} dp",
+            onChangeFinished = onChangeFinished,
             onFractionChange = { f ->
                 val next = (f * maxRadius).roundToInt().toFloat()
                 val tick = (next / 2f).roundToInt()
@@ -216,7 +221,8 @@ fun CornerRoundingSection(
 @Composable
 fun CardTitle(title: String, canReset: Boolean, colors: CustomiseColors, onReset: (() -> Unit)?) {
     val haptic = LocalHapticFeedback.current
-    Row(modifier = Modifier.padding(start = CardTextInset, top = CardTextInset)) {
+    // El botón tiene 44 dp de área táctil; la fila sube lo que crece para que el título quede donde estaba.
+    Row(modifier = Modifier.padding(start = CardTextInset, top = CardTextInset - 13.dp).heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(text = title, style = CardLabelStyle, color = colors.text.copy(alpha = 0.9f))
         if (onReset != null) {
             Icon(
@@ -224,15 +230,13 @@ fun CardTitle(title: String, canReset: Boolean, colors: CustomiseColors, onReset
                 contentDescription = "Restablecer",
                 tint = colors.text.copy(alpha = if (canReset) 0.8f else 0.25f),
                 modifier = Modifier
-                    // subido para que quede en la primera línea del título
-                    .offset(x = 2.dp, y = (-9).dp)
-                    .size(34.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .clickable(enabled = canReset) {
                         haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                         onReset()
                     }
-                    .padding(8.dp),
+                    .padding(13.dp),
             )
         }
     }
@@ -251,6 +255,7 @@ fun CustomiseSliderCard(
     valueText: String? = null,
     enabled: Boolean = true,
     steps: Int = 0,
+    onChangeFinished: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -267,7 +272,7 @@ fun CustomiseSliderCard(
         Spacer(Modifier.height(4.dp))
         BareSlider(
             fraction = fraction, onFractionChange = onFractionChange, enabled = enabled, colors = colors,
-            description = title, valueText = valueText, steps = steps,
+            description = title, valueText = valueText, steps = steps, onChangeFinished = onChangeFinished,
         )
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -335,11 +340,13 @@ private fun BareSlider(
     description: String,
     valueText: String?,
     steps: Int,
+    onChangeFinished: () -> Unit,
 ) {
     var widthPx by remember { mutableFloatStateOf(1f) }
     val shown = fraction.coerceIn(0f, 1f)
     val currentShown by rememberUpdatedState(shown)
     val currentOnChange by rememberUpdatedState(onFractionChange)
+    val currentOnFinished by rememberUpdatedState(onChangeFinished)
 
     fun updateFromX(x: Float) {
         currentOnChange((x / widthPx).coerceIn(0f, 1f))
@@ -355,20 +362,21 @@ private fun BareSlider(
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(28.dp)
+            .height(44.dp)
             .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
             .semantics {
                 contentDescription = description
                 if (valueText != null) stateDescription = valueText
                 progressBarRangeInfo = ProgressBarRangeInfo(shown, 0f..1f, steps)
-                if (enabled) setProgress { v -> currentOnChange(v.coerceIn(0f, 1f)); true }
+                if (enabled) setProgress { v -> currentOnChange(v.coerceIn(0f, 1f)); currentOnFinished(); true }
             }
-            .pointerInput(enabled) { if (enabled) detectTapGestures { offset -> updateFromX(offset.x) } }
+            .pointerInput(enabled) { if (enabled) detectTapGestures { offset -> updateFromX(offset.x); currentOnFinished() } }
             .draggable(
                 state = dragState,
                 orientation = Orientation.Horizontal,
                 enabled = enabled,
                 onDragStarted = { dragX = currentShown * widthPx },
+                onDragStopped = { currentOnFinished() },
             ),
     ) {
         val y = size.height / 2f
@@ -376,7 +384,10 @@ private fun BareSlider(
         val start = stroke / 2f
         val end = size.width - stroke / 2f
         drawLine(colors.text.copy(alpha = 0.2f), Offset(start, y), Offset(end, y), stroke, StrokeCap.Round)
-        drawLine(colors.text, Offset(start, y), Offset(start + (end - start) * shown, y), stroke, StrokeCap.Round)
+        val x = start + (end - start) * shown
+        drawLine(colors.text, Offset(start, y), Offset(x, y), stroke, StrokeCap.Round)
+        // pulgar visible: dice dónde está y que se puede arrastrar
+        drawCircle(colors.text, radius = 8.dp.toPx(), center = Offset(x.coerceIn(8.dp.toPx(), size.width - 8.dp.toPx()), y))
     }
 }
 
@@ -444,8 +455,8 @@ fun MiniSegmented(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(36.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(44.dp)
+            .clip(RoundedCornerShape(22.dp))
             .background(colors.row)
             .padding(3.dp),
     ) {
@@ -456,7 +467,7 @@ fun MiniSegmented(
                 .offset { androidx.compose.ui.unit.IntOffset(offset.roundToPx(), 0) }
                 .width(segment)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(19.dp))
                 .background(colors.highlight),
         )
         Row(Modifier.fillMaxWidth().fillMaxHeight()) {
@@ -497,6 +508,7 @@ fun AnimationSection(
     colors: CustomiseColors,
     toggle: @Composable (Boolean, (Boolean) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
+    onSpeedFinished: () -> Unit = {},
     extra: @Composable ColumnScope.() -> Unit = {},
 ) {
     val haptic = LocalHapticFeedback.current
@@ -525,6 +537,7 @@ fun AnimationSection(
             fraction = index / stops.lastIndex.toFloat(),
             colors = colors,
             steps = stops.size - 2,
+            onChangeFinished = onSpeedFinished,
             onFractionChange = { f ->
                 val next = stops[(f * stops.lastIndex).roundToInt()]
                 if (next != speed) {

@@ -1,6 +1,9 @@
 // Copiado de Mochy Music (https://github.com/realidkroo/Mochy-Music), de realidkroo.
 // Origen: app/src/main/kotlin/com/mochyy/mochymusic/ui/component/ChipsRow.kt
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: LazyRow con desplazamiento hasta la píldora elegida (en vez de Row con scroll),
 // colores por parámetro, descripción para lectores de pantalla, número por píldora y píldoras extra al
 // final ([trailing]); sin los márgenes de las barras del sistema ni los recursos de Mochy.
@@ -70,7 +73,7 @@ fun <E> ChipsRow(
         contentPadding = contentPadding,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(chips.size, key = { chips[it].value.toString() }) { i ->
+        items(chips.size, key = { "chip:${chips[it].value}" }) { i ->
             val chip = chips[i]
             val isSelected = currentValue == chip.value
             MochyChip(
@@ -95,6 +98,8 @@ fun MochyChip(
     textStyle: TextStyle,
     description: String = label,
     showCheck: Boolean = true,
+    // RadioButton: una sola elegida en la fila; Button para una píldora que hace algo.
+    role: Role = Role.RadioButton,
     onClick: () -> Unit,
 ) {
     val cornerRadius: Dp by animateDpAsState(
@@ -110,7 +115,7 @@ fun MochyChip(
     Box(
         Modifier.clearAndSetSemantics {
             contentDescription = description
-            role = Role.Checkbox
+            this.role = role
             this.selected = selected
             onClick { onClick(); true }
         },

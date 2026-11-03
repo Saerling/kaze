@@ -345,11 +345,20 @@ fun SettingsSheet(onDismiss: () -> Unit, onRestart: () -> Unit, onCheckUpdates: 
             IosGroup {
                 IosRow("Versión", trailing = { Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = KazeType.body, color = k.ink55) })
                 IosRow("Motor", trailing = { Text("Gecko (Firefox)", style = KazeType.body, color = k.ink55) })
-                IosRow("Ayuda y comentarios", titleColor = k.accent, divider = false) {
+                IosRow("Ayuda y comentarios", titleColor = k.accent) {
                     runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze/issues"))) }
                 }
+                // Aviso de licencia (GPL-3.0 §5 d): licencia, sin garantía, créditos y dónde está el código.
+                IosRow("Licencia y créditos (NOTICE.md)", titleColor = k.accent) {
+                    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze/blob/main/android/NOTICE.md"))) }
+                }
+                IosRow("Código fuente", titleColor = k.accent, divider = false) {
+                    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Saerling/kaze"))) }
+                }
             }
-            Note("Fyx es código abierto (MPL 2.0). Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
+            Note("Fyx para Android es software libre (GPL-3.0), sin garantía. Incluye código de Mochy Music (realidkroo) y Z-Sync (Kjell Behrends).")
+            Note("Código fuente: https://github.com/Saerling/kaze · Licencia y créditos: android/NOTICE.md")
+            Note("Inspirado en Safari, Zen Browser y Z-Sync; no está afiliado a ellos.")
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -376,6 +385,10 @@ internal fun PersonalizationSection(s: app.kaze.browser.data.Settings) {
     val toggle: @Composable (Boolean, (Boolean) -> Unit) -> Unit = { v, on -> KazeSwitch(v, on) }
     // Radio del estilo (lo que hay con "Restablecer").
     val styleCorner = k.copy(cornerOverride = -1).corner
+    // Los deslizadores usan un valor local mientras se arrastran; la preferencia se escribe al soltar.
+    var corner by remember(k.corner) { mutableStateOf(k.corner.toFloat()) }
+    var glass by remember(s.glassTransparency) { mutableStateOf(s.glassTransparency) }
+    var speed by remember(s.animationSpeed) { mutableStateOf(s.animationSpeed) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
         // Color principal: muestras redondas (el mismo ajuste "Color" de siempre).
         app.kaze.browser.ui.mochy.EffectCard(title = "Color", colors = colors) {
@@ -384,8 +397,9 @@ internal fun PersonalizationSection(s: app.kaze.browser.data.Settings) {
             Text(s.accent.label, style = KazeType.footnote, color = k.ink55)
         }
         app.kaze.browser.ui.mochy.CornerRoundingSection(
-            radiusDp = k.corner.toFloat(), defaultRadius = styleCorner.toFloat(), maxRadius = 32f, smooth = k.smooth, colors = colors,
-            onRadiusChange = { s.cornerRadius = it.toInt() }, onReset = { s.cornerRadius = -1 },
+            radiusDp = corner, defaultRadius = styleCorner.toFloat(), maxRadius = 32f, smooth = k.smooth, colors = colors,
+            onRadiusChange = { corner = it }, onReset = { s.cornerRadius = -1 },
+            onChangeFinished = { s.cornerRadius = corner.toInt() },
         )
         app.kaze.browser.ui.mochy.EffectCard(title = "Forma de las esquinas", colors = colors) {
             Text("Continuas: la curva de los íconos de apps (superelipse), sin el quiebre de un arco.", style = KazeType.footnote, color = k.ink55)
@@ -407,12 +421,12 @@ internal fun PersonalizationSection(s: app.kaze.browser.data.Settings) {
         }
         app.kaze.browser.ui.mochy.CustomiseSliderCard(
             title = "Transparencia del vidrio", startLabel = "Opaco", endLabel = "Transparente",
-            fraction = s.glassTransparency / 100f, colors = colors, valueText = "${s.glassTransparency} %", enabled = s.glassOn,
-            onFractionChange = { s.glassTransparency = (it * 100).toInt() },
+            fraction = glass / 100f, colors = colors, valueText = "$glass %", enabled = s.glassOn,
+            onFractionChange = { glass = (it * 100).toInt() }, onChangeFinished = { s.glassTransparency = glass },
         )
         app.kaze.browser.ui.mochy.AnimationSection(
             enabled = s.animationsOn, onEnabled = { s.animationsOn = it },
-            speed = s.animationSpeed / 100f, onSpeed = { s.animationSpeed = (it * 100).toInt() },
+            speed = speed / 100f, onSpeed = { speed = (it * 100).toInt() }, onSpeedFinished = { s.animationSpeed = speed },
             colors = colors, toggle = toggle,
         ) {
             Spacer(Modifier.height(11.dp))

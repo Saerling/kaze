@@ -5,6 +5,9 @@
 // y la aparición de elementos de ui/component/RevealOnAppear.kt (RevealEasing, RevealFadeInMs,
 // RevealSlideDistance y la ráfaga escalonada BurstStepMs/BurstMaxSteps).
 // Licencia: GNU General Public License v3.0 (ver android/LICENSE y android/NOTICE.md).
+// Copyright: realidkroo y colaboradores de Mochy Music (sin aviso de copyright propio en el repositorio;
+// Mochy es un fork de ViviMusic, de vivizzz007, que parte de Metrolist, de Mostafa Alagamy; ambos GPL-3.0).
+// Modificado por Fyx, 2026-11.
 // Cambios en Fyx: las piezas como transiciones de AnimatedVisibility (Fyx abre sus pantallas encima,
 // sin NavHost) y sin el recorte que se transforma desde la tarjeta (necesitaría SharedTransitionLayout).
 

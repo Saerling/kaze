@@ -10,6 +10,10 @@ cambia: sigue con la Mozilla Public License 2.0 del [`LICENSE`](../LICENSE) raí
   Los componentes de diseño y movimiento del paquete `app.kaze.browser.ui.mochy`
   (`android/app/src/main/java/app/kaze/browser/ui/mochy/`) están copiados o adaptados de Mochy.
   Cada archivo dice al inicio de qué archivo de Mochy viene y qué se cambió. Gracias a realidkroo.
+  Mochy no trae un aviso de copyright propio (su LICENSE es el texto de la GPL-3.0 sin modificar);
+  según su README es un fork de [ViviMusic](https://github.com/vivizzz007/vivi-music) (vivizzz007), que parte de
+  [Metrolist](https://github.com/mostafaalagamy/Metrolist) (Mostafa Alagamy), ambos GPL-3.0, así que parte de ese
+  código puede ser también de sus autores.
 - **Z-Sync** — © 2026 Kjell Behrends, licencia MIT (<https://github.com/Kjell6/Z-Sync>).
   El paquete `app.kaze.browser.zsync` (`android/app/src/main/java/app/kaze/browser/zsync/`) está
   adaptado de Z-Sync; la licencia MIT es compatible con la GPL-3.0 y su aviso se conserva en cada archivo.

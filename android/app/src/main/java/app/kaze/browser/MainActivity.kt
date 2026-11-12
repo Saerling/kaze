@@ -83,6 +83,7 @@ import app.kaze.browser.data.Space
 import app.kaze.browser.data.Tab
 import app.kaze.browser.data.TabKind
 import app.kaze.browser.data.Urls
+import app.kaze.browser.engine.WebNotifications
 import app.kaze.browser.engine.Engine
 import app.kaze.browser.engine.PendingPrompt
 import app.kaze.browser.ui.components.LocalApp
@@ -317,6 +318,10 @@ class MainActivity : ComponentActivity() {
     // ── Intents: enlaces de otras apps, compartir, búsquedas ──────────
 
     private fun handleIntent(intent: Intent?) {
+        if (intent?.action == WebNotifications.ACTION_CLICK) {
+            intent.getStringExtra(WebNotifications.EXTRA_TAG)?.let(app.webNotifications::click)
+            return
+        }
         val url = when (intent?.action) {
             Intent.ACTION_VIEW -> intent.dataString
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->

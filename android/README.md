@@ -1,4 +1,4 @@
-# Kaze para Android
+# Fyx para Android
 
 Kotlin + Jetpack Compose sobre **GeckoView 158** (el motor de Firefox para Android), con el
 **aspecto de Safari** y las **funciones de Zen**: espacios, Essentials, fijadas y pestañas que se duermen.
@@ -33,10 +33,10 @@ Kotlin + Jetpack Compose sobre **GeckoView 158** (el motor de Firefox para Andro
 Cada cambio que se sube a `main` se compila y se publica en **[Releases](https://github.com/Saerling/kaze/releases)**
 como `android-<número>`. Instala el `.apk` de tu procesador (`arm64-v8a` en casi todos los celulares).
 
-Después de eso **no hace falta volver a GitHub**: al abrir Kaze revisa si hay una versión nueva
+Después de eso **no hace falta volver a GitHub**: al abrir Fyx revisa si hay una versión nueva
 (como mucho cada 3 horas) y muestra *Nueva versión disponible* → **Actualizar** la descarga y la
 instala encima, sin desinstalar ni perder pestañas. También en **Ajustes → Buscar actualizaciones ahora**.
-La primera vez Android pide permitir que Kaze instale apps ("Permitir de esta fuente").
+La primera vez Android pide permitir que Fyx instale apps ("Permitir de esta fuente").
 
 ### Firma (por qué ya no hay que desinstalar)
 

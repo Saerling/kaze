@@ -439,7 +439,10 @@ class SessionPool(
         override fun onLoadRequest(session: GeckoSession, request: NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny>? {
             val scheme = request.uri.substringBefore(':').lowercase()
             // Complementos: un enlace a un .xpi (como "Añadir a Firefox" en addons.mozilla.org) se instala.
-            if (scheme == "https" && request.uri.substringBefore('?').endsWith(".xpi")) {
+            // Solo desde la tienda oficial de Mozilla y por un toque del usuario: ninguna otra página puede instalar nada.
+            if (scheme == "https" && request.uri.substringBefore('?').endsWith(".xpi") &&
+                Urls.host(request.uri) in ADDON_HOSTS && (request.hasUserGesture || request.isRedirect)
+            ) {
                 installAddon?.invoke(request.uri)
                 return GeckoResult.fromValue(AllowOrDeny.DENY)
             }
@@ -508,6 +511,23 @@ class SessionPool(
                 -> return GeckoResult.fromValue(PermissionDelegate.ContentPermission.VALUE_DENY)
             }
             val result = GeckoResult<Int>()
+            if (perm.permission == PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
+                // Si el usuario acepta, también hace falta el permiso de notificaciones de Android (13 o más).
+                val asked = GeckoResult<Int>()
+                asked.accept({ v ->
+                    if (v == PermissionDelegate.ContentPermission.VALUE_ALLOW && android.os.Build.VERSION.SDK_INT >= 33) {
+                        main.post {
+                            androidPermissions?.invoke(
+                                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                                object : PermissionDelegate.Callback {},
+                            )
+                        }
+                    }
+                    result.complete(v ?: PermissionDelegate.ContentPermission.VALUE_DENY)
+                }, { result.complete(PermissionDelegate.ContentPermission.VALUE_DENY) })
+                ui.permission = PermissionAsk.Content(Urls.displayHost(perm.uri), perm, asked)
+                return result
+            }
             ui.permission = PermissionAsk.Content(Urls.displayHost(perm.uri), perm, result)
             return result
         }
@@ -574,6 +594,7 @@ class SessionPool(
     companion object {
         private const val TAG = "FyxSessions"
         private const val CRASH_LOOP_MS = 20_000L
+        private val ADDON_HOSTS = setOf("addons.mozilla.org", "addons.cdn.mozilla.net")
         private val WEB_SCHEMES = setOf(
             "http", "https", "about", "data", "blob", "file", "javascript", "moz-extension", "resource", "view-source",
         )

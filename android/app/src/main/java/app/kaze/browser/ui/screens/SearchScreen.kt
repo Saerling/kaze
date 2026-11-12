@@ -30,6 +30,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.CallMade
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material3.Icon
@@ -108,6 +110,37 @@ fun SearchScreen(
     val favorites = app.store.favorites()
 
     BackHandler(onBack = onDismiss)
+
+    // Búsqueda por voz (el dictado del teléfono) y lector de códigos QR.
+    val voice = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { r ->
+        r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
+            ?.takeIf { it.isNotEmpty() }?.let { onSubmit(Urls.fromInput(it, engine)) }
+    }
+    val qr = androidx.activity.compose.rememberLauncherForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { r ->
+        val text = r.contents?.trim().orEmpty()
+        when {
+            text.isEmpty() -> Unit
+            // Solo las direcciones web se abren solas; cualquier otro contenido queda escrito para que tú decidas.
+            text.startsWith("https://", true) || text.startsWith("http://", true) -> onSubmit(text)
+            else -> field = TextFieldValue(text, TextRange(text.length))
+        }
+    }
+    fun startVoice() {
+        val i = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Di qué quieres buscar")
+        runCatching { voice.launch(i) }.onFailure { app.ui.show("Este teléfono no tiene dictado por voz") }
+    }
+    fun startQr() {
+        val o = com.journeyapps.barcodescanner.ScanOptions()
+            .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+            .setPrompt("Apunta la cámara al código QR")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+        runCatching { qr.launch(o) }.onFailure { app.ui.show("No se pudo abrir la cámara") }
+    }
 
     Box(Modifier.fillMaxSize().background(k.paper)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
@@ -214,6 +247,13 @@ fun SearchScreen(
                     if (field.text.isNotEmpty()) {
                         Box(Modifier.size(36.dp).clip(CircleShape).clickable { field = TextFieldValue("") }, contentAlignment = Alignment.Center) {
                             Icon(Icons.Outlined.Cancel, "Borrar", tint = k.ink35, modifier = Modifier.size(18.dp))
+                        }
+                    } else {
+                        Box(Modifier.size(36.dp).clip(CircleShape).clickable { startVoice() }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Mic, "Buscar por voz", tint = k.ink55, modifier = Modifier.size(20.dp))
+                        }
+                        Box(Modifier.size(36.dp).clip(CircleShape).clickable { startQr() }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.QrCodeScanner, "Leer código QR", tint = k.ink55, modifier = Modifier.size(20.dp))
                         }
                     }
                 }

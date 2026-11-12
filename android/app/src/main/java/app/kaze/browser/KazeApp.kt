@@ -115,7 +115,11 @@ class Kaze private constructor(context: Context) {
             .accept({ ext -> pool.extension = ext }, { e -> android.util.Log.w("Fyx", "Extensión interna", e) })
     }
 
+    /** Notificaciones de los sitios como notificaciones de Android. */
+    val webNotifications by lazy { app.kaze.browser.engine.WebNotifications(appContext) }
+
     private fun setupExtensions(runtime: GeckoRuntime) {
+        runtime.webNotificationDelegate = webNotifications
         runtime.autocompleteStorageDelegate = logins
         // Contraseña nueva + sesión de Firefox iniciada: se sube a la cuenta en segundo plano.
         logins.onSaved = {

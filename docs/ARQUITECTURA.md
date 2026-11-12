@@ -1,6 +1,6 @@
-# Arquitectura de Kaze
+# Arquitectura de Fyx
 
-Kaze se rehízo desde cero con una idea: **apoyarse en lo que Firefox ya trae** y añadir
+Fyx se rehízo desde cero con una idea: **apoyarse en lo que Firefox ya trae** y añadir
 solo la capa que falta. Menos código propio = menos que se rompa con cada versión de Firefox
 y menos memoria.
 
@@ -10,7 +10,7 @@ y menos memoria.
                     └──────────────┬───────────────┘
               ┌────────────────────┴────────────────────┐
      ┌────────▼─────────┐                      ┌────────▼─────────┐
-     │  Kaze Windows    │                      │  Kaze Android    │
+     │  Fyx Windows    │                      │  Fyx Android    │
      │  Firefox 158     │                      │  GeckoView 158   │
      │  + 3 parches     │                      │  + Compose       │
      │  + kaze.js/.css  │                      │                  │
@@ -22,12 +22,12 @@ y menos memoria.
 
 ### Comparado con Zen
 
-Zen mantiene ~260 parches sobre Firefox y su propia barra lateral. Kaze usa **3 parches**:
+Zen mantiene ~260 parches sobre Firefox y su propia barra lateral. Fyx usa **3 parches**:
 
 | Parche | Para qué |
 |---|---|
 | `browser/base/content/browser-xhtml.patch` | carga `kaze.css` y `kaze.js` en la ventana del navegador |
-| `browser/base/jar-mn.patch` | empaqueta los archivos de Kaze en `chrome://kaze/content/` (en el instalador de Windows los registra el cargador `cargador.cfg`) |
+| `browser/base/jar-mn.patch` | empaqueta los archivos de Fyx en `chrome://kaze/content/` (en el instalador de Windows los registra el cargador `cargador.cfg`) |
 | `browser/app/profile/firefox-js.patch` | incluye `kaze-prefs.js` (preferencias por defecto) |
 
 Todo lo demás vive en `desktop/src/browser/kaze/` y se construye **encima de las pestañas
@@ -36,7 +36,7 @@ verticales nativas de Firefox** (que ya existen desde Firefox 136):
 - **Espacios** — cada pestaña guarda su espacio en SessionStore (sobrevive a reinicios).
   Cambiar de espacio oculta las pestañas de los demás con `gBrowser.hideTab()`.
 - **Essentials** — pestañas fijadas con la marca `kaze-essential`; Firefox ya las dibuja en
-  cuadrícula, Kaze solo las estiliza y las deja visibles en todos los espacios.
+  cuadrícula, Fyx solo las estiliza y las deja visibles en todos los espacios.
 - **Fijadas del espacio** — pestañas fijadas sin esa marca; solo se ven en su espacio.
 - **Modo compacto, página flotante, degradados** — CSS.
 - **Dormir pestañas** — cada minuto descarga (`discardBrowser`) las que llevan 20 min sin usarse.

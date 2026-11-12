@@ -13,6 +13,9 @@
 - [x] Android: actualizaciones desde la app (GitHub Releases) con firma fija para instalar encima
 
 ## Fase 2 — Primera versión para usar a diario
+- [x] Android: páginas de error propias (sin conexión, sitio caído, certificado inválido, sitio peligroso) en vez de pantalla en blanco
+- [x] Android: compartir desde las páginas (navigator.share), "Buscar en Fyx" al seleccionar texto en otras apps, video en ventana flotante al salir
+- [x] Android: HTTPS primero, enlaces sin códigos de rastreo, prioridad de memoria para la pestaña visible, freno a páginas que se cierran en bucle
 - [ ] Windows: primera compilación completa en tu PC y medir RAM contra Firefox y Zen
 - [ ] Windows: editor de espacios en un panel (hoy usa menús)
 - [ ] Windows: arrastrar pestañas entre espacios y reordenar espacios arrastrando

@@ -230,6 +230,10 @@ class MainActivity : ComponentActivity() {
 
         app.pool.beforeClose = { s -> if (geckoView.session === s) geckoView.releaseSession() }
         app.pool.externalOpener = ::openExternal
+        app.pool.sharer = { title, text, uri ->
+            val body = listOfNotNull(text?.takeIf { it.isNotBlank() }, uri?.takeIf { it.isNotBlank() }).joinToString("\n")
+            if (body.isBlank()) false else { share(body, title?.takeIf { it.isNotBlank() }); true }
+        }
         app.pool.androidPermissions = { perms, cb ->
             val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
             if (missing.isEmpty()) cb.grant() else {
@@ -282,6 +286,17 @@ class MainActivity : ComponentActivity() {
     }
     private var startedOnce = false
 
+    // Al salir de la app con un video en pantalla completa sonando, sigue en una ventana flotante.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!::app.isInitialized || !app.ui.fullscreen || !app.pool.visiblePlaying) return
+        runCatching {
+            enterPictureInPictureMode(
+                android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build(),
+            )
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         if (!::app.isInitialized) return
@@ -309,6 +324,10 @@ class MainActivity : ComponentActivity() {
             }
             Intent.ACTION_WEB_SEARCH, Intent.ACTION_SEARCH ->
                 intent.getStringExtra(SearchManager.QUERY)?.let { Urls.fromInput(it, app.settings.searchEngine) }
+            // Texto seleccionado en otra app → "Buscar en Fyx".
+            Intent.ACTION_PROCESS_TEXT ->
+                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { Urls.fromInput(it, app.settings.searchEngine) }
             else -> null
         } ?: return
         app.store.newTab(url)
@@ -326,9 +345,14 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
         true
     } catch (_: ActivityNotFoundException) {
-        // intent: con enlace de respaldo para navegadores
-        Uri.parse(uri).getQueryParameter("browser_fallback_url")?.let { app.store.selectedTab?.let { t -> app.pool.ensure(t).loadUri(it) } }
-        false
+        // La app no está instalada: los enlaces intent: traen una dirección web de respaldo (va como extra, no en la consulta).
+        val fallback = if (uri.startsWith("intent:")) {
+            runCatching { Intent.parseUri(uri, Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url") }.getOrNull()
+        } else null
+        if (fallback != null && (fallback.startsWith("https://") || fallback.startsWith("http://"))) {
+            app.store.selectedTab?.let { t -> app.pool.ensure(t).loadUri(fallback) }
+            true // ya se resolvió: no mostrar "no hay una app"
+        } else false
     } catch (_: Exception) {
         false
     }

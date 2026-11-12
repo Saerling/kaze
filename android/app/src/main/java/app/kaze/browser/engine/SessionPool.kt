@@ -28,6 +28,7 @@ import org.mozilla.geckoview.GeckoSession.ProgressDelegate
 import org.mozilla.geckoview.GeckoSession.PromptDelegate
 import org.mozilla.geckoview.GeckoSession.ScrollDelegate
 import org.mozilla.geckoview.GeckoSessionSettings
+import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 
 /**
@@ -81,6 +82,10 @@ class SessionPool(
         s.open(runtime)
         val state = tab.sessionState?.let { runCatching { GeckoSession.SessionState.fromString(it) }.getOrNull() }
         when {
+            // Se cerró dos veces seguidas: en vez de recargarla en bucle (calienta el teléfono), se avisa y el usuario decide.
+            crashLooping.remove(tab.id) -> s.loadUri(
+                ErrorPages.dataUri(tab.url, WebRequestError.ERROR_CONTENT_CRASHED, WebRequestError.ERROR_CATEGORY_CONTENT),
+            )
             state != null -> s.restoreState(state)
             tab.isStart -> Unit // la página de inicio la dibuja Kaze; el motor espera a que se navegue
             else -> s.loadUri(tab.url)
@@ -93,9 +98,11 @@ class SessionPool(
     /** Pone [tab] en primer plano: la activa a ella y pausa la anterior. */
     fun show(tab: Tab): GeckoSession {
         val prev = visibleTabId
-        if (prev != null && prev != tab.id) sessions[prev]?.setActive(false)
+        if (prev != null && prev != tab.id) sessions[prev]?.let { it.setActive(false); it.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
         val s = ensure(tab)
         s.setActive(true)
+        // La pestaña en pantalla es la última que Android debe cerrar si falta memoria (como en Firefox).
+        s.setPriorityHint(GeckoSession.PRIORITY_HIGH)
         visibleTabId = tab.id
         trim()
         return s
@@ -125,7 +132,12 @@ class SessionPool(
 
     fun close(tab: Tab) {
         unload(tab)
+        lastCrash.remove(tab.id)
+        crashLooping.remove(tab.id)
     }
+
+    private val lastCrash = HashMap<String, Long>()
+    private val crashLooping = HashSet<String>()
 
     /** Instala un complemento desde su enlace .xpi (lo pone KazeApp). */
     var installAddon: ((String) -> Unit)? = null
@@ -342,6 +354,11 @@ class SessionPool(
             ui.fullscreen = fullScreen
         }
 
+        // La página pide que vuelvan las barras (por ejemplo, al enfocar un campo o llegar arriba).
+        override fun onShowDynamicToolbar(session: GeckoSession) {
+            if (tab.id == visibleTabId) ui.scrollDirection = -1
+        }
+
         override fun onContextMenu(session: GeckoSession, screenX: Int, screenY: Int, element: ContentDelegate.ContextElement) {
             if (element.linkUri != null || element.srcUri != null) ui.contextMenu = ContextMenuRequest(tab, element)
         }
@@ -356,8 +373,15 @@ class SessionPool(
         private fun recover(why: String) {
             Log.w(TAG, "La página ${tab.url} $why")
             val wasVisible = tab.id == visibleTabId
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - (lastCrash[tab.id] ?: -CRASH_LOOP_MS) < CRASH_LOOP_MS) crashLooping += tab.id
+            lastCrash[tab.id] = now
+            ports.remove(tab.id)
+            playing.remove(tab.id)
             sessions.remove(tab.id)?.let { s -> beforeClose?.invoke(s); runCatching { s.close() } }
             tab.isLive = false
+            tab.loading = false
+            tab.progress = 100
             if (wasVisible) {
                 visibleTabId = null
                 store.select(tab) // la UI vuelve a pedir la sesión y se recarga desde su estado
@@ -400,7 +424,8 @@ class SessionPool(
             perms: MutableList<PermissionDelegate.ContentPermission>,
             hasUserGesture: Boolean,
         ) {
-            if (url != null) store.onUrl(tab, url)
+            // La página de error propia nunca reemplaza la dirección real de la pestaña.
+            if (url != null && !url.startsWith(ErrorPages.PREFIX)) store.onUrl(tab, url)
         }
 
         override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
@@ -422,6 +447,14 @@ class SessionPool(
             val opened = externalOpener?.invoke(request.uri) ?: false
             if (!opened && scheme != "intent") ui.show("No hay una app para abrir este enlace")
             return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+
+        // Sin esto la pantalla se queda en blanco cuando una página no carga (sin internet, sitio caído, certificado malo).
+        override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
+            Log.w(TAG, "No cargó ${uri.orEmpty()}: código ${error.code}")
+            tab.loading = false
+            tab.progress = 100
+            return GeckoResult.fromValue(ErrorPages.dataUri(uri ?: tab.url, error))
         }
 
         // Enlaces con target="_blank" o window.open(): pestaña nueva en el mismo espacio.
@@ -499,6 +532,12 @@ class SessionPool(
         }
     }
 
+    /** Lo pone MainActivity: abre el menú de compartir de Android (título, texto, enlace). Devuelve si se pudo abrir. */
+    var sharer: ((String?, String?, String?) -> Boolean)? = null
+
+    /** ¿La pestaña visible está reproduciendo audio o video? (para la ventana flotante del video) */
+    val visiblePlaying: Boolean get() = visibleTabId?.let { it in playing } ?: false
+
     /** Lo pone MainActivity: pide permisos de Android (cámara, micrófono, ubicación). */
     var androidPermissions: ((Array<String>, PermissionDelegate.Callback) -> Unit)? = null
 
@@ -520,6 +559,12 @@ class SessionPool(
         override fun onColorPrompt(session: GeckoSession, prompt: PromptDelegate.ColorPrompt) = ask(prompt)
         override fun onPopupPrompt(session: GeckoSession, prompt: PromptDelegate.PopupPrompt) = ask(prompt)
         override fun onBeforeUnloadPrompt(session: GeckoSession, prompt: PromptDelegate.BeforeUnloadPrompt) = ask(prompt)
+        // navigator.share(): el botón "Compartir" de las páginas abre el menú de compartir de Android.
+        override fun onSharePrompt(session: GeckoSession, prompt: PromptDelegate.SharePrompt): GeckoResult<PromptDelegate.PromptResponse> {
+            val ok = runCatching { sharer?.invoke(prompt.title, prompt.text, prompt.uri) ?: false }.getOrDefault(false)
+            val r = if (ok) PromptDelegate.SharePrompt.Result.SUCCESS else PromptDelegate.SharePrompt.Result.FAILURE
+            return GeckoResult.fromValue(prompt.confirm(r))
+        }
         override fun onRepostConfirmPrompt(session: GeckoSession, prompt: PromptDelegate.RepostConfirmPrompt) = ask(prompt)
         // Contraseñas: preguntar si guardar; al rellenar con una sola cuenta, se usa directamente.
         override fun onLoginSave(session: GeckoSession, request: PromptDelegate.AutocompleteRequest<org.mozilla.geckoview.Autocomplete.LoginSaveOption>) = ask(request)
@@ -528,6 +573,7 @@ class SessionPool(
 
     companion object {
         private const val TAG = "FyxSessions"
+        private const val CRASH_LOOP_MS = 20_000L
         private val WEB_SCHEMES = setOf(
             "http", "https", "about", "data", "blob", "file", "javascript", "moz-extension", "resource", "view-source",
         )

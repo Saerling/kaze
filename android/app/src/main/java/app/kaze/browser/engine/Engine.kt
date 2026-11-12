@@ -47,6 +47,8 @@ object Engine {
         "network.http.speculative-parallel-limit" to 0,
         // Recolector de basura de JS más agresivo con memoria.
         "javascript.options.mem.gc_incremental_slice_ms" to 5,
+        // Probar siempre primero la versión segura (HTTPS) de un sitio; si no existe, se abre la normal sin avisos.
+        "dom.security.https_first" to true,
         // Telemetría fuera.
         "toolkit.telemetry.enabled" to false,
         "datareporting.healthreport.uploadEnabled" to false,
@@ -78,6 +80,9 @@ object Engine {
             .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
             .cookieBehaviorPrivateMode(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
             .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
+            // Quita de los enlaces los códigos que usan redes sociales y anuncios para seguirte (fbclid, gclid, igshid...).
+            .queryParameterStrippingEnabled(true)
+            .queryParameterStrippingPrivateBrowsingEnabled(true)
             .build()
 
         val builder = GeckoRuntimeSettings.Builder()
